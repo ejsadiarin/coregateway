@@ -26,15 +26,56 @@ services:
       - COREFINANCE_URL=http://corefinance-api:6969
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - GODEBUG=netdns=go
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
 
   corefinance-api:
     build:
       context: ./services/corefinance
       dockerfile: Dockerfile
+      target: api
     ports:
       - "6969:6969"
+    env_file:
+      - ./services/corefinance/.env
     environment:
-      - ENV=development
-      - DATABASE_URL=${DATABASE_URL}
-      - DB_SCHEMA=corefinance
       - PORT=6969
+      - GODEBUG=netdns=go
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    depends_on:
+      corefinance-migrate:
+        condition: service_completed_successfully
+
+  corefinance-migrate:
+    build:
+      context: ./services/corefinance
+      dockerfile: Dockerfile
+      target: migrate
+    env_file:
+      - ./services/corefinance/.env
+    environment:
+      - GODEBUG=netdns=go
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    restart: "no"
+
+  corefinance-worker:
+    build:
+      context: ./services/corefinance
+      dockerfile: Dockerfile
+      target: worker
+    env_file:
+      - ./services/corefinance/.env
+    environment:
+      - GODEBUG=netdns=go
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    depends_on:
+      corefinance-migrate:
+        condition: service_completed_successfully

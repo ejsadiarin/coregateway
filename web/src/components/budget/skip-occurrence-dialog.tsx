@@ -106,7 +106,7 @@ export function SkipOccurrenceDialog({ income, open, onOpenChange }: SkipOccurre
             Skip Recurring Income
           </DialogTitle>
           <DialogDescription>
-            Skip one occurrence of your recurring income.
+            Skipping keeps the entry and marks it Skipped — reversible anytime, excluded from totals.
           </DialogDescription>
         </DialogHeader>
 
@@ -167,7 +167,7 @@ export function SkipOccurrenceDialog({ income, open, onOpenChange }: SkipOccurre
           <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
             <p className="text-xs">
-              This marks the selected date as skipped for the recurring rule.
+              Skipped entries stay in history with a Skipped badge and can be restored. Delete only entries added by mistake.
             </p>
           </div>
         </div>

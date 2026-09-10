@@ -154,7 +154,7 @@ export function ExpenseCard({ expense, onView, onEdit, onDelete, disabled, showT
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Expense</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this expense? This action cannot be undone.
+              Delete this expense only if it was added by mistake. This permanently removes it and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

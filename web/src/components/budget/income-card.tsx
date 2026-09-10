@@ -148,7 +148,7 @@ export function IncomeCard({ income, onView, onEdit, onDelete, disabled, showToa
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Income</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this income? This action cannot be undone.
+              Delete this income only if it was added by mistake. This permanently removes it and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
