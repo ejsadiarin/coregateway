@@ -10,7 +10,6 @@ import {
   UpcomingBillsCard,
   RecurringSummaryCard,
   RecurringIncomeList,
-  BudgetVarianceTable,
   CurrentTotalMoneyCard,
   PeriodPresetFilter
 } from "@/components/budget";
@@ -29,8 +28,6 @@ import {
 } from "@/hooks/use-budget";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Plus, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,24 +43,17 @@ import type { Expense, Income, CreateIncomeRequest, UpdateIncomeRequest, CreateE
 export default function BudgetDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  
-  // Date range for analytics cards
-  const [dateRange, setDateRange] = useState<PeriodPresetFilterValue>({
-    startDate: '',
-    endDate: '',
-    preset: null
+  // Single global period filter (7D default); all period-scoped cards derive from this.
+  // Total Money is lifetime-scoped and does not consume dateRange.
+  const [dateRange, setDateRange] = useState<PeriodPresetFilterValue>(() => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    return { startDate: fmt(start), endDate: fmt(today), preset: '7d' };
   });
-  
-  // Compute summary stats date range from selected date (current month)
-  const summaryDateRange = useMemo(() => {
-    const d = new Date(selectedDate);
-    const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
-    return { startDate: start, endDate: end };
-  }, [selectedDate]);
 
-  const { data: summaryStats, isLoading: statsLoading } = useSummaryStats(summaryDateRange.startDate, summaryDateRange.endDate);
+  const { data: summaryStats, isLoading: statsLoading } = useSummaryStats(dateRange.startDate, dateRange.endDate);
   const { data: expensesData, isLoading: expensesLoading } = useExpenses(undefined, 1, 5);
   const { data: budgetRemainingData } = useBudgetRemaining();
 
@@ -245,16 +235,6 @@ export default function BudgetDashboard() {
         transition={{ duration: 0.5, delay: 0.1 }}
       >
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="date-filter" className="text-sm font-medium">Budget Date:</Label>
-            <Input
-              id="date-filter"
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-auto"
-            />
-          </div>
           {budgetRemainingData && (
             <div className={`text-sm font-semibold ${
               budgetRemainingData.remaining < 0 ? 'text-red-500' :
@@ -279,7 +259,7 @@ export default function BudgetDashboard() {
         <ExpenseStats stats={summaryStats} isLoading={statsLoading} />
       </motion.div>
 
-      {/* Date Range Picker for Analytics */}
+      {/* Global Period Filter */}
       <motion.div
         className="mb-4"
         initial={{ opacity: 0, y: 20 }}
@@ -296,20 +276,10 @@ export default function BudgetDashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.2 }}
       >
-        <CurrentTotalMoneyCard startDate={dateRange.startDate || undefined} endDate={dateRange.endDate || undefined} />
+        <CurrentTotalMoneyCard />
         <SavingsRateCard startDate={dateRange.startDate || undefined} endDate={dateRange.endDate || undefined} />
         <SpendingVelocityCard startDate={dateRange.startDate || undefined} endDate={dateRange.endDate || undefined} />
         <RecurringSummaryCard />
-      </motion.div>
-
-      {/* Budget Variance Table */}
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.25 }}
-      >
-        <BudgetVarianceTable />
       </motion.div>
 
       {/* Recurring Income and Bills */}

@@ -69,7 +69,7 @@ export default function IncomesPage() {
   const [filters, setFilters] = useState<IncomeFilters>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(5);
+  const [limit] = useState(10);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showOccurrences, setShowOccurrences] = useState(false);

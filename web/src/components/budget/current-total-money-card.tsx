@@ -4,19 +4,17 @@ import { useCurrentTotalMoney } from '@/hooks/use-budget';
 import { Wallet } from 'lucide-react';
 
 interface CurrentTotalMoneyCardProps {
-  startDate?: string;
-  endDate?: string;
   className?: string;
 }
 
-export function CurrentTotalMoneyCard({ startDate, endDate, className }: CurrentTotalMoneyCardProps) {
-  const { data, isLoading, error } = useCurrentTotalMoney(startDate, endDate);
+export function CurrentTotalMoneyCard({ className }: CurrentTotalMoneyCardProps) {
+  const { data, isLoading, error } = useCurrentTotalMoney();
 
   if (isLoading) {
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Total Money</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Money · lifetime</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-16 flex items-center justify-center">
@@ -31,7 +29,7 @@ export function CurrentTotalMoneyCard({ startDate, endDate, className }: Current
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Total Money</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Money · lifetime</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-sm text-muted-foreground">Failed to load total money</div>
@@ -43,7 +41,7 @@ export function CurrentTotalMoneyCard({ startDate, endDate, className }: Current
   return (
     <Card className={className}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">Total Money</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">Total Money · lifetime</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between">

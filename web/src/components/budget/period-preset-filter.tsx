@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { X } from 'lucide-react';
 
-export type PresetKey = '7d' | '30d' | '90d' | 'this-month' | 'this-year' | 'custom' | null;
+export type PresetKey = '7d' | '30d' | '90d' | 'this-week' | 'this-month' | 'this-year' | 'custom' | null;
 
 export interface PeriodPresetFilterValue {
   startDate: string;
@@ -42,6 +42,11 @@ function computePresetDates(preset: PresetKey): { startDate: string; endDate: st
       start.setDate(start.getDate() - 89);
       return { startDate: formatDate(start), endDate };
     }
+    case 'this-week': {
+      const start = new Date(today);
+      start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+      return { startDate: formatDate(start), endDate };
+    }
     case 'this-month': {
       const start = new Date(today.getFullYear(), today.getMonth(), 1);
       return { startDate: formatDate(start), endDate };
@@ -59,6 +64,7 @@ const presets: { key: PresetKey; label: string }[] = [
   { key: '7d', label: '7D' },
   { key: '30d', label: '30D' },
   { key: '90d', label: '90D' },
+  { key: 'this-week', label: 'This Week' },
   { key: 'this-month', label: 'This Month' },
   { key: 'this-year', label: 'This Year' },
 ];

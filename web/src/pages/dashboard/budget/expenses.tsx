@@ -37,7 +37,7 @@ export default function ExpensesPage() {
   const [filters, setFilters] = useState<ExpenseFilters>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
-  const [limit] = useState(5);
+  const [limit] = useState(10);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);

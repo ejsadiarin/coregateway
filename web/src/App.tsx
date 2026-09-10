@@ -10,10 +10,7 @@ import ServicesPage from "@/pages/dashboard/services";
 import BudgetPage from "@/pages/dashboard/budget/page";
 import ExpensesPage from "@/pages/dashboard/budget/expenses";
 import IncomesPage from "@/pages/dashboard/budget/incomes";
-import SummaryPage from "@/pages/dashboard/budget/summary";
 import SettingsPage from "@/pages/dashboard/budget/settings";
-import HealthPage from "@/pages/dashboard/budget/health";
-import SubscriptionsPage from "@/pages/dashboard/budget/subscriptions";
 import UsersPage from "@/pages/dashboard/admin/users";
 
 export default function App() {
@@ -36,10 +33,10 @@ export default function App() {
         <Route path="budget" element={<BudgetPage />} />
         <Route path="budget/expenses" element={<ExpensesPage />} />
         <Route path="budget/incomes" element={<IncomesPage />} />
-        <Route path="budget/summary" element={<SummaryPage />} />
         <Route path="budget/settings" element={<SettingsPage />} />
-        <Route path="budget/health" element={<HealthPage />} />
-        <Route path="budget/subscriptions" element={<SubscriptionsPage />} />
+        <Route path="budget/summary" element={<Navigate to="/dashboard/budget" replace />} />
+        <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
+        <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
       </Route>
 

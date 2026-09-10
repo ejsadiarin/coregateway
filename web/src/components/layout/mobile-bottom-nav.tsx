@@ -14,8 +14,6 @@ BarChart3,
 FileText,
 LogOut,
 X,
-Heart,
-Repeat,
 type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,8 +36,6 @@ const primaryItems: BottomNavItem[] = [
 ];
 
 const overflowItems: BottomNavItem[] = [
-{ label: "Health", icon: Heart, path: "/dashboard/budget/health" },
-{ label: "Recurring", icon: Repeat, path: "/dashboard/budget/recurring" },
 { label: "Incomes", icon: TrendingUp, path: "/dashboard/budget/incomes" },
 { label: "Settings", icon: SlidersHorizontal, path: "/dashboard/budget/settings" },
 { label: "Analytics", icon: BarChart3, path: "/analytics", disabled: true },

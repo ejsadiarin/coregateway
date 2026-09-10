@@ -8,8 +8,6 @@ import {
   BarChart3,
   FileText,
   Users,
-  Heart,
-  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,27 +55,9 @@ export const navItems: NavItem[] = [
     section: "finance",
   },
   {
-    label: "Summary",
-    icon: BarChart3,
-    path: "/dashboard/budget/summary",
-    section: "finance",
-  },
-  {
     label: "Settings",
     icon: SlidersHorizontal,
     path: "/dashboard/budget/settings",
-    section: "finance",
-  },
-  {
-    label: "Health",
-    icon: Heart,
-    path: "/dashboard/budget/health",
-    section: "finance",
-  },
-  {
-    label: "Recurring",
-    icon: RefreshCw,
-    path: "/dashboard/budget/subscriptions",
     section: "finance",
   },
   {

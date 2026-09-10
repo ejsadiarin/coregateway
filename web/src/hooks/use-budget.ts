@@ -129,8 +129,8 @@ export const budgetKeys = {
     [...budgetKeys.stats(), 'fiftyThirtyTwenty', { startDate, endDate }] as const,
   monthOverMonth: () => [...budgetKeys.stats(), 'monthOverMonth'] as const,
 
-  currentTotalMoney: (startDate?: string, endDate?: string) =>
-    [...budgetKeys.all, 'currentTotalMoney', { startDate, endDate }] as const
+  currentTotalMoney: () =>
+    [...budgetKeys.all, 'currentTotalMoney'] as const
 };
 
 // Categories
@@ -580,10 +580,10 @@ export function useMonthOverMonth(startDate?: string, endDate?: string) {
   });
 }
 
-export function useCurrentTotalMoney(startDate?: string, endDate?: string) {
+export function useCurrentTotalMoney() {
   return useQuery<CurrentTotalMoneyResponse>({
-    queryKey: budgetKeys.currentTotalMoney(startDate, endDate),
-    queryFn: () => fetchCurrentTotalMoney(startDate, endDate),
+    queryKey: budgetKeys.currentTotalMoney(),
+    queryFn: () => fetchCurrentTotalMoney(),
     staleTime: 300000
   });
 }
