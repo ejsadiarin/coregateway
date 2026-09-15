@@ -50,21 +50,7 @@ services:
       corefinance-migrate:
         condition: service_completed_successfully
 
-  corefinance-migrate:
-    build:
-      context: ./services/corefinance
-      dockerfile: Dockerfile
-      target: migrate
-    env_file:
-      - ./services/corefinance/.env
-    environment:
-      - GODEBUG=netdns=go
-    sysctls:
-      - net.ipv6.conf.all.disable_ipv6=1
-      - net.ipv6.conf.default.disable_ipv6=1
-    restart: "no"
-
-  corefinance-worker:
+  corefinance-cron-worker:
     build:
       context: ./services/corefinance
       dockerfile: Dockerfile
@@ -76,6 +62,3 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
-    depends_on:
-      corefinance-migrate:
-        condition: service_completed_successfully

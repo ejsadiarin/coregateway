@@ -30,7 +30,7 @@ PORT ?= 8080
 
 # Database configuration
 GOOSE_DRIVER=postgres
-GOOSE_MIGRATION_DIR=./db/migrations
+GOOSE_MIGRATION_DIR=./internal/db/migrations
 
 # Build configuration
 BINARY_NAME=api-gateway
