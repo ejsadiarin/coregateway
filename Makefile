@@ -41,7 +41,7 @@ PORT ?= 8080
 # Database configuration
 # NOTE: change migrations dir as needed
 GOOSE_DRIVER=postgres
-GOOSE_MIGRATION_DIR=./internal/db/old-migrations
+GOOSE_MIGRATION_DIR=./internal/db/migrations
 # Migrations run as the schema OWNER on the direct endpoint (goose takes
 # session-level locks; Neon pooler/PgBouncer transaction mode breaks that
 # and some DDL, and poolers drop the options param). Falls back to
