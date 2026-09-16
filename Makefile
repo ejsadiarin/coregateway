@@ -1,5 +1,5 @@
 # ==============================================================================
-# API Gateway - Go Backend Makefile
+# Coregateway - Go Backend Makefile
 # ==============================================================================
 #
 # Prerequisites:
@@ -9,10 +9,20 @@
 # - goose: go install github.com/pressly/goose/v3/cmd/goose@latest
 #
 # Environment Variables:
-# - DATABASE_URL (required): PostgreSQL connection string
+# - DATABASE_URL (required): PostgreSQL connection string (runtime, role, pooler endpoint)
+# - MIGRATION_URL (optional, defaults to DATABASE_URL): connection string for
+#   goose migrations — must be the schema OWNER over the direct (non-pooler)
+#   endpoint, with search_path set via the options form, e.g.:
+#   postgresql://neondb_owner:...@<direct-host>/coredb?sslmode=require&options=-c%20search_path%3Dcoregateway
+#   NOTE: a bare &search_path=... param does NOT work — libpq rejects unknown
+#   URI params, so the session silently lands in public (goose then reads
+#   public.goose_db_version). The options form is executed by the server at
+#   session start. Pooler endpoints drop options, hence direct host required.
 # - PORT (optional, default 8080): Server port
 # - ENV (optional, default development): Environment
-# - FRONTEND_URL (optional): CORS origin
+# - ALLOWED_ORIGINS (optional): CORS origin (ex. http://localhost:3000)
+# - ADMIN_EMAIL (optional)
+# - ADMIN_PASSWORD (optional)
 #
 # ==============================================================================
 
@@ -29,11 +39,18 @@ ENV ?= development
 PORT ?= 8080
 
 # Database configuration
+# NOTE: change migrations dir as needed
 GOOSE_DRIVER=postgres
-GOOSE_MIGRATION_DIR=./internal/db/migrations
+GOOSE_MIGRATION_DIR=./internal/db/old-migrations
+# Migrations run as the schema OWNER on the direct endpoint (goose takes
+# session-level locks; Neon pooler/PgBouncer transaction mode breaks that
+# and some DDL, and poolers drop the options param). Falls back to
+# DATABASE_URL if not set. CI (prod) and local CLI (dev) both invoke the
+# goose CLI directly through the migrate-* targets below.
+MIGRATION_URL ?= $(DATABASE_URL)
 
 # Build configuration
-BINARY_NAME=api-gateway
+BINARY_NAME=coregateway
 BUILD_DIR=./bin
 
 # ==============================================================================
@@ -42,7 +59,7 @@ BUILD_DIR=./bin
 
 help:
 	@echo ""
-	@echo -e "${BLUE}API Gateway - Available Commands${NC}"
+	@echo -e "${BLUE}coregateway - Available Commands${NC}"
 	@echo ""
 	@echo -e "${GREEN}Development${NC}"
 	@echo "  make run              Run in development mode"
@@ -95,17 +112,8 @@ help:
 	@echo "  make clean            Remove build artifacts"
 	@echo "  make prune            Clean up modules"
 	@echo ""
-	@echo -e "${GREEN}Docker${NC}"
-	@echo "  make docker-build     Build Docker image"
-	@echo "  make docker-run       Run in Docker"
-	@echo "  make docker-compose   Run with docker-compose"
-	@echo ""
 	@echo -e "${GREEN}API Testing${NC}"
 	@echo "  make api-health       Check API health"
-	@echo "  make api-services     List services"
-	@echo "  make api-categories   List budget categories"
-	@echo "  make api-tags         List budget tags"
-	@echo "  make api-expenses     List expenses"
 	@echo ""
 	@echo -e "${GREEN}Environment${NC}"
 	@echo "  ENV=$(ENV)"
@@ -118,11 +126,11 @@ help:
 # ==============================================================================
 
 run:
-	@echo -e "${YELLOW}Starting API Gateway in development mode...${NC}"
+	@echo -e "${YELLOW}Starting coregateway in development mode...${NC}"
 	@ENV=$(ENV) PORT=$(PORT) go run ./cmd/server
 
 dev:
-	@echo -e "${YELLOW}Starting API Gateway with live reload...${NC}"
+	@echo -e "${YELLOW}Starting coregateway with live reload...${NC}"
 	@if command -v air >/dev/null 2>&1; then \
 		ENV=$(ENV) PORT=$(PORT) air; \
 	else \
@@ -135,7 +143,7 @@ dev:
 # ==============================================================================
 
 build:
-	@echo -e "${YELLOW}Building API Gateway...${NC}"
+	@echo -e "${YELLOW}Building coregateway...${NC}"
 	@mkdir -p $(BUILD_DIR)
 	@go build -o $(BUILD_DIR)/$(BINARY_NAME) -ldflags="-s -w" ./cmd/server
 	@echo -e "${GREEN}Built successfully: $(BUILD_DIR)/$(BINARY_NAME)${NC}"
@@ -149,13 +157,13 @@ build-docker:
 # ==============================================================================
 
 start:
-	@echo -e "${YELLOW}Starting API Gateway...${NC}"
+	@echo -e "${YELLOW}Starting coregateway...${NC}"
 	@ENV=$(ENV) PORT=$(PORT) ./$(BUILD_DIR)/$(BINARY_NAME)
 
 run-background:
-	@echo -e "${YELLOW}Starting API Gateway in background...${NC}"
+	@echo -e "${YELLOW}Starting coregateway in background...${NC}"
 	@nohup ENV=$(ENV) PORT=$(PORT) ./$(BUILD_DIR)/$(BINARY_NAME) > api.log 2>&1 &
-	@echo -e "${GREEN}API Gateway started in background (PID: $$!)${NC}"
+	@echo -e "${GREEN}coregateway started in background (PID: $$!)${NC}"
 
 # ==============================================================================
 # Database Migrations (Goose)
@@ -163,19 +171,19 @@ run-background:
 
 migrate-up:
 	@echo -e "${YELLOW}Running database migrations...${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" up
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" up
 
 migrate-down:
 	@echo -e "${YELLOW}Rolling back last migration...${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" down
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" down
 
 migrate-redo:
 	@echo -e "${YELLOW}Redo last migration...${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" redo
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" redo
 
 migrate-status:
 	@echo -e "${YELLOW}Checking migration status...${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" status
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" status
 
 migrate-create:
 	@echo -e "${YELLOW}Creating new migration...${NC}"
@@ -186,13 +194,13 @@ migrate-create:
 
 migrate-baseline:
 	@echo -e "${YELLOW}Baselining existing database...${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" version
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" version
 	@echo -e "${YELLOW}Please manually mark migrations as applied if needed${NC}"
 
 migrate-fix:
 	@echo -e "${YELLOW}Fixing migration issues...${NC}"
 	@echo -e "${YELLOW}Current version:${NC}"
-	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(DATABASE_URL)" version
+	@goose -dir $(GOOSE_MIGRATION_DIR) $(GOOSE_DRIVER) "$(MIGRATION_URL)" version
 
 # ==============================================================================
 # Code Generation
@@ -316,59 +324,12 @@ prune:
 	@echo -e "${GREEN}Pruned successfully${NC}"
 
 # ==============================================================================
-# Docker
-# ==============================================================================
-
-docker-build:
-	@echo -e "${YELLOW}Building Docker image...${NC}"
-	@docker build -t $(BINARY_NAME):latest .
-
-docker-run:
-	@echo -e "${YELLOW}Running API Gateway in Docker...${NC}"
-	@docker run -p $(PORT):$(PORT) \
-		-e DATABASE_URL="$(DATABASE_URL)" \
-		-e ENV="$(ENV)" \
-		-e PORT=$(PORT) \
-		$(BINARY_NAME):latest
-
-docker-compose:
-	@echo -e "${YELLOW}Running with docker-compose...${NC}"
-	@cd ../ && docker compose up api-gateway
-
-# ==============================================================================
 # API Testing
 # ==============================================================================
 
 api-health:
 	@echo -e "${YELLOW}Checking API health...${NC}"
 	@curl -s http://localhost:$(PORT)/health | head -c 500
-
-api-services:
-	@echo -e "${YELLOW}Listing services...${NC}"
-	@curl -s http://localhost:$(PORT)/api/services/list | head -c 1000
-
-api-categories:
-	@echo -e "${YELLOW}Listing budget categories...${NC}"
-	@curl -s http://localhost:$(PORT)/api/budget/categories | head -c 1000
-
-api-tags:
-	@echo -e "${YELLOW}Listing budget tags...${NC}"
-	@curl -s http://localhost:$(PORT)/api/budget/tags | head -c 1000
-
-api-expenses:
-	@echo -e "${YELLOW}Listing expenses...${NC}"
-	@curl -s http://localhost:$(PORT)/api/budget/expenses | head -c 1000
-
-api-all: api-health api-services api-categories api-tags api-expenses
-
-# ==============================================================================
-# Documentation
-# ==============================================================================
-
-docs-open:
-	@echo -e "${YELLOW}Opening Swagger documentation...${NC}"
-	@open http://localhost:$(PORT)/swagger/index.html 2>/dev/null || \
-		echo -e "${YELLOW}Swagger UI at: http://localhost:$(PORT)/swagger/index.html${NC}"
 
 # ==============================================================================
 # Profiling
@@ -405,6 +366,5 @@ env-check:
         lint fmt vet staticcheck check \
         install tidy mod-download mod-verify \
         clean prune \
-        docker-build docker-run docker-compose \
-        api-health api-services api-categories api-tags api-expenses api-all \
+        api-health \
         docs-open profile-cpu profile-memory env-check
