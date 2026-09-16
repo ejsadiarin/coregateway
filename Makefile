@@ -13,7 +13,7 @@
 # - MIGRATION_URL (optional, defaults to DATABASE_URL): connection string for
 #   goose migrations — must be the schema OWNER over the direct (non-pooler)
 #   endpoint, with search_path set via the options form, e.g.:
-#   postgresql://neondb_owner:...@<direct-host>/coredb?sslmode=require&options=-c%20search_path%3Dcoregateway
+#   postgresql://neondb_owner:...@<direct-host>/coredb?sslmode=require&channel_binding=require&options=-c%20search_path%3Dcoregateway
 #   NOTE: a bare &search_path=... param does NOT work — libpq rejects unknown
 #   URI params, so the session silently lands in public (goose then reads
 #   public.goose_db_version). The options form is executed by the server at
