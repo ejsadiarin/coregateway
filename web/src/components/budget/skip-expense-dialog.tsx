@@ -11,6 +11,7 @@ import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/toast';
 import { GuestBlockedError } from '@/hooks/use-budget';
 import { checkSkippedExpense } from '@/lib/api';
+import { formatPeso, formatSigned } from '@/lib/format';
 import type { SubscriptionItem } from '@/types/api';
 
 interface SkipExpenseDialogProps {
@@ -83,7 +84,7 @@ export function SkipExpenseDialog({ expense, open, onOpenChange }: SkipExpenseDi
         id: expense.id,
       });
       showToast(
-        `Skipped ${expense.currency} ${expense.amount.toFixed(2)} for ${format(parseISO(skipDate), 'MMM d, yyyy')}`,
+        `Skipped ${formatPeso(expense.amount, expense.currency)} for ${format(parseISO(skipDate), 'MMM d, yyyy')}`,
         'success'
       );
       handleOpen(false);
@@ -121,8 +122,8 @@ export function SkipExpenseDialog({ expense, open, onOpenChange }: SkipExpenseDi
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount</span>
-              <span className="font-medium text-green-600">
-                -{expense.currency} {expense.amount.toFixed(2)}
+              <span className="font-medium font-mono tabular-nums text-green-600">
+                {formatSigned(expense.amount, "income", expense.currency)}
               </span>
             </div>
             <div className="flex justify-between">

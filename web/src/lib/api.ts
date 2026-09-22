@@ -27,6 +27,7 @@ import type {
   CreateIncomeRequest,
   UpdateIncomeRequest,
   RecurringIncomeWithNextDate,
+  RecurringExpenseRule,
   BudgetRemainingResponse,
   PaginatedResponse,
   PaginationParams,
@@ -750,6 +751,16 @@ export async function fetchRecurringIncomes(): Promise<RecurringIncomeWithNextDa
   });
   if (!res.ok) {
     throw new Error(`Error fetching recurring incomes: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchRecurringExpenses(): Promise<RecurringExpenseRule[]> {
+  const res = await fetch(url + '/api/budget/recurring-expenses', {
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    throw new Error(`Error fetching recurring expenses: ${res.status}`);
   }
   return res.json();
 }

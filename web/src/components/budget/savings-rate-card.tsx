@@ -2,7 +2,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSavingsRate } from '@/hooks/use-budget';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { cn, safeFixed } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import { formatPeso, formatRate } from '@/lib/format';
 
 interface SavingsRateCardProps {
   startDate?: string;
@@ -20,8 +21,10 @@ export function SavingsRateCard({ startDate, endDate, className }: SavingsRateCa
           <CardTitle className="text-sm font-medium">Savings Rate</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-16 flex items-center justify-center">
-            <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <div className="space-y-2 animate-pulse">
+            <div className="h-8 w-24 bg-muted rounded" />
+            <div className="h-3 w-16 bg-muted rounded" />
+            <div className="h-2 w-full bg-muted rounded-full mt-4" />
           </div>
         </CardContent>
       </Card>
@@ -72,8 +75,8 @@ export function SavingsRateCard({ startDate, endDate, className }: SavingsRateCa
       <CardContent>
         <div className="flex items-center justify-between">
           <div>
-            <div className={cn('text-3xl font-bold', config.color)}>
-              {safeFixed(rate, 1)}%
+            <div className={cn('text-3xl font-bold font-mono tabular-nums', config.color)}>
+              {formatRate(rate)}
             </div>
             <div className="text-xs text-muted-foreground mt-1 capitalize">
               {status.replace('_', ' ')}
@@ -87,16 +90,16 @@ export function SavingsRateCard({ startDate, endDate, className }: SavingsRateCa
         <div className="mt-4 space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Income</span>
-            <span className="font-medium">₱{income.toLocaleString()}</span>
+            <span className="font-medium font-mono tabular-nums">{formatPeso(income)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Expenses</span>
-            <span className="font-medium">₱{expenses.toLocaleString()}</span>
+            <span className="font-medium font-mono tabular-nums">{formatPeso(expenses)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Savings</span>
-            <span className={cn('font-medium', savings >= 0 ? 'text-green-500' : 'text-red-500')}>
-              ₱{savings.toLocaleString()}
+            <span className={cn('font-medium font-mono tabular-nums', savings >= 0 ? 'text-green-500' : 'text-red-500')}>
+              {formatPeso(savings)}
             </span>
           </div>
         </div>

@@ -12,6 +12,7 @@ import {
 import { useSubscriptions, useExpense, useUpdateExpense, GuestBlockedError } from '@/hooks/use-budget';
 import { RefreshCw, Calendar, MoreVertical, Pencil, SkipForward, XCircle } from 'lucide-react';
 import { cn, safeFormat } from '@/lib/utils';
+import { formatPeso, formatCount } from '@/lib/format';
 import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/toast';
 import { EditExpenseDialog } from './expense-edit-dialog';
@@ -109,7 +110,7 @@ export function RecurringExpensesList({ className }: RecurringExpensesListProps)
             <div>
               <CardTitle className="text-sm font-medium text-muted-foreground">Recurring Expenses</CardTitle>
               <CardDescription className="text-xs">
-                {data.count} active · ₱{data.total_monthly.toLocaleString()}/mo
+                {formatCount(data.count)} active · {formatPeso(data.total_monthly)}/mo
               </CardDescription>
             </div>
             <Badge variant="secondary">{data.count} active</Badge>
@@ -143,8 +144,8 @@ export function RecurringExpensesList({ className }: RecurringExpensesListProps)
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="text-right">
-                        <div className="text-sm font-medium">
-                          {sub.currency} {sub.amount.toLocaleString()}
+                        <div className="text-sm font-medium font-mono tabular-nums">
+                          {formatPeso(sub.amount, sub.currency)}
                         </div>
                         <Badge variant="outline" className={cn('text-xs mt-1', badge.color)}>
                           {badge.label}

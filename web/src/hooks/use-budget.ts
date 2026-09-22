@@ -25,6 +25,7 @@ import {
   skipIncome,
   skipExpense,
   fetchRecurringIncomes,
+  fetchRecurringExpenses,
   fetchIncomeOccurrences,
   fetchBudgetRemaining,
   fetchSummaryStats,
@@ -52,6 +53,7 @@ import type {
   ExpenseFilters,
   Income,
   RecurringIncomeWithNextDate,
+  RecurringExpenseRule,
   IncomeOccurrence,
   CreateIncomeRequest,
   UpdateIncomeRequest,
@@ -114,6 +116,7 @@ export const budgetKeys = {
   incomeOccurrences: (startDate: string, endDate: string) =>
     [...budgetKeys.incomes(), 'occurrences', { startDate, endDate }] as const,
   recurringIncomes: () => [...budgetKeys.all, 'recurringIncomes'] as const,
+  recurringExpenses: () => [...budgetKeys.all, 'recurringExpenses'] as const,
 
   budgetRemainingRoot: () => [...budgetKeys.all, 'budgetRemaining'] as const,
 
@@ -367,6 +370,14 @@ export function useRecurringIncomes() {
   return useQuery<RecurringIncomeWithNextDate[]>({
     queryKey: budgetKeys.recurringIncomes(),
     queryFn: fetchRecurringIncomes,
+    staleTime: 300000
+  });
+}
+
+export function useRecurringExpenses() {
+  return useQuery<RecurringExpenseRule[]>({
+    queryKey: budgetKeys.recurringExpenses(),
+    queryFn: fetchRecurringExpenses,
     staleTime: 300000
   });
 }

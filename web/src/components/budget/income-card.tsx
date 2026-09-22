@@ -16,7 +16,8 @@ import {
 import { Trash2, Edit, Repeat, Calendar } from "lucide-react";
 import type { Income } from "@/types/api";
 import { format } from "date-fns";
-import { safeFormat, safeFixed } from "@/lib/utils";
+import { safeFormat } from "@/lib/utils";
+import { formatSigned, isRecurringType, getRecurringLabel } from "@/lib/format";
 
 interface IncomeCardProps {
   income: Income;
@@ -57,20 +58,7 @@ export function IncomeCard({ income, onView, onEdit, onDelete, disabled, showToa
     setDeleteDialogOpen(false);
   };
 
-  const getRecurringLabel = (type: string | null | undefined) => {
-    switch (type) {
-      case "daily":
-        return "Daily";
-      case "weekly":
-        return "Weekly";
-      case "monthly":
-        return "Monthly";
-      default:
-        return "One-time";
-    }
-  };
-
-  const isRecurring = income.recurring_type !== null && income.recurring_type !== undefined;
+  const isRecurring = isRecurringType(income.recurring_type);
 
   return (
     <>
@@ -115,8 +103,8 @@ export function IncomeCard({ income, onView, onEdit, onDelete, disabled, showToa
             </div>
 
             <div className="flex flex-col items-end gap-2">
-              <div className="text-xl font-bold text-green-600">
-                +{income.currency} {safeFixed(income.amount)}
+              <div className="text-xl font-bold font-mono tabular-nums text-green-600">
+                {formatSigned(income.amount, "income", income.currency)}
               </div>
               <div className="flex gap-1">
                 <Button

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useRecurringIncomes, useCreateIncome } from '@/hooks/use-budget';
 import { SkipForward, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
-import { safeFormat, safeFixed } from "@/lib/utils";
+import { safeFormat } from "@/lib/utils";
+import { formatSigned, formatCount } from "@/lib/format";
 import { SkipOccurrenceDialog } from './skip-occurrence-dialog';
 import type { RecurringIncomeWithNextDate } from '@/types/api';
 
@@ -69,7 +70,7 @@ export function RecurringIncomeList({ className }: RecurringIncomeListProps) {
               <CardTitle>Recurring Incomes</CardTitle>
               <CardDescription>Your regular income sources</CardDescription>
             </div>
-            <Badge variant="secondary">{recurringIncomes.length} sources</Badge>
+            <Badge variant="secondary">{formatCount(recurringIncomes.length)} sources</Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -97,8 +98,8 @@ export function RecurringIncomeList({ className }: RecurringIncomeListProps) {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className="font-semibold text-green-600">
-                      +{income.currency} {safeFixed(income.amount)}
+                    <p className="font-semibold font-mono tabular-nums text-green-600">
+                      {formatSigned(income.amount, "income", income.currency)}
                     </p>
                   </div>
                   <Button

@@ -11,6 +11,7 @@ import { format, parseISO } from 'date-fns';
 import { useToast } from '@/components/ui/toast';
 import { GuestBlockedError } from '@/hooks/use-budget';
 import { checkSkippedIncome } from '@/lib/api';
+import { formatPeso, formatSigned } from '@/lib/format';
 import type { RecurringIncomeWithNextDate } from '@/types/api';
 
 interface SkipOccurrenceDialogProps {
@@ -82,7 +83,7 @@ export function SkipOccurrenceDialog({ income, open, onOpenChange }: SkipOccurre
       await skipIncome.mutateAsync({
         id: income.id,
       });
-      showToast(`Skipped ${income.currency} ${income.amount.toFixed(2)} for ${format(parseISO(skipDate), 'MMM d, yyyy')}`, 'success');
+      showToast(`Skipped ${formatPeso(income.amount, income.currency)} for ${format(parseISO(skipDate), 'MMM d, yyyy')}`, 'success');
       handleOpen(false);
     } catch (error) {
       if (error instanceof GuestBlockedError) {
@@ -118,8 +119,8 @@ export function SkipOccurrenceDialog({ income, open, onOpenChange }: SkipOccurre
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount</span>
-              <span className="font-medium text-red-600">
-                -{income.currency} {income.amount.toFixed(2)}
+              <span className="font-medium font-mono tabular-nums text-red-600">
+                {formatSigned(income.amount, "expense", income.currency)}
               </span>
             </div>
             <div className="flex justify-between">

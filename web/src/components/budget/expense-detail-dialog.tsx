@@ -16,7 +16,8 @@ import {
 import { Edit, Trash2, Calendar, Repeat } from "lucide-react";
 import type { Expense } from "@/types/api";
 import { format } from "date-fns";
-import { safeFormat, safeFixed } from "@/lib/utils";
+import { safeFormat } from "@/lib/utils";
+import { formatSigned, isRecurringType, getRecurringLabel } from "@/lib/format";
 import { EditExpenseDialog } from "./expense-edit-dialog";
 
 interface ExpenseDetailDialogProps {
@@ -43,22 +44,7 @@ export function ExpenseDetailDialog({
 
   if (!expense) return null;
 
-  const getRecurringLabel = (type: string | null | undefined) => {
-    switch (type) {
-      case "daily":
-        return "Daily";
-      case "weekly":
-        return "Weekly";
-      case "monthly":
-        return "Monthly";
-      case "yearly":
-        return "Yearly";
-      default:
-        return "One-time";
-    }
-  };
-
-  const isRecurring = expense.recurring_type !== null && expense.recurring_type !== undefined;
+  const isRecurring = isRecurringType(expense.recurring_type);
 
   const handleEditClick = () => {
     if (isGuest && showToast) {
@@ -116,8 +102,8 @@ export function ExpenseDetailDialog({
               >
                 {expense.description}
               </h3>
-              <p className="text-2xl font-bold text-primary shrink-0">
-                {expense.currency} {safeFixed(expense.amount)}
+              <p className="text-2xl font-bold font-mono tabular-nums text-primary shrink-0">
+                {formatSigned(expense.amount, "expense", expense.currency)}
               </p>
             </div>
 

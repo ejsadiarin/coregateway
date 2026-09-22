@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { useCreateCategoryBudget, useUpdateCategoryBudget, useCategories } from '@/hooks/use-budget';
 import type { CategoryBudgetWithVariance } from '@/types/api';
+import { formatPeso } from '@/lib/format';
 import { format } from 'date-fns';
 import { DollarSign, Edit2, Plus } from 'lucide-react';
 
@@ -138,7 +139,7 @@ export function CategoryBudgetForm({
 
             {categoryBudget && categoryBudget.spent_amount > 0 && (
               <div className="text-sm text-muted-foreground">
-                Current spending: ₱{categoryBudget.spent_amount.toLocaleString()}
+                Current spending: {formatPeso(categoryBudget.spent_amount)}
               </div>
             )}
           </div>

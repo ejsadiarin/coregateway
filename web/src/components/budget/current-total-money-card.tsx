@@ -1,6 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCurrentTotalMoney } from '@/hooks/use-budget';
+import { formatPeso } from '@/lib/format';
 import { Wallet } from 'lucide-react';
 
 interface CurrentTotalMoneyCardProps {
@@ -17,8 +18,9 @@ export function CurrentTotalMoneyCard({ className }: CurrentTotalMoneyCardProps)
           <CardTitle className="text-sm font-medium">Total Money · lifetime</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-16 flex items-center justify-center">
-            <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <div className="space-y-2 animate-pulse">
+            <div className="h-8 w-40 bg-muted rounded" />
+            <div className="h-3 w-24 bg-muted rounded" />
           </div>
         </CardContent>
       </Card>
@@ -46,8 +48,9 @@ export function CurrentTotalMoneyCard({ className }: CurrentTotalMoneyCardProps)
       <CardContent>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-3xl font-bold">
-              ₱{data.total_money.toLocaleString()}
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Lifetime total</p>
+            <div className="text-3xl font-bold font-mono tabular-nums">
+              {formatPeso(data.total_money)}
             </div>
           </div>
           <div className="p-3 rounded-full bg-primary/10">

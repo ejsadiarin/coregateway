@@ -16,7 +16,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
-import { safeFormat, safeFixed } from "@/lib/utils";
+import { safeFormat } from "@/lib/utils";
+import { formatPeso, formatSigned } from "@/lib/format";
 import { Link } from "react-router-dom";
 
 function OccurrenceCard({ occurrence }: { occurrence: IncomeOccurrence }) {
@@ -50,8 +51,8 @@ function OccurrenceCard({ occurrence }: { occurrence: IncomeOccurrence }) {
               {safeFormat(occurrence.date, (d) => format(d, "MMM dd, yyyy"))}
             </p>
           </div>
-          <div className={`text-xl font-bold ${occurrence.is_skipped ? 'text-red-600' : 'text-green-600'}`}>
-            {occurrence.is_skipped ? '' : '+'}{occurrence.currency} {safeFixed(Math.abs(Number(occurrence.amount)))}
+          <div className={`text-xl font-bold font-mono tabular-nums ${occurrence.is_skipped ? 'text-red-600' : 'text-green-600'}`}>
+            {occurrence.is_skipped ? formatPeso(Math.abs(Number(occurrence.amount)), occurrence.currency) : formatSigned(occurrence.amount, "income", occurrence.currency)}
           </div>
         </div>
       </CardContent>

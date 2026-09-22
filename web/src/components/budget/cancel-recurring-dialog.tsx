@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { GuestBlockedError } from '@/hooks/use-budget';
 import { budgetKeys } from '@/hooks/use-budget';
 import { cancelRecurringExpense, cancelRecurringIncome } from '@/lib/api';
+import { formatPeso } from '@/lib/format';
 import { useAuth } from '@/contexts/auth-context';
 
 type RecurringItemType = 'expense' | 'income';
@@ -97,8 +98,8 @@ export function CancelRecurringDialog({ item, itemType, open, onOpenChange }: Ca
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount</span>
-              <span className="font-medium">
-                {item.currency} {item.amount.toFixed(2)}
+              <span className="font-medium font-mono tabular-nums">
+                {formatPeso(item.amount, item.currency)}
               </span>
             </div>
             <div className="flex justify-between">

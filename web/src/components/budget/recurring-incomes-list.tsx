@@ -12,7 +12,8 @@ import {
 import { useRecurringIncomes, useIncome, useUpdateIncome, GuestBlockedError } from '@/hooks/use-budget';
 import { Calendar, Clock, MoreVertical, Pencil, SkipForward, XCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { safeFormat, safeFixed } from '@/lib/utils';
+import { safeFormat } from '@/lib/utils';
+import { formatSigned, formatCount } from '@/lib/format';
 import { useToast } from '@/components/ui/toast';
 import { EditIncomeDialog } from './income-edit-dialog';
 import { SkipOccurrenceDialog } from './skip-occurrence-dialog';
@@ -125,8 +126,8 @@ export function RecurringIncomesList({ className }: RecurringIncomesListProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right">
-                    <p className="font-semibold text-green-600">
-                      +{income.currency} {safeFixed(income.amount)}
+                    <p className="font-semibold font-mono tabular-nums text-green-600">
+                      {formatSigned(income.amount, "income", income.currency)}
                     </p>
                   </div>
                   <DropdownMenu>

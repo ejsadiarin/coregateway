@@ -237,6 +237,22 @@ export interface RecurringIncomeWithNextDate {
     updated_at: string;
 }
 
+export interface RecurringExpenseRule {
+    id: string;
+    amount: number;
+    currency: string;
+    description: string;
+    category_id?: string | null;
+    notes?: string;
+    recurring_type: string;
+    start_date: string;
+    end_date?: string;
+    priority: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface RecurringSummary {
     total_recurring_income: number;
     total_recurring_expenses: number;

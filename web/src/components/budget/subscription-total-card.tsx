@@ -1,6 +1,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSubscriptions } from '@/hooks/use-budget';
+import { formatPeso, formatCount } from '@/lib/format';
 import { CreditCard } from 'lucide-react';
 
 interface SubscriptionTotalCardProps {
@@ -54,17 +55,17 @@ export function SubscriptionTotalCard({ className }: SubscriptionTotalCardProps)
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-bold">₱{data.total_monthly.toLocaleString()}</div>
+        <div className="text-3xl font-bold font-mono tabular-nums">{formatPeso(data.total_monthly)}</div>
         <div className="text-xs text-muted-foreground mt-1">per month</div>
 
         <div className="mt-4 pt-3 border-t border-border space-y-1">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Yearly estimate</span>
-            <span className="font-medium">₱{yearlyEstimate.toLocaleString()}</span>
+            <span className="font-medium font-mono tabular-nums">{formatPeso(yearlyEstimate)}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Active subscriptions</span>
-            <span className="font-medium">{data.count}</span>
+            <span className="font-medium font-mono tabular-nums">{formatCount(data.count)}</span>
           </div>
         </div>
       </CardContent>

@@ -6,6 +6,7 @@ import { RefreshCw, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { safeFormat } from '@/lib/utils';
+import { formatPeso } from '@/lib/format';
 
 interface SubscriptionListProps {
   className?: string;
@@ -93,8 +94,8 @@ export function SubscriptionList({ className }: SubscriptionListProps) {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium">
-                      {sub.currency} {sub.amount.toLocaleString()}
+                    <div className="text-sm font-medium font-mono tabular-nums">
+                      {formatPeso(sub.amount, sub.currency)}
                     </div>
                     <Badge variant="outline" className={cn('text-xs mt-1', badge.color)}>
                       {badge.label}

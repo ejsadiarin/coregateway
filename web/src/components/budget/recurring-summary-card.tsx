@@ -1,8 +1,9 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useRecurringIncomes, useSubscriptions } from '@/hooks/use-budget';
-import { Repeat, ArrowDownRight, ArrowUpRight, DollarSign } from 'lucide-react';
+import { useRecurringIncomes, useRecurringExpenses } from '@/hooks/use-budget';
+import { Repeat, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatPeso, formatCount, formatSigned } from '@/lib/format';
 
 interface RecurringSummaryCardProps {
   className?: string;
@@ -10,9 +11,9 @@ interface RecurringSummaryCardProps {
 
 export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
   const { data: recurringIncomes, isLoading: incomesLoading } = useRecurringIncomes();
-  const { data: subscriptionsData, isLoading: subscriptionsLoading } = useSubscriptions();
+  const { data: recurringExpenses, isLoading: expensesLoading } = useRecurringExpenses();
 
-  const isLoading = incomesLoading || subscriptionsLoading;
+  const isLoading = incomesLoading || expensesLoading;
 
   if (isLoading) {
     return (
@@ -21,8 +22,10 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
           <CardTitle className="text-sm font-medium">Recurring Cash Flow</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-20 flex items-center justify-center">
-            <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <div className="space-y-4 animate-pulse">
+            <div className="h-5 w-32 bg-muted rounded" />
+            <div className="h-5 w-32 bg-muted rounded" />
+            <div className="h-6 w-40 bg-muted rounded" />
           </div>
         </CardContent>
       </Card>
@@ -30,15 +33,19 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
   }
 
   const totalRecurringIncome = recurringIncomes?.reduce(
-    (sum, inc) => sum + Number(inc.amount),
+    (sum, inc) => sum + (Number(inc.amount) || 0),
     0
   ) || 0;
 
-  const totalRecurringExpenses = subscriptionsData?.total_monthly || 0;
+  const activeExpenses = (recurringExpenses || []).filter((r) => r.is_active !== false);
+  const totalRecurringExpenses = activeExpenses.reduce(
+    (sum, r) => sum + (Number(r.amount) || 0),
+    0
+  );
   const netRecurringCashFlow = totalRecurringIncome - totalRecurringExpenses;
 
   const recurringIncomeCount = recurringIncomes?.length || 0;
-  const recurringExpenseCount = subscriptionsData?.count || 0;
+  const recurringExpenseCount = activeExpenses.length;
 
   return (
     <Card className={className}>
@@ -54,14 +61,14 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
                 <ArrowDownRight className="h-4 w-4 text-green-500" />
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Income</div>
-                <div className="text-lg font-semibold text-green-600">
-                  ₱{totalRecurringIncome.toLocaleString()}
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Income</p>
+                <div className="text-lg font-semibold font-mono tabular-nums text-green-600">
+                  {formatPeso(totalRecurringIncome)}
                 </div>
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              {recurringIncomeCount} sources
+              {formatCount(recurringIncomeCount)} sources
             </div>
           </div>
 
@@ -71,14 +78,14 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
                 <ArrowUpRight className="h-4 w-4 text-red-500" />
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Expenses</div>
-                <div className="text-lg font-semibold text-red-600">
-                  ₱{totalRecurringExpenses.toLocaleString()}
+                <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Expenses</p>
+                <div className="text-lg font-semibold font-mono tabular-nums text-red-600">
+                  {formatPeso(totalRecurringExpenses)}
                 </div>
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
-              {recurringExpenseCount} subscriptions
+              {formatCount(recurringExpenseCount)} rules
             </div>
           </div>
 
@@ -95,12 +102,12 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
                   )} />
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Net Cash Flow</div>
+                  <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Net cash flow</p>
                   <div className={cn(
-                    "text-xl font-bold",
+                    "text-xl font-bold font-mono tabular-nums",
                     netRecurringCashFlow >= 0 ? "text-green-600" : "text-red-600"
                   )}>
-                    {netRecurringCashFlow >= 0 ? '+' : ''}₱{netRecurringCashFlow.toLocaleString()}
+                    {formatSigned(netRecurringCashFlow, netRecurringCashFlow >= 0 ? 'income' : 'expense')}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useExpenses, useSearchExpenses, useCategories, useDeleteExpense, useUpdateExpense, useCreateExpense, GuestBlockedError } from "@/hooks/use-budget";
 import { ExpenseCard } from "@/components/budget/expense-card";
 import { EditExpenseDialog } from "@/components/budget/expense-edit-dialog";
@@ -324,12 +324,15 @@ export default function ExpensesPage() {
               {isGuest ? (
                 <p className="text-xs">Sign in or create an account to manage your own expenses.</p>
               ) : (
-                <Link to="/dashboard/budget/expenses/new">
-                  <Button variant="outline" size="sm" className="mt-2">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add your first expense
-                  </Button>
-                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setShowExpenseDialog(true)}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add your first expense
+                </Button>
               )}
             </div>
           </div>

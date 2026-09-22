@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ExpenseStats } from "@/components/budget/expense-stats";
 import { IncomeForm } from "@/components/budget/income-form";
@@ -34,7 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
-import { safeFormat, safeFixed } from "@/lib/utils";
+import { safeFormat } from "@/lib/utils";
+import { formatPeso, formatSigned } from "@/lib/format";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/components/ui/toast";
 import { ExpenseDetailDialog } from "@/components/budget/expense-detail-dialog";
@@ -54,22 +55,19 @@ export default function BudgetDashboard() {
   });
 
   const { data: summaryStats, isLoading: statsLoading } = useSummaryStats(dateRange.startDate, dateRange.endDate);
-  const { data: expensesData, isLoading: expensesLoading } = useExpenses(undefined, 1, 5);
+  const { data: expensesData, isLoading: expensesLoading } = useExpenses(
+    dateRange.startDate && dateRange.endDate
+      ? { start_date: dateRange.startDate, end_date: dateRange.endDate }
+      : undefined,
+    1,
+    5
+  );
   const { data: budgetRemainingData } = useBudgetRemaining();
 
-  // fetch recent income occurrences (last 7 days) including virtual recurring entries
-  const recentOccurrenceDates = useMemo(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    return {
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0]
-    };
-  }, []);
+  // recent incomes follow the same global period filter as everything else
   const { data: recentOccurrences, isLoading: occurrencesLoading } = useIncomeOccurrences(
-    recentOccurrenceDates.startDate,
-    recentOccurrenceDates.endDate,
+    dateRange.startDate,
+    dateRange.endDate,
     1,
     10
   );
@@ -216,37 +214,64 @@ export default function BudgetDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}>
+          <Button
+            onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}
+            disabled={isGuest}
+            title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Income
           </Button>
-          <Button onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}>
+          <Button
+            onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}
+            disabled={isGuest}
+            title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Expense
           </Button>
         </div>
       </motion.div>
 
-      {/* Date Filter & Budget Remaining */}
+      {/* Budget Remaining (current month — lifetime scope shown on Total Money card) */}
       <motion.div
         className="mb-4 flex items-center justify-between"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           {budgetRemainingData && (
-            <div className={`text-sm font-semibold ${
-              budgetRemainingData.remaining < 0 ? 'text-red-500' :
-              budgetRemainingData.remaining > 0 ? 'text-green-600' :
-              'text-gray-600'
-            }`}>
-              Budget Remaining: ₱{safeFixed(budgetRemainingData.remaining)}
-              {budgetRemainingData.remaining < 0 && ' ⚠️ Over Budget'}
-              {budgetRemainingData.remaining > 0 && ' ✓ On Track'}
-            </div>
+            <>
+              <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">
+                Remaining · {budgetRemainingData.period_start} → {budgetRemainingData.period_end}
+              </p>
+              <span className={`font-mono tabular-nums text-sm font-semibold ${
+                budgetRemainingData.remaining < 0 ? 'text-red-500' :
+                budgetRemainingData.remaining > 0 ? 'text-green-600' :
+                'text-gray-600'
+              }`}>
+                {formatPeso(budgetRemainingData.remaining)}
+              </span>
+              {budgetRemainingData.remaining < 0 && (
+                <Badge variant="destructive" className="text-xs">Over Budget</Badge>
+              )}
+              {budgetRemainingData.remaining > 0 && (
+                <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">On Track</Badge>
+              )}
+            </>
           )}
         </div>
+      </motion.div>
+
+      {/* Global Period Filter — controls every period-scoped card below */}
+      <motion.div
+        className="mb-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+      >
+        <PeriodPresetFilter value={dateRange} onChange={setDateRange} />
       </motion.div>
 
       {/* Summary Statistics */}
@@ -254,19 +279,9 @@ export default function BudgetDashboard() {
         className="mb-8"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15 }}
-      >
-        <ExpenseStats stats={summaryStats} isLoading={statsLoading} />
-      </motion.div>
-
-      {/* Global Period Filter */}
-      <motion.div
-        className="mb-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.18 }}
       >
-        <PeriodPresetFilter value={dateRange} onChange={setDateRange} />
+        <ExpenseStats stats={summaryStats} isLoading={statsLoading} />
       </motion.div>
 
       {/* Budget Analytics Cards */}
@@ -306,7 +321,7 @@ export default function BudgetDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Recent Incomes</CardTitle>
-                <CardDescription>Last 7 days (including recurring)</CardDescription>
+                <CardDescription>Selected period (including recurring)</CardDescription>
               </div>
               <Link to="/dashboard/budget/incomes">
                 <Button variant="ghost" size="sm">
@@ -332,11 +347,13 @@ export default function BudgetDashboard() {
               </div>
             ) : !recentOccurrences?.data?.length ? (
               <div className="text-center py-8 text-muted-foreground">
-                <p>No incomes in the last 7 days</p>
+                <p>No incomes in the selected period</p>
                 <Button
                   variant="outline"
                   size="sm"
                   className="mt-4"
+                  disabled={isGuest}
+                  title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
                   onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -344,11 +361,11 @@ export default function BudgetDashboard() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="divide-y divide-border/60">
                 {recentOccurrences.data.map((occ) => (
                   <div
                     key={occ.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border border-border/50 hover:border-border transition-colors ${occ.is_skipped ? 'bg-red-500/5' : ''} ${occ.is_virtual ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50'}`}
+                    className={`flex items-center justify-between py-2.5 transition-colors ${occ.is_skipped ? 'bg-red-500/5' : ''} ${occ.is_virtual ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50'}`}
                     onClick={() => {
                       if (!occ.is_virtual) {
                         // for real entries, allow editing
@@ -387,8 +404,8 @@ export default function BudgetDashboard() {
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      <p className={`font-semibold shrink-0 ${occ.is_skipped ? 'text-red-600' : 'text-green-600'}`}>
-                        {occ.is_skipped ? '' : '+'}{occ.currency} {safeFixed(Math.abs(Number(occ.amount)))}
+                      <p className={`font-semibold font-mono tabular-nums shrink-0 ${occ.is_skipped ? 'text-red-600' : 'text-green-600'}`}>
+                        {occ.is_skipped ? formatPeso(Math.abs(Number(occ.amount)), occ.currency) : formatSigned(occ.amount, "income", occ.currency)}
                       </p>
                     </div>
                   </div>
@@ -437,11 +454,12 @@ export default function BudgetDashboard() {
                   </div>
                 ) : (
                   <>
-                    <p>No expenses yet</p>
+                    <p>No expenses in the selected period</p>
                     <Button 
                       variant="outline" 
                       size="sm" 
                       className="mt-4"
+                      disabled={isGuest}
                       onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}
                     >
                       <Plus className="mr-2 h-4 w-4" />
@@ -451,11 +469,11 @@ export default function BudgetDashboard() {
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="divide-y divide-border/60">
                 {displayExpenses.map((expense) => (
                   <div
                     key={expense.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:border-border transition-colors cursor-pointer hover:bg-accent/50"
+                    className="flex items-center justify-between py-2.5 transition-colors cursor-pointer hover:bg-accent/50"
                     onClick={() => setViewingExpense(expense)}
                   >
                     <div className="flex-1 min-w-0">
@@ -470,8 +488,8 @@ export default function BudgetDashboard() {
                       </p>
                     </div>
                     <div className="text-right ml-4">
-                      <p className="font-semibold shrink-0 text-red-600">
-                        -{expense.currency} {safeFixed(expense.amount)}
+                      <p className="font-semibold font-mono tabular-nums shrink-0 text-red-600">
+                        {formatSigned(expense.amount, "expense", expense.currency)}
                       </p>
                     </div>
                   </div>

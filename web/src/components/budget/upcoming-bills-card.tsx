@@ -4,7 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { useUpcomingBills } from '@/hooks/use-budget';
 import { Calendar, Clock, DollarSign } from 'lucide-react';
 import { cn, safeFormat } from '@/lib/utils';
-import { format, parseISO, isWithinInterval, addDays } from 'date-fns';
+import { formatPeso } from '@/lib/format';
+import { format, parseISO, isWithinInterval, addDays, startOfDay } from 'date-fns';
 
 interface UpcomingBillsCardProps {
   days?: 7 | 30;
@@ -21,8 +22,17 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
           <CardTitle className="text-sm font-medium">Upcoming Bills</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-16 flex items-center justify-center">
-            <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <div className="space-y-3 animate-pulse">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="h-9 w-9 bg-muted rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-4 w-2/3 bg-muted rounded" />
+                  <div className="h-3 w-1/3 bg-muted rounded" />
+                </div>
+                <div className="h-4 w-20 bg-muted rounded" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -43,19 +53,28 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
   }
 
   const bills = Array.isArray(data) ? data : [];
-  const totalAmount = bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
-  const today = new Date();
-  const next7Days = addDays(today, 7);
+  const today = startOfDay(new Date());
+  const windowEnd = addDays(today, days);
+
+  const inWindow = bills.filter((b) => {
+    if (!b.start_date) return false;
+    try {
+      return isWithinInterval(parseISO(b.start_date), { start: today, end: windowEnd });
+    } catch {
+      return false;
+    }
+  });
+  const totalAmount = inWindow.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
 
   const getDueStatus = (dueDate: string) => {
     const date = parseISO(dueDate);
-    if (isWithinInterval(date, { start: today, end: next7Days })) {
+    if (isWithinInterval(date, { start: today, end: windowEnd })) {
       return { label: 'Soon', color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' };
     }
     return { label: 'Upcoming', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' };
   };
 
-  const displayedBills = bills.slice(0, 5);
+  const displayedBills = inWindow.slice(0, 5);
 
   return (
     <Card className={className}>
@@ -68,24 +87,24 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
             </CardDescription>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold">₱{Math.round(totalAmount).toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground">Total due</div>
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Total due</p>
+            <div className="text-2xl font-bold font-mono tabular-nums">{formatPeso(totalAmount)}</div>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {bills.length === 0 ? (
+        {inWindow.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-4">
-            No upcoming bills found
+            No bills due in the next {days} days
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-border/60">
             {displayedBills.map((bill) => {
               const status = bill.start_date ? getDueStatus(bill.start_date) : { label: 'Upcoming', color: 'bg-blue-500/10 text-blue-500 border-blue-500/20' };
               return (
                 <div
                   key={`${bill.id}-${bill.start_date}`}
-                  className="flex items-center justify-between p-2 rounded-lg border border-border/50 hover:bg-muted/50 transition-colors"
+                  className="flex items-center justify-between py-2.5 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-full bg-muted">
@@ -100,7 +119,7 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-medium">₱{Number(bill.amount).toLocaleString()}</div>
+                    <div className="text-sm font-medium font-mono tabular-nums">{formatPeso(bill.amount, bill.currency)}</div>
                     <Badge variant="outline" className={cn('text-xs mt-1', status.color)}>
                       {status.label}
                     </Badge>
@@ -109,9 +128,9 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
               );
             })}
 
-            {bills.length > 5 && (
+            {inWindow.length > 5 && (
               <div className="text-center text-xs text-muted-foreground pt-2">
-                +{bills.length - 5} more bills
+                +{inWindow.length - 5} more bills
               </div>
             )}
           </div>
@@ -120,7 +139,7 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
         <div className="mt-4 pt-3 border-t border-border">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <DollarSign className="h-3 w-3" />
-            <span>{bills.length} recurring payments</span>
+            <span>{inWindow.length} payments due in {days} days</span>
           </div>
         </div>
       </CardContent>
