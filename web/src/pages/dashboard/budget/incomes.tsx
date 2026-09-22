@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import { safeFormat } from "@/lib/utils";
-import { formatPeso, formatSigned } from "@/lib/format";
+import { formatPeso, formatSigned, getRecurringLabel } from "@/lib/format";
 import { Link } from "react-router-dom";
 
 function OccurrenceCard({ occurrence }: { occurrence: IncomeOccurrence }) {
@@ -33,7 +33,7 @@ function OccurrenceCard({ occurrence }: { occurrence: IncomeOccurrence }) {
               {occurrence.is_virtual && (
                 <Badge variant="secondary" className="text-xs">
                   <Repeat className="h-3 w-3 mr-1" />
-                  {occurrence.recurring_type || "recurring"}
+                  {getRecurringLabel(occurrence.recurring_type)}
                 </Badge>
               )}
               {occurrence.is_skipped && (

@@ -73,13 +73,9 @@ import type {
   FiftyThirtyTwentyResponse,
   MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
-  SubscriptionsResponse,
   MerchantAnalysisResponse,
   HealthScoreResponse,
-  WeekdayPatternResponse,
-  CategoryBudgetWithVariance,
-  CreateCategoryBudgetRequest,
-  UpdateCategoryBudgetRequest
+  WeekdayPatternResponse
 } from '@/types/api';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -625,41 +621,5 @@ export function useMerchantAnalysis(_limit: number = 10, _startDate?: string, _e
     queryFn: async () => { throw new Error('Merchant analysis endpoint not implemented'); },
     enabled: false,
     staleTime: Infinity
-  });
-}
-
-export function useSubscriptions() {
-  return useQuery<SubscriptionsResponse>({
-    queryKey: ['budget', 'subscriptions'],
-    queryFn: async () => { throw new Error('Subscriptions endpoint not implemented'); },
-    enabled: false,
-    staleTime: Infinity
-  });
-}
-
-export function useCategoryBudgets(_month?: string) {
-  return useQuery<CategoryBudgetWithVariance[]>({
-    queryKey: ['budget', 'categoryBudgets'],
-    queryFn: async () => { throw new Error('Category budgets endpoint not implemented'); },
-    enabled: false,
-    staleTime: Infinity
-  });
-}
-
-export function useCreateCategoryBudget() {
-  return useMutation<CategoryBudgetWithVariance, Error, CreateCategoryBudgetRequest>({
-    mutationFn: async () => { throw new Error('Category budgets endpoint not implemented'); }
-  });
-}
-
-export function useUpdateCategoryBudget() {
-  return useMutation<CategoryBudgetWithVariance, Error, { id: string; data: UpdateCategoryBudgetRequest }>({
-    mutationFn: async () => { throw new Error('Category budgets endpoint not implemented'); }
-  });
-}
-
-export function useDeleteCategoryBudget() {
-  return useMutation<void, Error, string>({
-    mutationFn: async () => { throw new Error('Category budgets endpoint not implemented'); }
   });
 }
