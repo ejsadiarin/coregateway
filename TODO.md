@@ -25,3 +25,30 @@
     - [ ] test services/business logic (practice TDD)
 - [ ] add handlers, middleware, etc. accordingly
     - update/add a .http file at the root
+
+---
+
+# plan revamp corefinance web (budget pages)
+
+Alright so here's my plan for the budget dashboard page
+
+- in /dashboard/budget
+    - main dashboard for corefinance
+    - have last 7 days, last 30 days, last 90 days, this month, this week, this year, custom filters
+        - the cards and "stats" should all update as needed when this filter is adjusted (e.g. total income and total spent cards update)
+    - [refactor] i want to see these "stats" at a glance:
+        - total income and total spent (filterable by above 7d, 30d, etc.) - default should be last 7d
+        - [needs fix] total money (current total money, calculation should include the expenses deducted and incomes added, etc. - just current state of financial position) - need to fix the calculation (its off the mark right now)
+        - recurring incomes and recurring expenses (like subscriptions, etc.) - so i can easily "skip" the record as needed (skip means the record would be deleted) 
+        - last 5 expense and income records - filterable by tags/categories
+    - [refactor] for now we can remove the other pages like "Summary", "Health", and "Recurring" pages
+    - /dashboard/budget/expenses and /dashboard/budget/incomes - these should just focus on displaying the records (paginated, 10 records each page), sorted by latest date
+
+- backend (corefinance-api)
+    - [verify] EACH recurring rule (expenses/incomes) MUST create a database record (e.g. weekly recurring income PHP +500 every monday --> insert record every monday on the incomes table +500) - this way calculations have history and are static and accurate. DON'T depend on dynamic calculations (e.g. if we change the recurring rule then the calculation would be off) - so static database records is the source of truth 
+
+
+- priority groups (needs, wants, savings) - higher level, optional
+- categories (food, transportation, etc.) - required per income/expense record
+- tags (custom ones) - these are the additional metadata to the income/expense record
+    - filterable by tags works dynamically - iterate the tags table and display it then simple search based on the records that have the tags 

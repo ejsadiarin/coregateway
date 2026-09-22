@@ -1,0 +1,190 @@
+@host = localhost:8080
+@user_id = 00000000-0000-0000-0000-000000000000
+@service_id = 00000000-0000-0000-0000-000000000000
+
+# ─── Ops ─────────────────────────────────────────────────────────────────────
+
+### Health Check
+
+GET {{host}}/health
+
+### Swagger UI
+
+GET {{host}}/swagger/index.html
+
+### System Stats (hardcoded mock data)
+
+GET {{host}}/api/system/stats
+
+### Legacy Services (hardcoded mock data)
+
+GET {{host}}/api/legacy/services
+
+
+# ─── Auth ────────────────────────────────────────────────────────────────────
+# Session is cookie-based (HttpOnly `session_token` set on login).
+# Send cookies with requests (VS Code REST Client: enable "Send cookies").
+
+### Register (role forced to `user`)
+
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+### Login
+
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "password123",
+  "remember_me": true
+}
+
+### Login as Demo (seeded guest user, no body)
+
+POST {{host}}/api/auth/demo
+
+### Logout (works anonymously, clears cookie)
+
+POST {{host}}/api/auth/logout
+
+### Get Current User (401 without valid session)
+
+GET {{host}}/api/auth/me
+
+
+# ─── Users ───────────────────────────────────────────────────────────────────
+# {id} = UUID. Path param is `{id}`, not `{user_id}`.
+
+### List Users (public — no auth check in handler)
+
+GET {{host}}/api/users
+
+### Create User (public; role: guest | user | admin)
+
+POST {{host}}/api/users
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "role": "user"
+}
+
+### Get User (session required; 403 unless admin or self)
+
+GET {{host}}/api/users/{{user_id}}
+
+### Update User (session required; admin or self; role change requires admin)
+
+PUT {{host}}/api/users/{{user_id}}
+Content-Type: application/json
+
+{
+  "email": "updated@example.com"
+}
+
+### Update User Password
+
+PUT {{host}}/api/users/{{user_id}}
+Content-Type: application/json
+
+{
+  "password": "newpassword123"
+}
+
+### Delete User (session required; cannot delete self or demo@example.com; 204)
+
+DELETE {{host}}/api/users/{{user_id}}
+
+
+# ─── Services (monitor) ──────────────────────────────────────────────────────
+# {id} = UUID. All routes are public (no auth check).
+
+### Create Service (defaults: interval 60, method GET, timeout 5000, codes [200,204])
+
+POST {{host}}/api/services
+Content-Type: application/json
+
+{
+  "name": "My Service",
+  "url": "https://example.com",
+  "icon": "🚀",
+  "description": "A test service",
+  "service_type": "web",
+  "health_check_interval": 60,
+  "health_check_method": "GET",
+  "expected_status_codes": [200],
+  "timeout": 5000
+}
+
+### List Services
+
+GET {{host}}/api/services/list
+
+### Get All Services Stats
+
+GET {{host}}/api/services/stats/all
+
+### Get Service
+
+GET {{host}}/api/services/{{service_id}}
+
+### Update Service (partial; all fields optional)
+
+PUT {{host}}/api/services/{{service_id}}
+Content-Type: application/json
+
+{
+  "name": "Updated Service",
+  "is_active": false
+}
+
+### Delete Service (204)
+
+DELETE {{host}}/api/services/{{service_id}}
+
+### Get Service History (limit hardcoded to 100)
+
+GET {{host}}/api/services/{{service_id}}/history
+
+### Get Service Stats (24h / 7d / 30d uptime)
+
+GET {{host}}/api/services/{{service_id}}/stats
+
+
+# ─── Budget (reverse-proxied to corefinance) ─────────────────────────────────
+# Any method/subpath under /api/budget/** is proxied to COREFINANCE_URL.
+# Requires a valid session cookie so the gateway forwards X-User-ID;
+# otherwise downstream returns 401 {"error":"X-User-ID header is required"}.
+# Full endpoint list: services/corefinance/budget-api.http
+
+### Priority Groups (public, no session needed)
+
+GET {{host}}/api/budget/priority-groups
+
+### Expense Categories (requires session)
+
+GET {{host}}/api/budget/expense-categories/
+
+### Income Categories (requires session)
+
+GET {{host}}/api/budget/incomes/
+
+### Budget Remaining (requires session)
+
+GET {{host}}/api/budget/remaining
+
+### Stats Summary (requires session)
+
+GET {{host}}/api/budget/stats/summary?start_date=2026-09-01&end_date=2026-09-30
+
+### Export Budget (requires session)
+
+GET {{host}}/api/budget/export
