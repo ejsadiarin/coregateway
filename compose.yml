@@ -15,7 +15,7 @@ services:
   coregateway-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.coregateway-api
     ports:
       - "8080:8080"
     environment:
@@ -34,7 +34,7 @@ services:
   corefinance-api:
     build:
       context: ./services/corefinance
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.corefinance-api
       target: api
     ports:
       - "6969:6969"
@@ -50,7 +50,7 @@ services:
   corefinance-cron-worker:
     build:
       context: ./services/corefinance
-      dockerfile: Dockerfile.cron-worker
+      dockerfile: Dockerfile.corefinance-cron-worker
       target: worker
     env_file:
       - ./services/corefinance/.env
