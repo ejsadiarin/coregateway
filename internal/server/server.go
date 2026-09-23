@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/ejsadiarin/coregateway/internal/config"
 	monitor "github.com/ejsadiarin/coregateway/internal/monitor"
 	"github.com/ejsadiarin/coregateway/internal/services/corefinance"
+	"github.com/ejsadiarin/coregateway/internal/token"
 	"github.com/ejsadiarin/coregateway/internal/user"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -22,11 +24,29 @@ type Server struct {
 	ServiceHandler    *monitor.Handler
 	AuthService       *auth.Service
 	CorefinanceClient *corefinance.Client
+	TokenIssuer       *token.Issuer
 	Queries           *db.Queries
 	Pool              *pgxpool.Pool
 }
 
-func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) *http.Server {
+// New builds the server. It fails closed when internal JWT identity cannot
+// be established: without key material the gateway refuses to start rather
+// than run unable to create tokens.
+func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Server, error) {
+	issuer, err := token.NewIssuerFromPEM(
+		cfg.JWTPrivateKeyPEM,
+		cfg.JWTKID,
+		cfg.JWTPrevPrivateKeyPEM,
+		cfg.JWTPrevKID,
+		cfg.JWTIssuer,
+		cfg.JWTAudience,
+		time.Duration(cfg.JWTTTLSeconds)*time.Second,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("internal JWT identity: %w", err)
+	}
+	slog.Info("internal JWT identity ready", "kid", cfg.JWTKID, "issuer", cfg.JWTIssuer)
+
 	s := &Server{
 		port:    cfg.Port,
 		Pool:    pool,
@@ -38,6 +58,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) *http.Serv
 	s.UserHandler = user.NewHandler(user.NewService(queries))
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)
+	s.TokenIssuer = issuer
 
 	return &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -45,5 +66,5 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) *http.Serv
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
-	}
+	}, nil
 }

@@ -25,6 +25,10 @@ func main() {
 
 	cfg := config.Load()
 
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
+
 	pool, err := dbpkg.NewPool(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -38,7 +42,10 @@ func main() {
 		healthChecker.StartHealthCheckScheduler(cfg.HealthCheckInterval)
 	}
 
-	srv := server.New(cfg, pool, queries)
+	srv, err := server.New(cfg, pool, queries)
+	if err != nil {
+		log.Fatalf("Failed to initialize server: %v", err)
+	}
 
 	go startSessionCleanup(queries)
 
