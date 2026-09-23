@@ -159,13 +159,46 @@ GET {{host}}/api/services/{{service_id}}/history
 GET {{host}}/api/services/{{service_id}}/stats
 
 
+# ─── API Keys (session + admin) ──────────────────────────────────────────────
+# Management for programmatic and service keys. Plaintext is returned
+# exactly once by Create; List never exposes secrets.
+
+### Create API Key
+
+POST {{host}}/api/auth/keys
+Content-Type: application/json
+
+{
+  "label": "ops-script",
+  "scopes": ["finance:read"]
+}
+
+### List API Keys (metadata only)
+
+GET {{host}}/api/auth/keys
+
+### Revoke API Key (immediate effect; 204)
+
+DELETE {{host}}/api/auth/keys/{{key_id}}
+
+### Exchange Service Key for Service JWT (public; key is the credential)
+
+POST {{host}}/api/auth/token
+Content-Type: application/json
+
+{
+  "key": "cgw_live_PASTE_SERVICE_KEY_HERE"
+}
+
+
 # ─── Budget (reverse-proxied to corefinance) ─────────────────────────────────
 # Any method/subpath under /api/budget/** is proxied to COREFINANCE_URL.
-# Requires a valid session cookie so the gateway forwards X-User-ID;
-# otherwise downstream returns 401 {"error":"X-User-ID header is required"}.
+# The edge authenticates (session cookie OR API key), creates a short-lived
+# internal JWT, and forwards it as Authorization: Bearer. No session and no
+# key → 401, never proxied. X-User-ID is never accepted downstream.
 # Full endpoint list: services/corefinance/budget-api.http
 
-### Priority Groups (public, no session needed)
+### Priority Groups (public downstream; via gateway still needs edge identity)
 
 GET {{host}}/api/budget/priority-groups
 
@@ -188,3 +221,18 @@ GET {{host}}/api/budget/stats/summary?start_date=2026-09-01&end_date=2026-09-30
 ### Export Budget (requires session)
 
 GET {{host}}/api/budget/export
+
+### Budget with API key instead of cookie (edge validates, creates, proxies)
+
+GET {{host}}/api/budget/remaining
+Authorization: Bearer cgw_live_PASTE_USER_KEY_HERE
+
+### Budget without credentials (expect 401, never proxied)
+
+GET {{host}}/api/budget/remaining
+
+### Admin path without admin scope (expect 403)
+
+GET {{host}}/api/budget/admin/backfill?dry_run=true
+
+# @key_id = 00000000-0000-0000-0000-000000000000
