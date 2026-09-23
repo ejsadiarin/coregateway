@@ -47,6 +47,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	}))
 
 	// ops
+	r.Get("/.well-known/jwks.json", s.ServeJWKS)
 	r.Get("/swagger/*", swagger.WrapHandler)
 	r.Get("/health", healthCheck)
 	r.Get("/api/system/stats", getSystemStats)
