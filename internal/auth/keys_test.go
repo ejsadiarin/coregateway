@@ -2,14 +2,21 @@ package auth
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
+	"github.com/ejsadiarin/coregateway/internal/token"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -167,5 +174,96 @@ func TestRevokeKeyNotFound(t *testing.T) {
 	svc := NewKeysService(&stubQuerier{revoked: 0})
 	if err := svc.RevokeKey(context.Background(), uuid.New()); err != ErrKeyNotFound {
 		t.Errorf("err = %v, want ErrKeyNotFound", err)
+	}
+}
+
+func testExchangeHandler(t *testing.T, row db.CoregatewayApiKey, err error) (*KeysHandler, *token.Issuer) {
+	t.Helper()
+	pub, priv, genErr := ed25519.GenerateKey(rand.Reader)
+	if genErr != nil {
+		t.Fatalf("generate key: %v", genErr)
+	}
+	iss, genErr := token.NewIssuer(
+		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
+		nil, "https://gateway.internal", "corefinance", 300*time.Second,
+	)
+	if genErr != nil {
+		t.Fatalf("new issuer: %v", genErr)
+	}
+	svc := NewKeysService(&stubQuerier{row: row, err: err})
+	return NewKeysHandler(svc, iss), iss
+}
+
+func serviceRow() db.CoregatewayApiKey {
+	return db.CoregatewayApiKey{
+		ID:     uuid.New(),
+		Label:  "corereminder",
+		Scopes: []string{"finance:read"},
+	}
+}
+
+func TestExchangeServiceKey(t *testing.T) {
+	h, iss := testExchangeHandler(t, serviceRow(), nil)
+
+	body := strings.NewReader(`{"key":"service-key-material"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", body)
+	rec := httptest.NewRecorder()
+	h.Exchange(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var resp struct {
+		TokenType string `json:"token_type"`
+		Token     string `json:"token"`
+		ExpiresIn int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.TokenType != "Bearer" || resp.ExpiresIn != 300 {
+		t.Errorf("response = %+v", resp)
+	}
+	var claims token.Claims
+	parsed, err := jwt.ParseWithClaims(resp.Token, &claims, func(t *jwt.Token) (any, error) {
+		return iss.Keys()[0].Public, nil
+	})
+	if err != nil || !parsed.Valid {
+		t.Fatalf("exchanged token does not verify: %v", err)
+	}
+	if claims.Subject != "" {
+		t.Errorf("service token sub = %q, want empty", claims.Subject)
+	}
+	if claims.Azp != "corereminder" {
+		t.Errorf("azp = %q", claims.Azp)
+	}
+	if claims.Scope != "finance:read" {
+		t.Errorf("scope = %q", claims.Scope)
+	}
+}
+
+func TestExchangeRejects(t *testing.T) {
+	owned := serviceRow()
+	owned.OwnerUserID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
+
+	cases := map[string]struct {
+		row  db.CoregatewayApiKey
+		err  error
+		body string
+		want int
+	}{
+		"unknown key":     {row: db.CoregatewayApiKey{}, err: pgx.ErrNoRows, body: `{"key":"x"}`, want: http.StatusUnauthorized},
+		"owned human key": {row: owned, body: `{"key":"x"}`, want: http.StatusForbidden},
+		"empty body":      {row: serviceRow(), body: `{}`, want: http.StatusBadRequest},
+		"malformed body":  {row: serviceRow(), body: `not-json`, want: http.StatusBadRequest},
+	}
+	for name, c := range cases {
+		h, _ := testExchangeHandler(t, c.row, c.err)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/token", strings.NewReader(c.body))
+		rec := httptest.NewRecorder()
+		h.Exchange(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("%s: status = %d, want %d", name, rec.Code, c.want)
+		}
 	}
 }

@@ -28,6 +28,9 @@ var (
 	ErrInvalidKey = errors.New("invalid API key")
 	// ErrKeyNotFound covers missing and already-revoked keys on management calls.
 	ErrKeyNotFound = errors.New("API key not found")
+	// ErrNotServiceKey rejects owned (human) keys at the token exchange,
+	// where exchanging would silently drop the user's identity.
+	ErrNotServiceKey = errors.New("key is not a service key")
 )
 
 // KeysService owns the api_keys lifecycle: issuance, validation at the
@@ -121,29 +124,54 @@ func (s *KeysService) RevokeKey(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// ValidateKey implements middleware.APIKeyValidator. It hashes the
-// presented key, looks it up, and enforces live/unrevoked/unexpired.
-// Ownerless (service) keys return uuid.Nil as the user: the proxy leg
-// rejects those (it needs a user), while the token exchange accepts them.
-func (s *KeysService) ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error) {
+// validatedRow hashes the presented key, looks it up, and enforces
+// live/unrevoked/unexpired. Unknown, revoked, and expired keys all report
+// ErrInvalidKey so validation reveals nothing about which failed.
+func (s *KeysService) validatedRow(ctx context.Context, presented string) (db.CoregatewayApiKey, error) {
 	row, err := s.queries.GetApiKeyByHash(ctx, HashAPIKey(presented))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, "", nil, ErrInvalidKey
+			return db.CoregatewayApiKey{}, ErrInvalidKey
 		}
-		return uuid.Nil, "", nil, fmt.Errorf("key lookup failed: %w", err)
+		return db.CoregatewayApiKey{}, fmt.Errorf("key lookup failed: %w", err)
 	}
 	if row.RevokedAt.Valid {
-		return uuid.Nil, "", nil, ErrInvalidKey
+		return db.CoregatewayApiKey{}, ErrInvalidKey
 	}
 	if row.ExpiresAt.Valid && time.Now().After(row.ExpiresAt.Time) {
-		return uuid.Nil, "", nil, ErrInvalidKey
+		return db.CoregatewayApiKey{}, ErrInvalidKey
+	}
+	s.touchLastUsed(row.ID)
+	return row, nil
+}
+
+// ValidateKey implements middleware.APIKeyValidator. Ownerless (service)
+// keys return uuid.Nil as the user: the proxy leg rejects those (it needs
+// a user), while the token exchange accepts them.
+func (s *KeysService) ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error) {
+	row, err := s.validatedRow(ctx, presented)
+	if err != nil {
+		return uuid.Nil, "", nil, err
 	}
 	if row.OwnerUserID.Valid {
 		userID = row.OwnerUserID.Bytes
 	}
-	s.touchLastUsed(row.ID)
 	return userID, row.ID.String(), row.Scopes, nil
+}
+
+// ValidateServiceKey validates a key for the token exchange. Only
+// ownerless keys qualify: an owned (human) key exchanged here would mint
+// a user-less token and silently drop the user's identity, so owned keys
+// are rejected outright.
+func (s *KeysService) ValidateServiceKey(ctx context.Context, presented string) (db.CoregatewayApiKey, error) {
+	row, err := s.validatedRow(ctx, presented)
+	if err != nil {
+		return db.CoregatewayApiKey{}, err
+	}
+	if row.OwnerUserID.Valid {
+		return db.CoregatewayApiKey{}, ErrNotServiceKey
+	}
+	return row, nil
 }
 
 // touchLastUsed updates last_used_at off the request path. Failures are

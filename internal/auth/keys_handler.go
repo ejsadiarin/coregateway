@@ -7,18 +7,21 @@ import (
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
+	"github.com/ejsadiarin/coregateway/internal/token"
 	"github.com/google/uuid"
 )
 
 // KeysHandler serves session-authenticated, admin-gated API key management
-// under /api/auth/keys.
+// under /api/auth/keys, plus the public token exchange.
 type KeysHandler struct {
-	keys *KeysService
+	keys   *KeysService
+	issuer *token.Issuer
 }
 
-// NewKeysHandler builds a KeysHandler over a KeysService.
-func NewKeysHandler(keys *KeysService) *KeysHandler {
-	return &KeysHandler{keys: keys}
+// NewKeysHandler builds a KeysHandler over a KeysService and the token
+// issuer used by the exchange endpoint.
+func NewKeysHandler(keys *KeysService, issuer *token.Issuer) *KeysHandler {
+	return &KeysHandler{keys: keys, issuer: issuer}
 }
 
 type createKeyHTTPRequest struct {
@@ -112,4 +115,53 @@ func (h *KeysHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type exchangeRequest struct {
+	Key string `json:"key"`
+}
+
+type exchangeResponse struct {
+	TokenType string `json:"token_type"`
+	Token     string `json:"token"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
+// Exchange trades a valid ownerless (service) key for a short-lived
+// service JWT. It is public: the presented key is the credential. Owned
+// (human) keys are rejected — exchanging one would silently drop the
+// user's identity, so those callers use the proxy leg instead.
+func (h *KeysHandler) Exchange(w http.ResponseWriter, r *http.Request) {
+	var req exchangeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Key == "" {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	row, err := h.keys.ValidateServiceKey(r.Context(), req.Key)
+	if err != nil {
+		switch err {
+		case ErrInvalidKey:
+			helper.RespondErrorJSON(w, http.StatusUnauthorized, "Invalid API key")
+			return
+		case ErrNotServiceKey:
+			helper.RespondErrorJSON(w, http.StatusForbidden, "Key is not a service key")
+			return
+		default:
+			slog.Error("keys.Exchange: failed", "error", err)
+			helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to exchange API key")
+			return
+		}
+	}
+	signed, err := h.issuer.CreateServiceToken(row.Label, row.Scopes)
+	if err != nil {
+		slog.Error("keys.Exchange: failed to create token", "error", err)
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to create token")
+		return
+	}
+	slog.Info("keys.Exchange: service token issued", "key_id", row.ID, "label", row.Label)
+	helper.RespondJSON(w, http.StatusOK, exchangeResponse{
+		TokenType: "Bearer",
+		Token:     signed,
+		ExpiresIn: int(h.issuer.TTL().Seconds()),
+	})
 }

@@ -60,6 +60,10 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
 	r.Get("/api/auth/me", s.AuthHandler.Me)
 
+	// Service token exchange: public, the presented service key is the
+	// credential. Trades an ownerless key for a short-lived service JWT.
+	r.Post("/api/auth/token", s.KeysHandler.Exchange)
+
 	// API key management: session + admin only. Plaintext appears in the
 	// create response exactly once.
 	r.Route("/api/auth/keys", func(r chi.Router) {

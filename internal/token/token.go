@@ -109,6 +109,11 @@ func NewIssuerFromPEM(pem, kid, prevPEM, prevKID, issuer, audience string, ttl t
 	return NewIssuer(current, previous, issuer, audience, ttl)
 }
 
+// TTL returns the token lifetime configured on the issuer.
+func (i *Issuer) TTL() time.Duration {
+	return i.ttl
+}
+
 // Keys returns the signing keys: current first, then previous when a
 // rotation is in progress. Used to build the JWKS.
 func (i *Issuer) Keys() []Key {
