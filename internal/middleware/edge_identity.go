@@ -29,7 +29,14 @@ func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator) func(http.Handler)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if user := auth.GetUserFromContext(r); user != nil {
-				issue(w, r, next, issuer, user.ID, "session", nil)
+				// The edge knows the user's role; downstream does not. Grant
+				// the admin scope here so admin endpoints can authorize
+				// locally from the verified scope claim.
+				var scopes []string
+				if user.Role == auth.RoleAdmin {
+					scopes = []string{"admin"}
+				}
+				issue(w, r, next, issuer, user.ID, "session", scopes)
 				return
 			}
 			if keys != nil {

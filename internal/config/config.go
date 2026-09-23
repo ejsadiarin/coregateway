@@ -34,14 +34,14 @@ type Config struct {
 // Load loads configuration from environment variables
 func Load() *Config {
 	return &Config{
-		DatabaseURL:         getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
-		Port:                getEnvInt("PORT", 8080),
-		Env:                 getEnv("ENV", "development"),
-		HealthCheckInterval: 60 * time.Second,
-		AdminEmail:          os.Getenv("ADMIN_EMAIL"),
-		AdminPass:           os.Getenv("ADMIN_PASSWORD"),
-		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
-		CorefinanceURL:      getEnv("COREFINANCE_URL", "http://localhost:6969"),
+		DatabaseURL:          getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
+		Port:                 getEnvInt("PORT", 8080),
+		Env:                  getEnv("ENV", "development"),
+		HealthCheckInterval:  60 * time.Second,
+		AdminEmail:           os.Getenv("ADMIN_EMAIL"),
+		AdminPass:            os.Getenv("ADMIN_PASSWORD"),
+		AllowedOrigins:       getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		CorefinanceURL:       getEnv("COREFINANCE_URL", "http://localhost:6969"),
 		JWTPrivateKeyPEM:     os.Getenv("JWT_PRIVATE_KEY_PEM"),
 		JWTPrevPrivateKeyPEM: os.Getenv("JWT_PREV_PRIVATE_KEY_PEM"),
 		JWTKID:               os.Getenv("JWT_KID"),

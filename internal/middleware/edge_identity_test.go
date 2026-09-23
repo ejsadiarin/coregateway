@@ -82,6 +82,37 @@ func TestEdgeIdentitySessionMintsJWT(t *testing.T) {
 	}
 }
 
+func TestEdgeIdentityAdminSessionGrantsAdminScope(t *testing.T) {
+	iss := testIssuer(t)
+
+	var gotAuth string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/admin/backfill", nil)
+	req = req.WithContext(auth.ContextWithUser(req.Context(), &auth.UserContext{
+		ID:    uuid.New(),
+		Email: "admin@example.com",
+		Role:  auth.RoleAdmin,
+	}))
+	EdgeIdentity(iss, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+
+	presented, ok := bearerToken(mustRequest(t, gotAuth))
+	if !ok {
+		t.Fatalf("Authorization header is not a bearer token: %q", gotAuth)
+	}
+	var claims token.Claims
+	if _, err := jwt.ParseWithClaims(presented, &claims, func(t *jwt.Token) (any, error) {
+		return iss.Keys()[0].Public, nil
+	}); err != nil {
+		t.Fatalf("minted token does not verify: %v", err)
+	}
+	if claims.Scope != "admin" {
+		t.Errorf("scope = %q, want admin", claims.Scope)
+	}
+}
+
 func mustRequest(t *testing.T, authHeader string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

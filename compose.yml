@@ -43,6 +43,8 @@ services:
     environment:
       - PORT=6969
       - GODEBUG=netdns=go
+      # Dev override: reach the gateway by compose service name over plain HTTP.
+      - JWT_JWKS_URL=http://coregateway-api:8080/.well-known/jwks.json
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
