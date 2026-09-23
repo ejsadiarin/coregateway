@@ -25,6 +25,10 @@ type Config struct {
 	JWTIssuer            string
 	JWTAudience          string
 	JWTTTLSeconds        int
+	// JWTReemitUserID is a transitional cutover flag. When true the
+	// gateway re-emits the legacy X-User-ID header alongside the internal
+	// JWT. Defaults to false; downstream services must not trust it.
+	JWTReemitUserID bool
 }
 
 // Load loads configuration from environment variables
@@ -45,6 +49,7 @@ func Load() *Config {
 		JWTIssuer:            getEnv("JWT_ISSUER", "https://gateway.internal"),
 		JWTAudience:          getEnv("JWT_AUDIENCE", "corefinance"),
 		JWTTTLSeconds:        getEnvInt("JWT_TTL_SECONDS", 300),
+		JWTReemitUserID:      os.Getenv("JWT_REEMIT_USER_ID") == "true",
 	}
 }
 

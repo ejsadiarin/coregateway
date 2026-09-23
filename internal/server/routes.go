@@ -77,9 +77,11 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Get("/api/services/{id}/history", s.ServiceHandler.GetServiceHistory)
 	r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 
-	// budget — streamed to corefinance-api
+	// budget — authenticated at the edge, streamed to corefinance-api.
+	// The internal JWT (not X-User-ID) is the only identity downstream.
 	r.Route("/api/budget", func(r chi.Router) {
-		r.Use(middleware.ForwardHeaders)
+		r.Use(middleware.EdgeIdentity(s.TokenIssuer, nil))
+		r.Use(middleware.ForwardHeaders(cfg.JWTReemitUserID))
 		r.Handle("/*", s.CorefinanceClient.Proxy())
 	})
 
