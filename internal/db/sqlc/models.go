@@ -9,6 +9,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CoregatewayApiKey struct {
+	ID          uuid.UUID          `json:"id"`
+	KeyPrefix   string             `json:"key_prefix"`
+	KeyHash     string             `json:"key_hash"`
+	Label       string             `json:"label"`
+	OwnerUserID pgtype.UUID        `json:"owner_user_id"`
+	Scopes      []string           `json:"scopes"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type CoregatewayService struct {
 	ID                  uuid.UUID        `json:"id"`
 	Name                string           `json:"name"`

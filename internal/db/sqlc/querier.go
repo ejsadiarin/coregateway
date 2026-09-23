@@ -14,6 +14,8 @@ import (
 type Querier interface {
 	CountActiveSessions(ctx context.Context) (int64, error)
 	CountAdmins(ctx context.Context) (int64, error)
+	// API keys (gateway-owned credentials for programmatic and service callers)
+	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (CoregatewayApiKey, error)
 	CreateHealthHistory(ctx context.Context, arg CreateHealthHistoryParams) (CoregatewayServiceHealthHistory, error)
 	CreateService(ctx context.Context, arg CreateServiceParams) (CoregatewayService, error)
 	// Sessions
@@ -27,6 +29,7 @@ type Querier interface {
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
 	GetAllServicesStats(ctx context.Context) (GetAllServicesStatsRow, error)
+	GetApiKeyByHash(ctx context.Context, keyHash string) (CoregatewayApiKey, error)
 	GetService(ctx context.Context, id uuid.UUID) (CoregatewayService, error)
 	GetServiceHistory(ctx context.Context, arg GetServiceHistoryParams) ([]CoregatewayServiceHealthHistory, error)
 	GetServiceStats24h(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats24hRow, error)
@@ -36,8 +39,11 @@ type Querier interface {
 	GetUser(ctx context.Context, id uuid.UUID) (CoregatewayUser, error)
 	GetUserByEmail(ctx context.Context, email string) (CoregatewayUser, error)
 	ListActiveServicesForHealthCheck(ctx context.Context) ([]ListActiveServicesForHealthCheckRow, error)
+	ListApiKeys(ctx context.Context) ([]ListApiKeysRow, error)
 	ListServices(ctx context.Context) ([]ListServicesRow, error)
 	ListUsers(ctx context.Context) ([]CoregatewayUser, error)
+	RevokeApiKey(ctx context.Context, id uuid.UUID) (int64, error)
+	TouchApiKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (CoregatewayService, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (CoregatewayUser, error)
 }

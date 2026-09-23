@@ -46,6 +46,19 @@ func (m *mockQuerier) GetUser(_ context.Context, id uuid.UUID) (sqlc.Coregateway
 func (m *mockQuerier) DeleteExpiredSessions(context.Context) error                { return nil }
 func (m *mockQuerier) CountActiveSessions(context.Context) (int64, error)        { return 0, nil }
 func (m *mockQuerier) CountAdmins(context.Context) (int64, error)                { return 0, nil }
+func (m *mockQuerier) CreateApiKey(context.Context, sqlc.CreateApiKeyParams) (sqlc.CoregatewayApiKey, error) {
+	return sqlc.CoregatewayApiKey{}, nil
+}
+func (m *mockQuerier) GetApiKeyByHash(context.Context, string) (sqlc.CoregatewayApiKey, error) {
+	return sqlc.CoregatewayApiKey{}, pgx.ErrNoRows
+}
+func (m *mockQuerier) ListApiKeys(context.Context) ([]sqlc.ListApiKeysRow, error) {
+	return nil, nil
+}
+func (m *mockQuerier) RevokeApiKey(context.Context, uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (m *mockQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error { return nil }
 func (m *mockQuerier) CreateHealthHistory(context.Context, sqlc.CreateHealthHistoryParams) (sqlc.CoregatewayServiceHealthHistory, error) {
 	return sqlc.CoregatewayServiceHealthHistory{}, nil
 }

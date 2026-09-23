@@ -20,6 +20,8 @@ import (
 type Server struct {
 	port              int
 	AuthHandler       *auth.Handler
+	KeysHandler       *auth.KeysHandler
+	KeysService       *auth.KeysService
 	UserHandler       *user.Handler
 	ServiceHandler    *monitor.Handler
 	AuthService       *auth.Service
@@ -55,6 +57,8 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 
 	s.AuthService = auth.NewService(queries)
 	s.AuthHandler = auth.NewHandler(s.AuthService)
+	s.KeysService = auth.NewKeysService(queries)
+	s.KeysHandler = auth.NewKeysHandler(s.KeysService)
 	s.UserHandler = user.NewHandler(user.NewService(queries))
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)

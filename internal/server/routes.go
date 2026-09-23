@@ -60,6 +60,15 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
 	r.Get("/api/auth/me", s.AuthHandler.Me)
 
+	// API key management: session + admin only. Plaintext appears in the
+	// create response exactly once.
+	r.Route("/api/auth/keys", func(r chi.Router) {
+		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
+		r.Post("/", s.KeysHandler.Create)
+		r.Get("/", s.KeysHandler.List)
+		r.Delete("/{id}", s.KeysHandler.Revoke)
+	})
+
 	// users
 	r.Get("/api/users", s.UserHandler.ListUsers)
 	r.Post("/api/users", s.UserHandler.CreateUser)
@@ -79,9 +88,15 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 
 	// budget — authenticated at the edge, streamed to corefinance-api.
 	// The internal JWT (not X-User-ID) is the only identity downstream.
+	// chi prefers the static /admin segment over the /* catch-all, so
+	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity(s.TokenIssuer, nil))
+		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService))
 		r.Use(middleware.ForwardHeaders(cfg.JWTReemitUserID))
+		r.Route("/admin", func(r chi.Router) {
+			r.Use(middleware.RequireScope("admin"))
+			r.Handle("/*", s.CorefinanceClient.Proxy())
+		})
 		r.Handle("/*", s.CorefinanceClient.Proxy())
 	})
 

@@ -1,8 +1,10 @@
 package middleware
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -184,6 +186,120 @@ func TestForwardHeadersReemitFlag(t *testing.T) {
 	})).ServeHTTP(httptest.NewRecorder(), withUser())
 	if emitted != "" {
 		t.Errorf("re-emit off: X-User-ID = %q, want empty", emitted)
+	}
+}
+
+type stubValidator struct {
+	userID uuid.UUID
+	keyID  string
+	scopes []string
+	err    error
+}
+
+func (s stubValidator) ValidateKey(_ context.Context, _ string) (uuid.UUID, string, []string, error) {
+	return s.userID, s.keyID, s.scopes, s.err
+}
+
+func TestEdgeIdentityValidKey(t *testing.T) {
+	iss := testIssuer(t)
+	userID := uuid.New()
+	keys := stubValidator{userID: userID, keyID: "key-1", scopes: []string{"finance:read"}}
+
+	var gotAuth string
+	var gotScopes []string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		gotScopes = scopesFromContext(r.Context())
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
+	req.Header.Set("Authorization", "Bearer user-key-material")
+	EdgeIdentity(iss, keys)(next).ServeHTTP(httptest.NewRecorder(), req)
+
+	presented, ok := bearerToken(mustRequest(t, gotAuth))
+	if !ok {
+		t.Fatalf("downstream Authorization is not a bearer token: %q", gotAuth)
+	}
+	var claims token.Claims
+	if _, err := jwt.ParseWithClaims(presented, &claims, func(t *jwt.Token) (any, error) {
+		return iss.Keys()[0].Public, nil
+	}); err != nil {
+		t.Fatalf("minted token does not verify: %v", err)
+	}
+	if claims.Subject != userID.String() {
+		t.Errorf("sub = %q, want %q", claims.Subject, userID.String())
+	}
+	if claims.Azp != "api-key:key-1" {
+		t.Errorf("azp = %q", claims.Azp)
+	}
+	if len(gotScopes) != 1 || gotScopes[0] != "finance:read" {
+		t.Errorf("context scopes = %v", gotScopes)
+	}
+}
+
+func TestEdgeIdentityInvalidKeyRejected(t *testing.T) {
+	iss := testIssuer(t)
+	keys := stubValidator{err: errors.New("nope")}
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { nextCalled = true })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
+	req.Header.Set("Authorization", "Bearer bad-key")
+	rec := httptest.NewRecorder()
+	EdgeIdentity(iss, keys)(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+	if nextCalled {
+		t.Error("next must not be called")
+	}
+}
+
+func TestEdgeIdentityServiceKeyRejectedAtProxy(t *testing.T) {
+	iss := testIssuer(t)
+	// Ownerless service key validates but carries no user.
+	keys := stubValidator{userID: uuid.Nil, keyID: "svc-1", scopes: []string{"finance:read"}}
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { nextCalled = true })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
+	req.Header.Set("Authorization", "Bearer service-key-material")
+	rec := httptest.NewRecorder()
+	EdgeIdentity(iss, keys)(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+	if nextCalled {
+		t.Error("service keys belong to the token exchange, not the proxy")
+	}
+}
+
+func TestRequireScope(t *testing.T) {
+	pass := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+
+	withScopesReq := func(scopes []string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/api/budget/admin/backfill", nil)
+		return req.WithContext(withScopes(req.Context(), scopes))
+	}
+
+	rec := httptest.NewRecorder()
+	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"admin", "finance:read"}))
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("scoped request: status = %d, want 204", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"finance:read"}))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("unscoped request: status = %d, want 403", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	RequireScope("admin")(pass).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("identity without scopes: status = %d, want 403", rec.Code)
 	}
 }
 
