@@ -26,6 +26,11 @@ services:
       - COREFINANCE_URL=http://corefinance-api:6969
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - JWT_KID=${JWT_KID:-2026-09-a}
+      - JWT_ISSUER=${JWT_ISSUER:-https://gateway.internal}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-corefinance}
+      - JWT_TTL_SECONDS=${JWT_TTL_SECONDS:-300}
+      - JWT_PRIVATE_KEY_PEM=${JWT_PRIVATE_KEY_PEM:-}
       - GODEBUG=netdns=go
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
