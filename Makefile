@@ -213,7 +213,7 @@ sqlc:
 
 sqlc-check:
 	@echo -e "${YELLOW}Checking SQL code generation...${NC}"
-	@sqlc generate --diff
+	@sqlc diff
 
 swagger:
 	@echo -e "${YELLOW}Generating Swagger documentation...${NC}"
