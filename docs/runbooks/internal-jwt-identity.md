@@ -78,3 +78,15 @@ authorize locally:
   → exchange at `POST /api/auth/token` → service JWT → direct
   `GET :6969/internal/recurring/active` (200), same token on
   `/api/budget/expenses/` (401), user JWT on `/internal/*` (403).
+
+## Accepted posture
+
+- Corefinance `/`, `/health`, `/websocket` intentionally sit outside the
+  JWT verifier (pre-existing unauthenticated posture, out of scope for
+  this change).
+- `/api/budget/priority-groups` intentionally stays public via the
+  verifier's `PublicPaths` bypass (reference data, no user scope).
+- Everything else under `/api/budget`, and everything under `/internal`,
+  requires a gateway-minted JWT; scoped routes additionally enforce
+  scope (`RequireScope("admin")` at the gateway edge,
+  `RequireServiceScope` downstream).
