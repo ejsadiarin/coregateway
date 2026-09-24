@@ -63,6 +63,10 @@ func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *to
 		return
 	}
 	r.Header.Set("Authorization", "Bearer "+signed)
+	// A client-supplied X-User-ID must never ride the proxy downstream:
+	// identity travels exclusively as the minted JWT. Strip it here so
+	// both the session and API-key paths are covered.
+	r.Header.Del("X-User-ID")
 	// Carry the edge-established scopes in-process for RequireScope.
 	next.ServeHTTP(w, r.WithContext(withScopes(r.Context(), scopes)))
 }

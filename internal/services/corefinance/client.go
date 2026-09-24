@@ -26,7 +26,10 @@ func New(baseURL string) *Client {
 
 // Proxy returns an http.Handler that streams requests to corefinance-api.
 // The request path is passed through as-is (both services use /api/budget/...).
-// Headers like X-User-ID and X-Request-ID are expected to be set by upstream middleware.
+// Identity travels exclusively as the internal JWT minted at the edge
+// (Authorization: Bearer, set by EdgeIdentity); X-Request-ID is propagated
+// by ForwardHeaders for correlation. X-User-ID is never set, forwarded,
+// or trusted on this path.
 func (c *Client) Proxy() http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {

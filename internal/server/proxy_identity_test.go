@@ -147,6 +147,34 @@ func TestProxyForwardsSessionJWT(t *testing.T) {
 	}
 }
 
+func TestProxyStripsSpoofedUserID(t *testing.T) {
+	userID := uuid.New()
+	forged := uuid.New()
+	if forged == userID {
+		forged = uuid.New()
+	}
+	s, fake, iss := proxyTestSetup(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
+	req.Header.Set("X-User-ID", forged.String())
+	rec := httptest.NewRecorder()
+	proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	hits, _, authHeader, userIDHeader := fake.snapshot()
+	if hits != 1 {
+		t.Fatalf("downstream hits = %d, want 1", hits)
+	}
+	if userIDHeader != "" {
+		t.Errorf("downstream X-User-ID = %q, forged header must be stripped", userIDHeader)
+	}
+	if claims := parseDownstreamToken(t, iss, authHeader); claims.Subject != userID.String() {
+		t.Errorf("sub = %q, want %q", claims.Subject, userID.String())
+	}
+}
+
 func TestProxyAdminPathRequiresScope(t *testing.T) {
 	// Non-admin session against the admin path: 403 before proxying.
 	// This also proves chi routes /admin/* to the scope gate, not the
