@@ -9,6 +9,31 @@ Convention: service name = `<name>` (e.g. `corereminder`), module
 `github.com/ejsadiarin/<name>`, schema `<name>`, port e.g. `6970`,
 scope prefix e.g. `reminder:`.
 
+> ⛔ **Gateway prerequisite — read before scaffolding.** The gateway mints
+> internal JWTs with a **single audience** (`token.Issuer` takes one
+> `audience` string, `internal/token/token.go:69-89,132`;
+> `server.New` passes `cfg.JWTAudience`, `internal/server/server.go:39-47`;
+> compose default `JWT_AUDIENCE=corefinance`, `compose.yml:32`). A new
+> service verifying `aud=<name>` will 401 **every** proxied request until
+> the gateway can mint that audience. Likewise only `/api/budget` is
+> proxied today (`internal/server/routes.go:98-106`). So a second service
+> needs gateway changes first — at minimum:
+>
+> - `internal/token/token.go` + `internal/config/config.go`: accept
+>   multiple audiences (e.g. comma-separated `JWT_AUDIENCE`) and mint
+>   `aud` as a list, **or** a per-route issuer (wiring-time, no
+>   per-request logic).
+> - `internal/server/server.go` + `routes.go`: a `/api/<domain>` group
+>   with `middleware.EdgeIdentity(issuer, s.KeysService)` +
+>   `middleware.ForwardHeaders()` and a proxy client
+>   (`internal/services/<name>/client.go`, mirroring
+>   `internal/services/corefinance/client.go`) fed by
+>   `COREFINANCE_URL`-style env (`COREREMINDER_URL=...` in compose).
+> - `compose.yml`: the `corereminder-api` block (§5) plus the new env on
+>   `coregateway-api`.
+>
+> Until that lands, "no per-service auth code needed" does **not** hold.
+
 ## 0. Scaffold
 
 ```bash
@@ -32,11 +57,20 @@ Copy verbatim (only rename the import path): `internal/auth/verifier.go`,
   (Ed25519). The service holds public material only (JWKS). No shared
   secrets, no API keys validated downstream, no env bearer tokens.
 - **Verification** (`internal/auth/verifier.go`, copied): fetch JWKS at
-  startup, cache 5 min (`CacheTTL`), refresh once on unknown `kid`
-  (rotation-safe). Validate: EdDSA signature, `iss=https://gateway.internal`,
-  `aud=<service-name>`, `exp` required, ±60s leeway
-  (`jwt.WithLeeway(60*time.Second)`). **Fail closed**: `NewVerifier` error
-  (or JWKS unreachable at boot) → `os.Exit(1)`, never serve degraded.
+  startup, cache 5 min (`CacheTTL`). Unknown `kid` or stale cache triggers
+  a refresh that concurrent verifications coalesce into a **single**
+  in-flight fetch (`singleflight`); a refresh that succeeds with the `kid`
+  still absent writes a **30s negative-cache** entry (forgery/mis-issue);
+  fetch failures cache nothing, so the next request retries — a JWKS
+  outage can never poison rotation. Validate: EdDSA signature,
+  `iss=https://gateway.internal`, `aud=<service-name>`, `exp` required,
+  ±60s leeway (`jwt.WithLeeway(60*time.Second)`). **Fail closed**:
+  `NewVerifier` error (or JWKS unreachable at boot) → `os.Exit(1)`,
+  never serve degraded. Copy this file **verbatim** (only rename the
+  import path): the gateway holds a test-only mirror of it
+  (`internal/server/downstream_verifier_mirror_test.go`, drift contract
+  in the header) — behavior changes must update both or gateway tests
+  fail loudly.
 - **Strip `X-User-ID` on every request** — first line of the middleware,
   before the public-path check:
   ```go
@@ -90,7 +124,11 @@ Service rules:
    r.Header.Get("Authorization"))`). Go context cannot cross the network;
    the JWT is the network carrier. External SaaS that cannot verify JWTs gets
    no user identity (use a purpose-built integration credential instead).
-4. **Request-ID**: keep `requestIDMiddleware` + `slogMiddleware` from
+4. **Cookies never reach downstream.** The edge deletes the `Cookie` header
+   alongside `X-User-ID` (`internal/middleware/edge_identity.go:71-72`) —
+   downstream authenticates via the JWT and never reads cookies, so never
+   code a cookie path into the service.
+5. **Request-ID**: keep `requestIDMiddleware` + `slogMiddleware` from
    `services/corefinance/internal/server/routes.go` verbatim — accept
    `X-Request-ID` (fallback `X-Correlation-ID`), generate UUID if absent,
    stash under `middleware.RequestIDKey`, log it on every request.
@@ -249,9 +287,17 @@ r.Route("/internal", func(r chi.Router) {
       - JWT_JWKS_URL=http://coregateway-api:8080/.well-known/jwks.json
   ```
 - [ ] Gateway proxy config: add `COREREMINDER_URL=http://corereminder-api:6970`
-  to the `coregateway-api` block (mirrors `COREFINANCE_URL`) and wire the
-  route prefix in the gateway (gateway mints JWTs for all proxied routes;
-  no per-service auth code needed).
+  to the `coregateway-api` block (mirrors `COREFINANCE_URL`), add the
+  `/api/<domain>` edge→proxy group plus proxy client in
+  `internal/server/` (see the prerequisite box at the top — per-service
+  gateway wiring **is** required), and extend the minted audience to cover
+  `<name>` or every proxied call 401s on `aud` mismatch.
+- [ ] Boot order: downstream fail-closes (by design) if the gateway JWKS is
+  not up when it starts, and compose has no healthcheck/`depends_on`
+  between them — start the gateway first, then the service (the
+  `x-test-integration` script just re-ups the downstream once the gateway
+  is healthy). If this bites more than once, fix it in compose topology,
+  not in service code.
 - [ ] `services/corereminder/<domain>-api.http`: `@jwt=` placeholder + happy
   path + the four identity cases from `budget-api.http` tail (copy, swap
   paths/audience):
@@ -279,25 +325,31 @@ Services never present API keys downstream — they exchange them at the gateway
 for a short-lived service JWT, then call `/internal/*` directly (never via the
 gateway proxy).
 
-1. **Gateway admin creates an ownerless `api_keys` row** (label = service name,
-   scopes = what it may call):
+1. **Gateway admin creates a service key** via the dedicated endpoint
+   (admin session; plaintext returned once — store it as the worker's
+   secret, never log it). Service-ness is `owner_user_id IS NULL` in the
+   `coregateway.api_keys` table — there is no `is_service_key` column, and
+   `POST /api/auth/keys` can only ever create *owned* (human) keys:
    ```http
-   POST {{gateway}}/api/auth/keys
+   POST {{gateway}}/api/auth/keys/service
    Content-Type: application/json
    Cookie: session_token={{admin_session}}
 
    { "label": "corereminder", "scopes": ["finance:read"], "expires_at": "2027-01-01T00:00:00Z" }
    ```
-   Response returns the plaintext key once (`cgw_live_…`) — store it as the
-   worker's secret, never log it. Human keys and service keys share the
-   `coregateway.api_keys` table, distinguished by label/scopes/owner.
-2. **Worker exchanges it** (client-credentials, `POST /api/auth/token`):
+   Missing/blank label → `400 {"error":"label is required"}`.
+2. **Worker exchanges it** (client-credentials, `POST /api/auth/token`;
+   the key goes in the JSON body as `key` — an `Authorization` header is
+   ignored here):
    ```http
    POST {{gateway}}/api/auth/token
    Content-Type: application/json
 
-   { "api_key": "cgw_live_…" }
+   { "key": "cgw_live_…" }
    ```
+   Malformed body → `400 {"error":"invalid request body"}`;
+   unknown/revoked/expired → `401 {"error":"Invalid API key"}`;
+   owned (human) key → `403 {"error":"Key is not a service key"}`.
    Response is a service JWT: same envelope, no `sub`, `azp=corereminder`,
    `scope` from the key row, TTL 300s. Cache until near-expiry, re-exchange
    (the worker in `services/corefinance/cmd/worker/main.go` is the pattern
@@ -312,6 +364,16 @@ gateway proxy).
 
 ## 7. Testing checklist
 
+Makefile targets (same in both repos — keep this convention, do not invent
+test commands):
+`make test-unit` (`go test ./... -short`; skips docker-backed tests),
+`make test-integration` (`-run _Integration`, needs docker — name DB tests
+`*_Integration` and gate container setup on `testing.Short()`),
+`make test-race`, `make check-refs` (`scripts/check-refs.sh` verifies
+README/Makefile paths and targets — note it does **not** scan
+`docs/`, so keep runbook paths accurate by hand). Cross-service seam:
+parent `make x-test-integration` (compose stack, black-box over HTTP).
+
 Replicate `internal/auth/verifier_test.go`, `internal/auth/scope_test.go`,
 `internal/service/handler_test.go` (corefinance `routes_test.go` is only a
 placeholder HelloWorld test — write real route tests instead):
@@ -322,8 +384,12 @@ placeholder HelloWorld test — write real route tests instead):
   missing/malformed bearer (`""`, `"Bearer"`, `"Bearer "`, `"Token abc"`) →
   401 without reaching handler; wrong key, wrong `iss`, wrong `aud` → 401;
   expiry 30s ago passes (60s leeway), 61s ago → 401; newly published `kid`
-  verifies after refresh; service token (no `sub`) passes verification but
-  establishes no user; unreachable JWKS → `NewVerifier` errors (fail closed).
+  verifies after refresh; forged `kid` twice → one refresh fetch, second
+  rejection from the 30s negative cache; concurrent stale-cache requests →
+  one coalesced fetch (singleflight); refresh failure → 401 with no
+  negative entry, next request retries; service token (no `sub`) passes
+  verification but establishes no user; unreachable JWKS → `NewVerifier`
+  errors (fail closed).
 - [ ] **Scope** (`scope_test.go` pattern): matching scope → next; wrong scope
   → 403; user identity without service identity → 403; no identity → 403.
 - [ ] **Handlers**: user handlers over a stub `db.Querier` embedding the
