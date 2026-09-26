@@ -22,6 +22,9 @@ import (
 // image), and returns sqlc queries plus the raw pool for assertions.
 func setupKeyDB(t *testing.T) (*db.Queries, *pgxpool.Pool) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("short mode: integration test needs Docker (run `make test-integration`)")
+	}
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx,
@@ -111,7 +114,7 @@ func migrationFiles(t *testing.T) []string {
 	return files
 }
 
-func TestApiKeyStorageHoldsHashOnly(t *testing.T) {
+func TestApiKeyStorageHoldsHashOnly_Integration(t *testing.T) {
 	queries, pool := setupKeyDB(t)
 	svc := NewKeysService(queries)
 	ctx := context.Background()
@@ -162,7 +165,7 @@ func TestApiKeyStorageHoldsHashOnly(t *testing.T) {
 	}
 }
 
-func TestApiKeyRevocationTakesEffectImmediately(t *testing.T) {
+func TestApiKeyRevocationTakesEffectImmediately_Integration(t *testing.T) {
 	queries, _ := setupKeyDB(t)
 	svc := NewKeysService(queries)
 	ctx := context.Background()
@@ -185,7 +188,7 @@ func TestApiKeyRevocationTakesEffectImmediately(t *testing.T) {
 	}
 }
 
-func TestApiKeyExpiryRejects(t *testing.T) {
+func TestApiKeyExpiryRejects_Integration(t *testing.T) {
 	queries, _ := setupKeyDB(t)
 	svc := NewKeysService(queries)
 	ctx := context.Background()
@@ -200,7 +203,7 @@ func TestApiKeyExpiryRejects(t *testing.T) {
 	}
 }
 
-func TestApiKeyListExcludesSecrets(t *testing.T) {
+func TestApiKeyListExcludesSecrets_Integration(t *testing.T) {
 	queries, _ := setupKeyDB(t)
 	svc := NewKeysService(queries)
 	ctx := context.Background()

@@ -4,7 +4,7 @@ API gateway and service monitor for a homelab dashboard. Built with Go, chi, pgx
 
 ## Prerequisites
 
-- Go 1.21+
+- Go 1.26+
 - PostgreSQL 13+
 
 ## Setup
@@ -62,9 +62,10 @@ coregateway/
 │   ├── auth/                 # Authentication (register, login, sessions)
 │   ├── user/                 # User management (CRUD)
 │   ├── monitor/              # Service monitoring (CRUD, health checks, stats)
-│   ├── corefinance/          # Corefinance-api HTTP client and streaming proxy
+│   ├── services/             # Downstream clients + streaming proxy (corefinance)
+│   ├── token/                # Internal JWT minting (Ed25519) + JWKS
 │   ├── server/               # HTTP server, routes, middleware wiring
-│   ├── middleware/            # Request ID, slog logging, outbound propagation, forward headers
+│   ├── middleware/           # Request ID, slog logging, edge identity, forward headers
 │   ├── helper/               # JSON responses, UUID parsing, query helpers
 │   ├── logger/               # ENV-based slog setup
 │   ├── config/               # Environment variable loading
@@ -78,7 +79,7 @@ coregateway/
 │   └── corefinance/          # Corefinance microservice (separate repo/deployment)
 ├── proto/                    # Protobuf definitions (buf-managed)
 ├── compose.yml               # Docker Compose for local development
-├── routes-api.http           # HTTP client file (VS Code REST Client)
+├── coregateway-api.http      # HTTP client file (VS Code REST Client)
 └── go.mod
 ```
 
@@ -138,7 +139,8 @@ Request → chi router
   → Handler → Service → sqlc → PostgreSQL
 
 Budget API flow:
-  → ForwardHeaders (sets X-User-ID, X-Request-ID on request)
+  → EdgeIdentity (mints internal JWT; strips X-User-ID/Cookie)
+  → ForwardHeaders (sets Authorization, X-Request-ID on request)
   → httputil.ReverseProxy (streams body to corefinance-api, no buffering)
 ```
 
@@ -147,7 +149,7 @@ Budget API flow:
 - **Helper package**: `helper.RespondJSON`, `helper.RespondErrorJSON`, `helper.ParseUUID` for consistent HTTP responses
 - **Structured logging**: `slog.Debug/Info/Error` with contextual fields, ENV-based format (text in dev, JSON in prod)
 - **Request IDs**: Generated per request via chi, returned in `X-Request-ID` response header, propagated on outbound calls
-- **Outbound propagation**: `middleware.PropagateHeaders(req)` sets `X-Request-ID` and `X-User-ID` on downstream HTTP calls
+- **Outbound propagation**: `middleware.PropagateHeaders(req)` sets `X-Request-ID` on downstream HTTP calls (`X-User-ID` is never sent — the edge strips it and mints an internal JWT instead)
 - **Streaming proxy**: `httputil.ReverseProxy` streams request/response bodies via `io.Copy` — no memory buffering for large payloads
 
 ## Environment Variables
@@ -160,6 +162,14 @@ Budget API flow:
 | `FRONTEND_URL` | - | Frontend URL for CORS |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `COREFINANCE_URL` | `http://localhost:6969` | Corefinance-api base URL (internal service) |
+| `JWT_PRIVATE_KEY_PEM` | - | Gateway Ed25519 signing key, PEM (required) |
+| `JWT_KID` | - | Signing key ID published in JWKS (required) |
+| `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | - | Previous key pair, rotation overlap only |
+| `JWT_ISSUER` | `https://gateway.internal` | Internal JWT issuer |
+| `JWT_AUDIENCE` | `corefinance` | Internal JWT audience |
+| `JWT_TTL_SECONDS` | `300` | Internal JWT lifetime in seconds |
+
+See `docs/auth-flow.md` and `.env.example` for the full auth picture.
 | `ADMIN_EMAIL` | - | Admin user email (for seeding) |
 | `ADMIN_PASSWORD` | - | Admin user password (for seeding) |
 
@@ -181,8 +191,17 @@ Budget API flow:
 ### Running tests
 
 ```bash
-go test ./...
+make test             # everything (unit + integration, needs Docker)
+make test-unit        # unit only, no Docker needed
+make test-integration # Docker-backed integration only (testcontainers)
+make test-race        # unit tests with race detector
+make check-refs       # verify README/Makefile references
 ```
+
+Integration tests spin ephemeral Postgres via testcontainers
+(`internal/auth/keys_integration_test.go`). Each repo's Makefile covers its
+own Go module — corefinance has its own (`services/corefinance/Makefile`)
+with the same `test` / `test-unit` / `test-integration` targets.
 
 ## Downstream Microservices
 
@@ -211,7 +230,7 @@ To integrate a new downstream service (e.g. `coreinventory-api`):
 mkdir -p internal/coreinventory
 ```
 
-Create `internal/coreinventory/client.go`:
+Create `client.go` inside it:
 ```go
 package coreinventory
 
