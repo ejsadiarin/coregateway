@@ -1,0 +1,163 @@
+# Rotation executor. Monthly check, 90-day policy, two phases in one run.
+# The script lives in the ConfigMap below so rotation logic is git-versioned
+# (ArgoCD-synced); the CronJob only schedules it.
+# Job image needs: sh, openssl, curl, jq, vault CLI.
+# Adjust: namespace, Service names, Vault addr/role/path as needed.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jwt-rotation
+  namespace: coregateway
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jwt-rotation-script
+  namespace: coregateway
+data:
+  rotate.sh: |
+    #!/bin/sh
+    set -eu
+    VAULT_ADDR="${VAULT_ADDR:?set VAULT_ADDR}"
+    KV_PATH="${KV_PATH:-secret/coregateway/jwt}"
+    VAULT_ROLE="${VAULT_ROLE:-jwt-rotation}"
+    THRESHOLD_DAYS="${THRESHOLD_DAYS:-90}"
+    FORCE="${FORCE:-false}"
+    JWKS_URL="${JWKS_URL:-http://gateway.coregateway.svc:8080/.well-known/jwks.json}"
+    DRAIN_SECONDS="${DRAIN_SECONDS:-600}"
+
+    vault login -method=kubernetes role="$VAULT_ROLE" >/dev/null
+
+    cur="$(vault kv get -format=json "$KV_PATH")"
+    get() { echo "$cur" | jq -r ".data.data.$1"; }
+    created="$(get created_at)"; cur_kid="$(get kid)"
+
+    now="$(date +%s)"
+    age_days=$(( (now - created) / 86400 ))
+    if [ "$FORCE" != "true" ] && [ "$age_days" -lt "$THRESHOLD_DAYS" ]; then
+      echo "key ${cur_kid} age ${age_days}d < ${THRESHOLD_DAYS}d — nothing to do"
+      exit 0
+    fi
+
+    # New kid: same-month reruns bump the letter (a -> b -> ...).
+    base="$(date +%Y-%m)"
+    if [ "${cur_kid%$base-*}" != "$cur_kid" ] || [ "${cur_kid%%-*}" = "$base" ]; then
+      last="${cur_kid##*-}"
+      # increment trailing letter
+      next="$(printf '%s' "$last" | tr 'a-yz' 'b-za')"
+      new_kid="${base}-${next}"
+    else
+      new_kid="${base}-a"
+    fi
+    echo "rotating ${cur_kid} (${age_days}d) -> ${new_kid}"
+
+    tmpdir="$(mktemp -d)"; trap 'rm -rf "$tmpdir"' EXIT
+    openssl genpkey -algorithm ed25519 -out "$tmpdir/new.pem"
+    new_pem="$(cat "$tmpdir/new.pem")"
+    old_pem="$(get private_pem)"
+
+    # ---- Phase 1: publish overlap ----
+    out1="$(vault kv put -format=json "$KV_PATH" \
+      private_pem="$new_pem" kid="$new_kid" \
+      prev_private_pem="$old_pem" prev_kid="$cur_kid" \
+      created_at="$now")"
+    ver1="$(echo "$out1" | jq -r '.data.version')"
+    echo "phase 1 written (kv version $ver1), waiting for JWKS to serve $new_kid"
+
+    deadline=$(( $(date +%s) + 300 ))
+    while :; do
+      if curl -fsS "$JWKS_URL" | jq -e --arg k "$new_kid" \
+          '.keys | map(.kid) | index($k)' >/dev/null; then
+        echo "JWKS serves $new_kid"
+        break
+      fi
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "TIMEOUT waiting for $new_kid in JWKS — investigate ESO/Reloader, leaving overlap in place" >&2
+        exit 1
+      fi
+      sleep 15
+    done
+
+    echo "draining old-key tokens (${DRAIN_SECONDS}s: TTL + cache + margin)"
+    sleep "$DRAIN_SECONDS"
+
+    # ---- Phase 2: drop overlap ----
+    out2="$(vault kv put -format=json "$KV_PATH" \
+      private_pem="$new_pem" kid="$new_kid" \
+      prev_private_pem="" prev_kid="" \
+      created_at="$now")"
+    ver2="$(echo "$out2" | jq -r '.data.version')"
+    echo "phase 2 written (kv version $ver2)"
+
+    # Destroy pre-rotation versions so the old private key is really gone.
+    for v in $(seq 1 $((ver1 - 1))); do
+      vault kv destroy -versions="$v" "$KV_PATH" >/dev/null 2>&1 || true
+    done
+    echo "rotation complete: ${cur_kid} -> ${new_kid}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotation
+  namespace: coregateway
+spec:
+  schedule: "0 3 1 * *" # monthly; acts only when key age >= 90d
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: jwt-rotation
+          restartPolicy: OnFailure
+          containers:
+            - name: rotate
+              # TODO: pin an image containing sh+openssl+curl+jq+vault CLI,
+              # e.g. hashicorp/vault:<ver> with openssl added, or a small
+              # purpose-built image. Pin by digest.
+              image: hashicorp/vault:1.18
+              command: ["/bin/sh", "/scripts/rotate.sh"]
+              env:
+                - name: VAULT_ADDR
+                  value: "https://vault.vault.svc:8200" # TODO: your Vault addr
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: jwt-rotation-script
+                defaultMode: 0755
+---
+# Manual/incident trigger template. Suspended: never runs on its own.
+#   kubectl create job --from=cronjob/jwt-rotation-manual incident-<date> -n coregateway
+# Same script, same verification — FORCE bypasses only the age check.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: jwt-rotation-manual
+  namespace: coregateway
+spec:
+  schedule: "0 0 1 1 *" # placeholder; suspended below
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: jwt-rotation
+          restartPolicy: OnFailure
+          containers:
+            - name: rotate
+              image: hashicorp/vault:1.18 # TODO: same pinned image as above
+              command: ["/bin/sh", "/scripts/rotate.sh"]
+              env:
+                - name: VAULT_ADDR
+                  value: "https://vault.vault.svc:8200" # TODO: your Vault addr
+                - name: FORCE
+                  value: "true"
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+          volumes:
+            - name: script
+              configMap:
+                name: jwt-rotation-script
+                defaultMode: 0755

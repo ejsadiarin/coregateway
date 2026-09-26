@@ -1,0 +1,38 @@
+# Outer ring: downstreams accept ingress ONLY from the gateway identity.
+# The internal JWT stays the second (user-delegation) layer.
+# Adjust pod labels / namespace / ports to your manifests. Apply with
+# `kubectl apply --dry-run=server` first, then for real; verify a direct
+# pod-to-corefinance curl drops while gateway traffic flows.
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: corefinance-ingress
+  namespace: coregateway
+spec:
+  endpointSelector:
+    matchLabels:
+      app: corefinance # TODO: downstream pod label
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: gateway # TODO: gateway pod label
+      toPorts:
+        - ports:
+            - port: "6969" # TODO: downstream port
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+      toCIDR:
+        - "0.0.0.0/0" # TODO: narrow once egress needs are known
+---
+# Copy the pattern per downstream (corereminder, ...): same shape,
+# own endpointSelector. Gateway pods themselves need no ingress policy
+# here (they serve the outside world); add one later if you want to
+# restrict ingress to your ingress controller's identity.

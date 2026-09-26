@@ -1,0 +1,36 @@
+# Patch/snippet: wire the ESO-synced Secret into the gateway Deployment.
+# Apply as a strategic-merge patch or fold into your Deployment manifest.
+# No PEM material in git — only the Secret *name*.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: coregateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          env:
+            - name: JWT_PRIVATE_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-jwt-keys
+                  key: private_pem
+            - name: JWT_KID
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-jwt-keys
+                  key: kid
+            - name: JWT_PREV_PRIVATE_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-jwt-keys
+                  key: prev_private_pem
+            - name: JWT_PREV_KID
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-jwt-keys
+                  key: prev_kid
+            # JWT_ISSUER / JWT_AUDIENCE / JWT_TTL_SECONDS keep their
+            # defaults or come from plain (non-secret) env/config.

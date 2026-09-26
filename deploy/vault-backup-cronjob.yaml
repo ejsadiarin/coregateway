@@ -1,0 +1,50 @@
+# Nightly raft snapshot of single-node Vault to a PVC.
+# Restore: `vault operator raft snapshot restore` from the snapshot file.
+# Adjust: namespace, storage size/class, Vault addr + auth as needed.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-backup
+  namespace: vault
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: vault-backup
+          restartPolicy: OnFailure
+          containers:
+            - name: snapshot
+              image: hashicorp/vault:1.18 # TODO: pin by digest, match server
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -eu
+                  vault login -method=kubernetes role=vault-backup >/dev/null
+                  f="/backups/raft-$(date +%Y%m%d-%H%M%S).snap"
+                  vault operator raft snapshot save "$f"
+                  # keep last 14 snapshots
+                  ls -1t /backups/raft-*.snap | tail -n +15 | xargs -r rm --
+                  echo "saved $f"
+              env:
+                - name: VAULT_ADDR
+                  value: "https://vault.vault.svc:8200" # TODO: your Vault addr
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: vault-backups # TODO: create PVC (e.g. 10Gi)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-backup
+  namespace: vault
+# Required Vault side (operator applies once):
+# - K8s auth role `vault-backup` bound to this SA with a policy allowing
+#   `sys/storage/raft/snapshot` (read) — snapshots need root-adjacent
+#   privilege; scope the role to this SA/namespace only.
