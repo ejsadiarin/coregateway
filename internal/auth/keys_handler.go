@@ -49,6 +49,10 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	caller := GetUserFromContext(r)
+	if strings.TrimSpace(req.Label) == "" {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "label is required")
+		return
+	}
 	plaintext, row, err := h.keys.CreateKey(r.Context(), CreateKeyRequest{
 		Label:     req.Label,
 		OwnerID:   &caller.ID,
