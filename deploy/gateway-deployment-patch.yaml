@@ -1,11 +1,16 @@
 # Patch/snippet: wire the ESO-synced Secret into the gateway Deployment.
 # Apply as a strategic-merge patch or fold into your Deployment manifest.
 # No PEM material in git — only the Secret *name*.
+# Reloader: set the annotation below (or on the ExternalSecret's template)
+# so the gateway rolls automatically on every Secret change (i.e. each
+# rotation phase). TODO: uncomment once Reloader is installed.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gateway
   namespace: coregateway
+  # annotations:
+  #   reloader.stakater.com/auto: "true"
 spec:
   template:
     spec:

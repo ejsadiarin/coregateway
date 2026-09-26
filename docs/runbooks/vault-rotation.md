@@ -24,8 +24,10 @@ automatically. See `deploy/` for all templates and
    `kid` appears (5 min timeout, Job fails loudly on timeout — check
    ESO/Reloader, overlap stays safely in place).
 3. Drain wait ~10 min (300s token TTL + 5 min downstream cache + margin).
-4. **Phase 2:** writes `{current: NEW, prev: cleared}`, destroys
-   pre-rotation KV versions, verifies the OLD `kid` is gone from JWKS.
+4. **Phase 2:** writes `{current: NEW, prev: cleared}`, destroys all
+   versions up to and including phase 1 (`destroy` wipes the data; the
+   phase-1 version still embeds the old key), verifies the OLD `kid` is
+   gone from JWKS.
 5. Vault version history is the audit log.
 
 A crash between phases is safe: overlap still published, next month's
@@ -51,6 +53,10 @@ curl -s http://gateway.coregateway.svc:8080/.well-known/jwks.json | jq '.keys[].
 # Gateway pods all on the new revision:
 kubectl rollout status deploy/gateway -n coregateway
 # Spot-check a real call: login -> GET /api/budget/remaining -> 200
+# Sync lag tuning: the ExternalSecret uses refreshInterval: 1m; if a
+# rotation ever waits on sync, force it with:
+# kubectl annotate externalsecret gateway-jwt-keys -n coregateway \
+#   force-sync=$(date +%s) --overwrite
 ```
 
 ## Rollback

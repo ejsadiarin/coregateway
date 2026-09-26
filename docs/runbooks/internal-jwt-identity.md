@@ -44,8 +44,9 @@ authorize locally:
 
 ## Rollback
 
-- Gateway: set `JWT_REEMIT_USER_ID=true` to re-emit the legacy
-  `X-User-ID` header alongside the JWT (transitional flag, default false).
+- Gateway: the legacy `X-User-ID` re-emit path was removed
+  (`auth-hardening-vault-k3s`); rollback is reverting the commit(s) — no
+  flag exists anymore.
 - Migration: `make migrate-down` drops `coregateway.api_keys`.
 - **Warning: rolling back re-opens header trust.** Any downstream still
   accepting `X-User-ID` becomes spoofable again. Treat rollback as a

@@ -29,8 +29,16 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
-      toCIDR:
-        - "0.0.0.0/0" # TODO: narrow once egress needs are known
+    # TODO: allow the downstream's database. Example for in-cluster Postgres:
+    # - toEndpoints:
+    #     - matchLabels:
+    #         app: postgres
+    #   toPorts:
+    #     - ports:
+    #         - port: "5432"
+    #           protocol: TCP
+    # For managed/external DBs, use toCIDR with the DB address instead.
+    # Do NOT leave a broad toCIDR: 0.0.0.0/0 here — DNS + DB only.
 ---
 # Copy the pattern per downstream (corereminder, ...): same shape,
 # own endpointSelector. Gateway pods themselves need no ingress policy

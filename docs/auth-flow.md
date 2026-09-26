@@ -149,10 +149,9 @@ key. During rotation both keys are published in JWKS
 (`/.well-known/jwks.json`); new tokens use the current `kid`, old tokens
 still verify until they expire (minutes, given the 300s TTL) or the
 prev vars are cleared. Downstream caches JWKS for 5 minutes and refreshes
-on unknown `kid`, so a rotation propagates on its own. Note:
-`compose.yml` wires only the current-key vars for the gateway —
-`JWT_PREV_*` are omitted, so overlap rotation can't be exercised via
-compose without editing it.
+on unknown `kid`, so a rotation propagates on its own. `compose.yml`
+passes all `JWT_*` through (including `JWT_PREV_*`), so setting the PREV
+pair locally publishes both kids in JWKS — local rotation parity.
 
 ### k3s deployment
 

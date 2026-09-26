@@ -51,4 +51,7 @@ K8s Secret via external-secrets.
 - `created_at` tracks the **current** key only; the CronJob enforces the
   90-day policy off this field.
 - Old KV versions are destroyed after phase 2 (see runbook) so a
-  rotated-out private key does not linger in history.
+  rotated-out private key does not linger in history. `destroy` wipes
+  version data outright (unlike soft `delete`); destroy every version up
+  to and including the phase-1 write, which still embeds the old key in
+  `prev_private_pem`.

@@ -87,10 +87,26 @@ data:
       prev_private_pem="" prev_kid="" \
       created_at="$now")"
     ver2="$(echo "$out2" | jq -r '.data.version')"
-    echo "phase 2 written (kv version $ver2)"
+    echo "phase 2 written (kv version $ver2), waiting for $cur_kid to leave JWKS"
 
-    # Destroy pre-rotation versions so the old private key is really gone.
-    for v in $(seq 1 $((ver1 - 1))); do
+    deadline=$(( $(date +%s) + 600 ))
+    while :; do
+      if curl -fsS "$JWKS_URL" | jq -e --arg k "$cur_kid" \
+          '.keys | map(.kid) | index($k) | not' >/dev/null; then
+        echo "JWKS no longer serves $cur_kid"
+        break
+      fi
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo "TIMEOUT waiting for $cur_kid to leave JWKS — overlap still published, safe to investigate and re-run" >&2
+        exit 1
+      fi
+      sleep 15
+    done
+
+    # Destroy every version up to and including phase 1: ver1 still embeds
+    # the old private key in prev_private_pem. `destroy` wipes version data
+    # (unlike soft `delete`); only metadata stubs remain, holding no secrets.
+    for v in $(seq 1 "$ver1"); do
       vault kv destroy -versions="$v" "$KV_PATH" >/dev/null 2>&1 || true
     done
     echo "rotation complete: ${cur_kid} -> ${new_kid}"
