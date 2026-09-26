@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,6 +49,12 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 		return nil, fmt.Errorf("internal JWT identity: %w", err)
 	}
 	slog.Info("internal JWT identity ready", "kid", cfg.JWTKID, "issuer", cfg.JWTIssuer)
+
+	// SeedUsers is idempotent: existing demo/admin rows are left alone.
+	// Failure is fatal — a gateway that cannot read/write users cannot serve.
+	if err := auth.SeedUsers(context.Background(), queries, cfg.AdminEmail, cfg.AdminPass); err != nil {
+		return nil, fmt.Errorf("seed users: %w", err)
+	}
 
 	s := &Server{
 		port:    cfg.Port,
