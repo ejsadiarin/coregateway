@@ -96,6 +96,10 @@ help:
 	@echo "  make test-coverage    Run tests with coverage"
 	@echo "  make watch-test      Run tests with live reload"
 	@echo ""
+	@echo -e "${GREEN}Cross-Service (x- = composed stack, outside both modules' suites)${NC}"
+	@echo "  make x-test-integration  Run live gateway+downstream checks (needs compose+Docker)"
+	@echo ""
+	@echo ""
 	@echo -e "${GREEN}Code Quality${NC}"
 	@echo "  make lint             Run linter (golangci-lint)"
 	@echo "  make fmt              Format code"
@@ -261,6 +265,24 @@ watch-test:
 	fi
 
 # ==============================================================================
+# Cross-Service (x-*)
+# ==============================================================================
+#
+# NOTE: `x-` targets run against the COMPOSED system (compose.yml), never
+# inside a Go module's test suite. Each repo's `test-*` targets cover exactly
+# one module (`go test ./...` from here never reaches services/corefinance,
+# and neither module imports the other). Cross-service checks — real gateway
+# container minting, real downstream container verifying over a real JWKS
+# fetch — live here instead. For now only test-related helpers exist
+# (`x-test-*`); the prefix reserves room for future cross-service automation.
+# The script never runs `compose down`: your dev stack is left running.
+#
+
+x-test-integration:
+	@echo -e "${YELLOW}Running cross-service integration (compose stack)...${NC}"
+	@./scripts/x-test-integration.sh
+
+# ==============================================================================
 # Code Quality
 # ==============================================================================
 
@@ -373,6 +395,7 @@ env-check:
         migrate-create migrate-baseline migrate-fix \
         sqlc sqlc-check swagger generate \
         test test-unit test-integration test-coverage test-race watch-test \
+        x-test-integration \
         lint fmt vet staticcheck check check-refs \
         install tidy mod-download mod-verify \
         clean prune \
