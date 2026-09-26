@@ -105,6 +105,27 @@ func (s *KeysService) CreateKey(ctx context.Context, req CreateKeyRequest) (plai
 	return plaintext, row, nil
 }
 
+// CreateServiceKeyRequest carries ownerless key creation parameters.
+// ExpiresAt nil means the key never expires.
+type CreateServiceKeyRequest struct {
+	Label     string
+	Scopes    []string
+	ExpiresAt *time.Time
+}
+
+// CreateServiceKey stores a new ownerless (service) key row and returns the
+// plaintext exactly once. Storage holds only the prefix + SHA-256 hash;
+// owner_user_id is NULL so the key validates at the token exchange but is
+// rejected on the user-scoped proxy leg.
+func (s *KeysService) CreateServiceKey(ctx context.Context, req CreateServiceKeyRequest) (string, db.CoregatewayApiKey, error) {
+	return s.CreateKey(ctx, CreateKeyRequest{
+		Label:     req.Label,
+		OwnerID:   nil,
+		Scopes:    req.Scopes,
+		ExpiresAt: req.ExpiresAt,
+	})
+}
+
 // ListKeys returns key metadata newest-first. Hashes are never selected.
 func (s *KeysService) ListKeys(ctx context.Context) ([]db.ListApiKeysRow, error) {
 	return s.queries.ListApiKeys(ctx)

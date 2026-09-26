@@ -69,6 +69,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Route("/api/auth/keys", func(r chi.Router) {
 		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
 		r.Post("/", s.KeysHandler.Create)
+		r.Post("/service", s.KeysHandler.CreateServiceKey)
 		r.Get("/", s.KeysHandler.List)
 		r.Delete("/{id}", s.KeysHandler.Revoke)
 	})

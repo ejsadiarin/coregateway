@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
@@ -57,6 +58,42 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("keys.Create: failed", "error", err)
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to create API key")
+		return
+	}
+	resp := keyHTTPResponse{
+		ID:        row.ID,
+		Key:       plaintext,
+		KeyPrefix: row.KeyPrefix,
+		Label:     row.Label,
+		Scopes:    row.Scopes,
+		CreatedAt: row.CreatedAt.Time,
+	}
+	if row.ExpiresAt.Valid {
+		resp.ExpiresAt = &row.ExpiresAt.Time
+	}
+	helper.RespondJSON(w, http.StatusCreated, resp)
+}
+
+// CreateServiceKey issues an ownerless (service) key. The plaintext appears
+// in this response only; it is never re-readable via List.
+func (h *KeysHandler) CreateServiceKey(w http.ResponseWriter, r *http.Request) {
+	var req createKeyHTTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Label) == "" {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "label is required")
+		return
+	}
+	plaintext, row, err := h.keys.CreateServiceKey(r.Context(), CreateServiceKeyRequest{
+		Label:     req.Label,
+		Scopes:    req.Scopes,
+		ExpiresAt: req.ExpiresAt,
+	})
+	if err != nil {
+		slog.Error("keys.CreateServiceKey: failed", "error", err)
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to create service API key")
 		return
 	}
 	resp := keyHTTPResponse{
