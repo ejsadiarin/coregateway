@@ -52,10 +52,11 @@ import (
 //     published (vault-rotation two-phase, jwks-resilience rotation)
 //   - forged-kid and wrong iss/aud tokens are rejected
 //
-// What remains uncovered without the real verifier: its negative-kid cache,
-// singleflight fetch coalescing, and stale-cache refresh timing — those live
-// in services/corefinance/internal/auth/verifier_test.go against synthetic
-// tokens.
+// The verifier-owned behaviors — negative-kid cache, singleflight fetch
+// coalescing, stale-cache/rotation refresh, fail-closed boot — are covered
+// against real gateway-minted tokens in mirror_verifier_flow_test.go, via a
+// test-only copy of the downstream verifier (downstream_verifier_mirror_test.go;
+// downstream repos are never imported, see the drift contract there).
 
 // flowIssuer is the issuer identity shared by the tests below; it matches
 // the defaults the verifier is configured with (see docs/auth-flow.md).
