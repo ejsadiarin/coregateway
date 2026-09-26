@@ -29,6 +29,10 @@ hand-off). Everywhere else it is a **string value with real newlines**:
 ```bash
 # Gateway does NOT auto-migrate on boot — DB must already be migrated:
 make migrate-status   # expect 002_create_api_keys applied; else: make migrate-up
+# If migrate-status hangs/fails from a bare shell, the MIGRATION_URL in
+# .env likely points at the -pooler host (poolers reject the
+# options=search_path param): retry against the direct host per the
+# Makefile's own comment, or run via `make` targets which handle quoting.
 ```
 
 Root `.env` supplies `DATABASE_URL`; `services/corefinance/.env` exists.
@@ -42,6 +46,14 @@ export JWT_KID="local-a"
 export JWT_PRIVATE_KEY_PEM="$(cat /tmp/jwt-current.pem)"
 # admin seed for the key-provisioning tests (skip if you only want demo login):
 export ADMIN_EMAIL="admin@example.com" ADMIN_PASSWORD="change-me-123"
+# The gateway seeds this admin on boot (idempotent; existing rows are
+# left alone). Caveat on the shared dev DB: admin@example.com already
+# exists with an unknown password, so the seed skips it — if login 401s,
+# register a fresh admin instead and promote it:
+#   curl -s -X POST localhost:8080/api/auth/register -H 'Content-Type: application/json' \
+#     -d '{"email":"you@example.com","password":"..."}'
+# then: update coregateway.users set role='admin' where email='you@example.com';
+# and use that email below.
 ```
 
 ## 2. Boot — gateway first, then the rest
@@ -57,7 +69,9 @@ If `corefinance-api` crashes with a JWKS error, re-run
 `docker compose up -d corefinance-api` once the gateway is up.
 
 Negative test (optional): `unset JWT_PRIVATE_KEY_PEM` and boot — the
-gateway must refuse to start. That is fail-closed working.
+gateway must refuse to start. That is fail-closed working. Always
+`--build` for this: a stale pre-fail-closed image boots happily with an
+empty key.
 
 ## 3. Sanity endpoints
 
@@ -98,8 +112,9 @@ curl -s -b $cj localhost:8080/api/budget/remaining \
 ```bash
 key=$(curl -s -b $cj -X POST localhost:8080/api/auth/keys/service \
   -H 'Content-Type: application/json' \
-  -d '{"label":"manual-test","scopes":[]}' | jq -r .key)
-# cgw_live_... — shown once, never again
+  -d '{"label":"manual-test","scopes":["finance:read"]}' | jq -r .key)
+# cgw_live_... — shown once, never again. Scopes matter: /internal/*
+# requires finance:read, so provision with it (empty scopes → 403 there).
 
 curl -s localhost:8080/api/budget/remaining -H "Authorization: Bearer $key"  # 401 (no user — correct)
 
