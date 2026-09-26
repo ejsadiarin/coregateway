@@ -97,7 +97,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
 		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService))
-		r.Use(middleware.ForwardHeaders(cfg.JWTReemitUserID))
+		r.Use(middleware.ForwardHeaders())
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middleware.RequireScope("admin"))
 			r.Handle("/*", s.CorefinanceClient.Proxy())

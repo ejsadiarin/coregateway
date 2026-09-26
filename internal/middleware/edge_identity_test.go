@@ -164,28 +164,18 @@ func TestEdgeIdentityMalformedBearerRejected(t *testing.T) {
 	}
 }
 
-func TestForwardHeadersReemitFlag(t *testing.T) {
+func TestForwardHeadersNeverEmitsUserID(t *testing.T) {
 	userID := uuid.New()
 
-	withUser := func() *http.Request {
-		return requestWithUser(httptest.NewRequest(http.MethodGet, "/", nil), userID)
-	}
-
-	// X-User-ID is set on the outgoing request object; capture via next handler.
+	// Even with a validated user in context, ForwardHeaders must not
+	// emit X-User-ID downstream: the re-emit branch is gone and identity
+	// travels exclusively as the internal JWT minted by EdgeIdentity.
 	var emitted string
-	ForwardHeaders(true)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ForwardHeaders()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		emitted = r.Header.Get("X-User-ID")
-	})).ServeHTTP(httptest.NewRecorder(), withUser())
-	if emitted != userID.String() {
-		t.Errorf("re-emit on: X-User-ID = %q, want %q", emitted, userID.String())
-	}
-
-	emitted = "unset-sentinel"
-	ForwardHeaders(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		emitted = r.Header.Get("X-User-ID")
-	})).ServeHTTP(httptest.NewRecorder(), withUser())
+	})).ServeHTTP(httptest.NewRecorder(), requestWithUser(httptest.NewRequest(http.MethodGet, "/", nil), userID))
 	if emitted != "" {
-		t.Errorf("re-emit off: X-User-ID = %q, want empty", emitted)
+		t.Errorf("X-User-ID = %q, ForwardHeaders must never emit it", emitted)
 	}
 }
 

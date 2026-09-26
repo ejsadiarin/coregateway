@@ -26,6 +26,7 @@ type fakeDownstream struct {
 	lastPath   string
 	lastAuth   string
 	lastUserID string
+	lastCookie string
 }
 
 func (f *fakeDownstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +36,7 @@ func (f *fakeDownstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.lastPath = r.URL.Path
 	f.lastAuth = r.Header.Get("Authorization")
 	f.lastUserID = r.Header.Get("X-User-ID")
+	f.lastCookie = r.Header.Get("Cookie")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
 }
@@ -43,6 +45,12 @@ func (f *fakeDownstream) snapshot() (hits int, path, authHeader, userID string) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.hits, f.lastPath, f.lastAuth, f.lastUserID
+}
+
+func (f *fakeDownstream) cookie() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastCookie
 }
 
 func proxyTestSetup(t *testing.T) (*Server, *fakeDownstream, *token.Issuer) {
@@ -169,6 +177,36 @@ func TestProxyStripsSpoofedUserID(t *testing.T) {
 	}
 	if userIDHeader != "" {
 		t.Errorf("downstream X-User-ID = %q, forged header must be stripped", userIDHeader)
+	}
+	if claims := parseDownstreamToken(t, iss, authHeader); claims.Subject != userID.String() {
+		t.Errorf("sub = %q, want %q", claims.Subject, userID.String())
+	}
+}
+
+func TestProxyStripsCookieAndUserID(t *testing.T) {
+	userID := uuid.New()
+	s, fake, iss := proxyTestSetup(t)
+
+	// Browser-like request: session cookie plus a forged X-User-ID.
+	// Downstream must see a valid JWT and neither header.
+	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
+	req.Header.Set("Cookie", "session=abc123; other=xyz")
+	req.Header.Set("X-User-ID", uuid.New().String())
+	rec := httptest.NewRecorder()
+	proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	hits, _, authHeader, userIDHeader := fake.snapshot()
+	if hits != 1 {
+		t.Fatalf("downstream hits = %d, want 1", hits)
+	}
+	if userIDHeader != "" {
+		t.Errorf("downstream X-User-ID = %q, must be absent", userIDHeader)
+	}
+	if got := fake.cookie(); got != "" {
+		t.Errorf("downstream Cookie = %q, must be stripped", got)
 	}
 	if claims := parseDownstreamToken(t, iss, authHeader); claims.Subject != userID.String() {
 		t.Errorf("sub = %q, want %q", claims.Subject, userID.String())

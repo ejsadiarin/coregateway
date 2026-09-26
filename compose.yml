@@ -31,6 +31,8 @@ services:
       - JWT_AUDIENCE=${JWT_AUDIENCE:-corefinance}
       - JWT_TTL_SECONDS=${JWT_TTL_SECONDS:-300}
       - JWT_PRIVATE_KEY_PEM=${JWT_PRIVATE_KEY_PEM:-}
+      - JWT_PREV_PRIVATE_KEY_PEM=${JWT_PREV_PRIVATE_KEY_PEM:-}
+      - JWT_PREV_KID=${JWT_PREV_KID:-}
       - GODEBUG=netdns=go
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
