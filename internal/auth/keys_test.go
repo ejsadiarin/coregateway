@@ -185,7 +185,7 @@ func testExchangeHandler(t *testing.T, row db.CoregatewayApiKey, err error) (*Ke
 	}
 	iss, genErr := token.NewIssuer(
 		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
-		nil, "https://gateway.internal", "corefinance", 300*time.Second,
+		nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second,
 	)
 	if genErr != nil {
 		t.Fatalf("new issuer: %v", genErr)

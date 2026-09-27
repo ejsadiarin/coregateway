@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -23,8 +24,10 @@ type Config struct {
 	JWTKID               string
 	JWTPrevKID           string
 	JWTIssuer            string
-	JWTAudience          string
-	JWTTTLSeconds        int
+	// JWTAudience lists every downstream the minted tokens are valid for.
+	// Comma-separated in JWT_AUDIENCE (e.g. "corefinance,corereminder").
+	JWTAudience   []string
+	JWTTTLSeconds int
 }
 
 // Load loads configuration from environment variables
@@ -43,7 +46,7 @@ func Load() *Config {
 		JWTKID:               os.Getenv("JWT_KID"),
 		JWTPrevKID:           os.Getenv("JWT_PREV_KID"),
 		JWTIssuer:            getEnv("JWT_ISSUER", "https://gateway.internal"),
-		JWTAudience:          getEnv("JWT_AUDIENCE", "corefinance"),
+		JWTAudience:          getEnvList("JWT_AUDIENCE", "corefinance"),
 		JWTTTLSeconds:        getEnvInt("JWT_TTL_SECONDS", 300),
 	}
 }
@@ -72,7 +75,7 @@ func (c *Config) Validate() error {
 	if c.JWTIssuer == "" {
 		return fmt.Errorf("JWT_ISSUER is required")
 	}
-	if c.JWTAudience == "" {
+	if len(c.JWTAudience) == 0 {
 		return fmt.Errorf("JWT_AUDIENCE is required")
 	}
 	if c.JWTTTLSeconds <= 0 {
@@ -86,6 +89,19 @@ func getEnv(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// getEnvList reads a comma-separated env var into trimmed, non-empty
+// entries (e.g. JWT_AUDIENCE="corefinance,corereminder").
+func getEnvList(key, defaultValue string) []string {
+	raw := getEnv(key, defaultValue)
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func getEnvInt(key string, defaultValue int) int {

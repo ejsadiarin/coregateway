@@ -85,7 +85,7 @@ func mirrorTestKey(t *testing.T, kid string) token.Key {
 
 func mirrorTestIssuer(t *testing.T, current token.Key, prev *token.Key) *token.Issuer {
 	t.Helper()
-	iss, err := token.NewIssuer(current, prev, flowIssuer, flowAudience, flowTTL)
+	iss, err := token.NewIssuer(current, prev, flowIssuer, []string{flowAudience}, flowTTL)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}

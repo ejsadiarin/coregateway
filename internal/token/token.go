@@ -56,17 +56,21 @@ func ParseKey(kid, pem string) (Key, error) {
 
 // Issuer creates signed internal JWTs. previous is nil outside rotation;
 // when set, both keys are published in JWKS but only current signs.
+// audiences lists every downstream the tokens are valid for (one entry per
+// service, e.g. ["corefinance", "corereminder"]); a downstream accepts a
+// token when its own name is a member.
 type Issuer struct {
-	current  Key
-	previous *Key
-	issuer   string
-	audience string
-	ttl      time.Duration
+	current   Key
+	previous  *Key
+	issuer    string
+	audiences []string
+	ttl       time.Duration
 }
 
 // NewIssuer builds an Issuer from parsed keys. current must be a valid
-// key; previous may be nil.
-func NewIssuer(current Key, previous *Key, issuer, audience string, ttl time.Duration) (*Issuer, error) {
+// key; previous may be nil. audiences must hold at least one non-empty
+// entry.
+func NewIssuer(current Key, previous *Key, issuer string, audiences []string, ttl time.Duration) (*Issuer, error) {
 	if current.KID == "" || len(current.Private) == 0 {
 		return nil, fmt.Errorf("token: current signing key is required")
 	}
@@ -76,24 +80,31 @@ func NewIssuer(current Key, previous *Key, issuer, audience string, ttl time.Dur
 	if issuer == "" {
 		return nil, fmt.Errorf("token: issuer is required")
 	}
-	if audience == "" {
-		return nil, fmt.Errorf("token: audience is required")
+	clean := make([]string, 0, len(audiences))
+	for _, a := range audiences {
+		if strings.TrimSpace(a) == "" {
+			return nil, fmt.Errorf("token: audience must not be blank")
+		}
+		clean = append(clean, strings.TrimSpace(a))
+	}
+	if len(clean) == 0 {
+		return nil, fmt.Errorf("token: at least one audience is required")
 	}
 	if ttl <= 0 {
 		return nil, fmt.Errorf("token: ttl must be positive")
 	}
 	return &Issuer{
-		current:  current,
-		previous: previous,
-		issuer:   issuer,
-		audience: audience,
-		ttl:      ttl,
+		current:   current,
+		previous:  previous,
+		issuer:    issuer,
+		audiences: clean,
+		ttl:       ttl,
 	}, nil
 }
 
 // NewIssuerFromPEM parses PEM material and builds an Issuer in one step.
 // prevPEM/prevKID may both be empty (no rotation in progress).
-func NewIssuerFromPEM(pem, kid, prevPEM, prevKID, issuer, audience string, ttl time.Duration) (*Issuer, error) {
+func NewIssuerFromPEM(pem, kid, prevPEM, prevKID, issuer string, audiences []string, ttl time.Duration) (*Issuer, error) {
 	current, err := ParseKey(kid, pem)
 	if err != nil {
 		return nil, err
@@ -106,7 +117,7 @@ func NewIssuerFromPEM(pem, kid, prevPEM, prevKID, issuer, audience string, ttl t
 		}
 		previous = &p
 	}
-	return NewIssuer(current, previous, issuer, audience, ttl)
+	return NewIssuer(current, previous, issuer, audiences, ttl)
 }
 
 // TTL returns the token lifetime configured on the issuer.
@@ -129,7 +140,7 @@ func (i *Issuer) sign(sub uuid.UUID, hasSub bool, azp string, scopes []string) (
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.issuer,
-			Audience:  jwt.ClaimStrings{i.audience},
+			Audience:  jwt.ClaimStrings(i.audiences),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(i.ttl)),
 		},

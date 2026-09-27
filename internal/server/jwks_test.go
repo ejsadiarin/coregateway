@@ -22,7 +22,7 @@ func testIssuer(t *testing.T) *token.Issuer {
 		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
 		nil,
 		"https://gateway.internal",
-		"corefinance",
+		[]string{"corefinance"},
 		300*time.Second,
 	)
 	if err != nil {

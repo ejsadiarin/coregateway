@@ -295,7 +295,7 @@ func TestInternalJWTFlowRotationPrevKidStillVerifies(t *testing.T) {
 	oldKey := token.Key{KID: "2026-09-a", Private: oldPriv, Public: oldPub}
 	newKey := token.Key{KID: "2026-09-b", Private: newPriv, Public: newPub}
 
-	before, err := token.NewIssuer(oldKey, nil, flowIssuer, flowAudience, flowTTL)
+	before, err := token.NewIssuer(oldKey, nil, flowIssuer, []string{flowAudience}, flowTTL)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestInternalJWTFlowRotationPrevKidStillVerifies(t *testing.T) {
 		t.Fatalf("create pre-rotation token: %v", err)
 	}
 
-	after, err := token.NewIssuer(newKey, &oldKey, flowIssuer, flowAudience, flowTTL)
+	after, err := token.NewIssuer(newKey, &oldKey, flowIssuer, []string{flowAudience}, flowTTL)
 	if err != nil {
 		t.Fatalf("new rotated issuer: %v", err)
 	}

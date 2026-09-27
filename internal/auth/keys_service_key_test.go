@@ -99,7 +99,7 @@ func serviceTestIssuer(t *testing.T) *token.Issuer {
 	}
 	iss, err := token.NewIssuer(
 		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
-		nil, "https://gateway.internal", "corefinance", 300*time.Second,
+		nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second,
 	)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)

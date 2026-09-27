@@ -24,7 +24,7 @@ func testKey(t *testing.T, kid string) Key {
 
 func testIssuer(t *testing.T) *Issuer {
 	t.Helper()
-	iss, err := NewIssuer(testKey(t, "2026-09-a"), nil, "https://gateway.internal", "corefinance", 300*time.Second)
+	iss, err := NewIssuer(testKey(t, "2026-09-a"), nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
@@ -197,22 +197,57 @@ func TestParseKeyRejects(t *testing.T) {
 
 func TestNewIssuerValidation(t *testing.T) {
 	key := testKey(t, "a")
-	if _, err := NewIssuer(Key{}, nil, "iss", "aud", time.Minute); err == nil {
+	if _, err := NewIssuer(Key{}, nil, "iss", []string{"aud"}, time.Minute); err == nil {
 		t.Error("expected error for empty current key")
 	}
-	if _, err := NewIssuer(key, &Key{}, "iss", "aud", time.Minute); err == nil {
+	if _, err := NewIssuer(key, &Key{}, "iss", []string{"aud"}, time.Minute); err == nil {
 		t.Error("expected error for incomplete previous key")
 	}
-	if _, err := NewIssuer(key, nil, "", "aud", time.Minute); err == nil {
+	if _, err := NewIssuer(key, nil, "", []string{"aud"}, time.Minute); err == nil {
 		t.Error("expected error for empty issuer")
 	}
-	if _, err := NewIssuer(key, nil, "iss", "", time.Minute); err == nil {
-		t.Error("expected error for empty audience")
+	if _, err := NewIssuer(key, nil, "iss", nil, time.Minute); err == nil {
+		t.Error("expected error for missing audiences")
 	}
-	if _, err := NewIssuer(key, nil, "iss", "aud", 0); err == nil {
+	if _, err := NewIssuer(key, nil, "iss", []string{""}, time.Minute); err == nil {
+		t.Error("expected error for blank audience")
+	}
+	if _, err := NewIssuer(key, nil, "iss", []string{"aud"}, 0); err == nil {
 		t.Error("expected error for non-positive ttl")
 	}
-	if _, err := NewIssuerFromPEM("", "a", "", "", "iss", "aud", time.Minute); err == nil {
+	if _, err := NewIssuerFromPEM("", "a", "", "", "iss", []string{"aud"}, time.Minute); err == nil {
 		t.Error("expected error for empty PEM")
+	}
+}
+
+func TestMultiAudienceMintedAsList(t *testing.T) {
+	iss, err := NewIssuer(testKey(t, "2026-09-a"), nil,
+		"https://gateway.internal", []string{"corefinance", "corereminder"}, 300*time.Second)
+	if err != nil {
+		t.Fatalf("new issuer: %v", err)
+	}
+	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	claims := parseWith(t, tokenString, iss.current.Public)
+	if len(claims.Audience) != 2 || claims.Audience[0] != "corefinance" || claims.Audience[1] != "corereminder" {
+		t.Fatalf("aud = %v, want [corefinance corereminder]", claims.Audience)
+	}
+	// Each downstream verifies with its own name: membership, not equality.
+	for _, aud := range []string{"corefinance", "corereminder"} {
+		var v Claims
+		parsed, err := jwt.ParseWithClaims(tokenString, &v, func(t *jwt.Token) (any, error) {
+			return iss.current.Public, nil
+		}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience(aud), jwt.WithExpirationRequired())
+		if err != nil || !parsed.Valid {
+			t.Errorf("aud %q rejected multi-audience token: %v", aud, err)
+		}
+	}
+	var other Claims
+	if parsed, _ := jwt.ParseWithClaims(tokenString, &other, func(t *jwt.Token) (any, error) {
+		return iss.current.Public, nil
+	}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience("third-service"), jwt.WithExpirationRequired()); parsed != nil && parsed.Valid {
+		t.Error("unrelated audience accepted multi-audience token")
 	}
 }

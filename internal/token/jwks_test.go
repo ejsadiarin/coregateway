@@ -40,7 +40,7 @@ func TestRotationOverlap(t *testing.T) {
 	oldKey := testKey(t, "2026-09-a")
 	newKey := testKey(t, "2026-09-b")
 
-	before, err := NewIssuer(oldKey, nil, "https://gateway.internal", "corefinance", 300*time.Second)
+	before, err := NewIssuer(oldKey, nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestRotationOverlap(t *testing.T) {
 	}
 
 	// Rotation: new key signs, old key still published.
-	after, err := NewIssuer(newKey, &oldKey, "https://gateway.internal", "corefinance", 300*time.Second)
+	after, err := NewIssuer(newKey, &oldKey, "https://gateway.internal", []string{"corefinance"}, 300*time.Second)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestRotationOverlap(t *testing.T) {
 	}
 
 	// After retirement (previous dropped), only the new key is published.
-	retired, err := NewIssuer(newKey, nil, "https://gateway.internal", "corefinance", 300*time.Second)
+	retired, err := NewIssuer(newKey, nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
