@@ -233,6 +233,14 @@ GET {{host}}/api/budget/remaining
 
 ### Admin path without admin scope (expect 403)
 
-GET {{host}}/api/budget/admin/backfill?dry_run=true
+POST {{host}}/api/budget/admin/backfill?dry_run=true
+
+### Admin backfill dry-run (admin session, expect counts, no mutation)
+
+POST {{host}}/api/budget/admin/backfill?dry_run=true
+
+### Admin backfill execute for another user (admin session)
+
+POST {{host}}/api/budget/admin/backfill?user_id=PASTE_TARGET_USER_UUID_HERE
 
 # @key_id = 00000000-0000-0000-0000-000000000000
