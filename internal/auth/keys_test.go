@@ -2,11 +2,8 @@ package auth
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,8 +12,6 @@ import (
 	"time"
 
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
-	"github.com/ejsadiarin/coregateway/internal/token"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -80,13 +75,10 @@ func (s *stubQuerier) RevokeApiKey(_ context.Context, _ uuid.UUID) (int64, error
 
 func liveRow(owner uuid.UUID) db.CoregatewayApiKey {
 	return db.CoregatewayApiKey{
-		ID:     uuid.New(),
-		Label:  "test",
-		Scopes: []string{"finance:read"},
-		OwnerUserID: pgtype.UUID{
-			Bytes: owner,
-			Valid: true,
-		},
+		ID:          uuid.New(),
+		Label:       "test",
+		Scopes:      []string{"corefinance:read"},
+		OwnerUserID: owner,
 	}
 }
 
@@ -105,7 +97,7 @@ func TestValidateKeyLive(t *testing.T) {
 	if keyID != stub.row.ID.String() {
 		t.Errorf("key id = %q", keyID)
 	}
-	if len(scopes) != 1 || scopes[0] != "finance:read" {
+	if len(scopes) != 1 || scopes[0] != "corefinance:read" {
 		t.Errorf("scopes = %v", scopes)
 	}
 	// last_used is touched asynchronously; poll briefly.
@@ -134,7 +126,7 @@ func TestValidateKeyRejects(t *testing.T) {
 		},
 		"expired": {
 			ID:          uuid.New(),
-			OwnerUserID: pgtype.UUID{Bytes: owner, Valid: true},
+			OwnerUserID: owner,
 			ExpiresAt:   pgtype.Timestamptz{Time: past, Valid: true},
 		},
 	}
@@ -150,16 +142,12 @@ func TestValidateKeyRejects(t *testing.T) {
 	}
 }
 
-func TestValidateKeyOwnerlessServiceKey(t *testing.T) {
+func TestValidateKeyRejectsOwnerless(t *testing.T) {
 	row := liveRow(uuid.New())
-	row.OwnerUserID = pgtype.UUID{}
+	row.OwnerUserID = uuid.Nil
 	svc := NewKeysService(&stubQuerier{row: row})
-	userID, _, _, err := svc.ValidateKey(context.Background(), "k")
-	if err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	if userID != uuid.Nil {
-		t.Errorf("ownerless key user = %v, want Nil", userID)
+	if _, _, _, err := svc.ValidateKey(context.Background(), "k"); err != ErrInvalidKey {
+		t.Errorf("err = %v, want ErrInvalidKey", err)
 	}
 }
 
@@ -170,6 +158,14 @@ func TestCreateKeyRequiresLabel(t *testing.T) {
 	}
 }
 
+func TestCreateKeyRequiresOwner(t *testing.T) {
+	svc := NewKeysService(&stubQuerier{})
+	req := CreateKeyRequest{Label: "x", Scopes: []string{"admin"}} // OwnerID nil
+	if _, _, err := svc.CreateKey(context.Background(), req); err == nil {
+		t.Error("expected error for nil OwnerID")
+	}
+}
+
 func TestRevokeKeyNotFound(t *testing.T) {
 	svc := NewKeysService(&stubQuerier{revoked: 0})
 	if err := svc.RevokeKey(context.Background(), uuid.New()); err != ErrKeyNotFound {
@@ -177,93 +173,88 @@ func TestRevokeKeyNotFound(t *testing.T) {
 	}
 }
 
-func testExchangeHandler(t *testing.T, row db.CoregatewayApiKey, err error) (*KeysHandler, *token.Issuer) {
-	t.Helper()
-	pub, priv, genErr := ed25519.GenerateKey(rand.Reader)
-	if genErr != nil {
-		t.Fatalf("generate key: %v", genErr)
+func TestValidateScopes(t *testing.T) {
+	valid := [][]string{
+		nil,
+		{},
+		{"admin"},
+		{"corefinance:read"},
+		{"corefinance:write"},
+		{"corefinance:admin"},
+		{"admin", "corefinance:read"},
 	}
-	iss, genErr := token.NewIssuer(
-		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
-		nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second,
-	)
-	if genErr != nil {
-		t.Fatalf("new issuer: %v", genErr)
-	}
-	svc := NewKeysService(&stubQuerier{row: row, err: err})
-	return NewKeysHandler(svc, iss), iss
-}
-
-func serviceRow() db.CoregatewayApiKey {
-	return db.CoregatewayApiKey{
-		ID:     uuid.New(),
-		Label:  "corereminder",
-		Scopes: []string{"finance:read"},
-	}
-}
-
-func TestExchangeServiceKey(t *testing.T) {
-	h, iss := testExchangeHandler(t, serviceRow(), nil)
-
-	body := strings.NewReader(`{"key":"service-key-material"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/token", body)
-	rec := httptest.NewRecorder()
-	h.Exchange(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	var resp struct {
-		TokenType string `json:"token_type"`
-		Token     string `json:"token"`
-		ExpiresIn int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.TokenType != "Bearer" || resp.ExpiresIn != 300 {
-		t.Errorf("response = %+v", resp)
-	}
-	var claims token.Claims
-	parsed, err := jwt.ParseWithClaims(resp.Token, &claims, func(t *jwt.Token) (any, error) {
-		return iss.Keys()[0].Public, nil
-	})
-	if err != nil || !parsed.Valid {
-		t.Fatalf("exchanged token does not verify: %v", err)
-	}
-	if claims.Subject != "" {
-		t.Errorf("service token sub = %q, want empty", claims.Subject)
-	}
-	if claims.Azp != "corereminder" {
-		t.Errorf("azp = %q", claims.Azp)
-	}
-	if claims.Scope != "finance:read" {
-		t.Errorf("scope = %q", claims.Scope)
-	}
-}
-
-func TestExchangeRejects(t *testing.T) {
-	owned := serviceRow()
-	owned.OwnerUserID = pgtype.UUID{Bytes: uuid.New(), Valid: true}
-
-	cases := map[string]struct {
-		row  db.CoregatewayApiKey
-		err  error
-		body string
-		want int
-	}{
-		"unknown key":     {row: db.CoregatewayApiKey{}, err: pgx.ErrNoRows, body: `{"key":"x"}`, want: http.StatusUnauthorized},
-		"owned human key": {row: owned, body: `{"key":"x"}`, want: http.StatusForbidden},
-		"empty body":      {row: serviceRow(), body: `{}`, want: http.StatusBadRequest},
-		"malformed body":  {row: serviceRow(), body: `not-json`, want: http.StatusBadRequest},
-	}
-	for name, c := range cases {
-		h, _ := testExchangeHandler(t, c.row, c.err)
-		req := httptest.NewRequest(http.MethodPost, "/api/auth/token", strings.NewReader(c.body))
-		rec := httptest.NewRecorder()
-		h.Exchange(rec, req)
-		if rec.Code != c.want {
-			t.Errorf("%s: status = %d, want %d", name, rec.Code, c.want)
+	for i, scopes := range valid {
+		if err := validateScopes(scopes); err != nil {
+			t.Errorf("valid[%d] (%v): err = %v", i, scopes, err)
 		}
+	}
+	invalid := [][]string{
+		{"x"},
+		{"finance"},
+		{"corefinance:delete"},
+		{"Admin"},
+		{" corefinance:read"},
+		{"corefinance:read "},
+		{""},
+	}
+	for i, scopes := range invalid {
+		if err := validateScopes(scopes); err == nil {
+			t.Errorf("invalid[%d] (%v): expected error", i, scopes)
+		}
+	}
+}
+
+// createStubQuerier records CreateApiKey params and returns a canned row.
+type createStubQuerier struct {
+	stubQuerier
+	created *db.CreateApiKeyParams
+}
+
+func (s *createStubQuerier) CreateApiKey(_ context.Context, arg db.CreateApiKeyParams) (db.CoregatewayApiKey, error) {
+	*s.created = arg
+	return db.CoregatewayApiKey{
+		ID:          uuid.New(),
+		KeyPrefix:   ApiKeyPrefix,
+		KeyHash:     "hash",
+		Label:       arg.Label,
+		OwnerUserID: arg.OwnerUserID,
+		Scopes:      arg.Scopes,
+	}, nil
+}
+
+func TestCreateKeyHandlerRejectsInvalidScope(t *testing.T) {
+	caller := &UserContext{ID: uuid.New(), Email: "admin@example.com", Role: RoleAdmin}
+	body := strings.NewReader(`{"label":"ops","scopes":["bogus"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/keys", body)
+	req = req.WithContext(ContextWithUser(req.Context(), caller))
+	rec := httptest.NewRecorder()
+
+	NewKeysHandler(NewKeysService(&stubQuerier{})).Create(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestCreateKeyHandlerAcceptsValidScopes(t *testing.T) {
+	callerID := uuid.New()
+	caller := &UserContext{ID: callerID, Email: "admin@example.com", Role: RoleAdmin}
+	var created db.CreateApiKeyParams
+	stub := &createStubQuerier{created: &created}
+	body := strings.NewReader(`{"label":"ops-admin","scopes":["admin","corefinance:read"]}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/keys", body)
+	req = req.WithContext(ContextWithUser(req.Context(), caller))
+	rec := httptest.NewRecorder()
+
+	NewKeysHandler(NewKeysService(stub)).Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", rec.Code)
+	}
+	if created.OwnerUserID != callerID {
+		t.Errorf("owner = %v, want %v", created.OwnerUserID, callerID)
+	}
+	if len(created.Scopes) != 2 || created.Scopes[0] != "admin" {
+		t.Errorf("scopes = %v", created.Scopes)
 	}
 }

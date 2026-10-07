@@ -142,41 +142,8 @@ func TestMirrorUserTokenEndToEnd(t *testing.T) {
 	if id == nil || id.userID != userID {
 		t.Fatalf("identity = %+v, want user %s", id, userID)
 	}
-	if id.label != "" {
-		t.Errorf("label = %q, want empty for user token", id.label)
-	}
 	if got := h.fetches.Load(); got != 1 {
 		t.Errorf("fetches = %d, want 1 (fresh cache, no refresh)", got)
-	}
-}
-
-// TestMirrorServiceTokenEndToEnd proves the Pattern B shape through
-// verifier-identical checks: a sub-less token minted by the real issuer (the
-// same call the exchange handler makes) establishes a service identity with
-// the key label and scopes, and no user.
-func TestMirrorServiceTokenEndToEnd(t *testing.T) {
-	h := newMirrorHarness(t, mirrorTestIssuer(t, mirrorTestKey(t, "2026-09-a"), nil))
-	v := h.newVerifier(0)
-
-	minted, err := h.iss.CreateServiceToken("svc-mirror", []string{"finance:read"})
-	if err != nil {
-		t.Fatalf("mint service token: %v", err)
-	}
-	code, _, id := mirrorRoundTrip(v, minted, nil)
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", code)
-	}
-	if id == nil {
-		t.Fatal("no identity established")
-	}
-	if id.userID != uuid.Nil {
-		t.Errorf("userID = %s, want nil for service token", id.userID)
-	}
-	if id.label != "svc-mirror" {
-		t.Errorf("label = %q, want svc-mirror", id.label)
-	}
-	if len(id.scopes) != 1 || id.scopes[0] != "finance:read" {
-		t.Errorf("scopes = %v, want [finance:read]", id.scopes)
 	}
 }
 

@@ -16,8 +16,8 @@ import (
 )
 
 // Claims is the internal JWT envelope. Scope is a space-delimited list
-// (OAuth2 style) and is omitted when empty. Subject is omitted for
-// service tokens, which carry no user identity.
+// (OAuth2 style) and is omitted when empty. Subject always carries the
+// user identity: every token is a user token.
 type Claims struct {
 	jwt.RegisteredClaims
 	Azp   string `json:"azp"`
@@ -135,7 +135,7 @@ func (i *Issuer) Keys() []Key {
 	return keys
 }
 
-func (i *Issuer) sign(sub uuid.UUID, hasSub bool, azp string, scopes []string) (string, error) {
+func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -143,11 +143,9 @@ func (i *Issuer) sign(sub uuid.UUID, hasSub bool, azp string, scopes []string) (
 			Audience:  jwt.ClaimStrings(i.audiences),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(i.ttl)),
+			Subject:   sub.String(),
 		},
 		Azp: azp,
-	}
-	if hasSub {
-		claims.Subject = sub.String()
 	}
 	if len(scopes) > 0 {
 		claims.Scope = strings.Join(scopes, " ")
@@ -166,14 +164,5 @@ func (i *Issuer) CreateUserToken(userID uuid.UUID, azp string, scopes []string) 
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, true, azp, scopes)
-}
-
-// CreateServiceToken creates a token for a service identity (no user).
-// The label is typically the service name from its API key row.
-func (i *Issuer) CreateServiceToken(label string, scopes []string) (string, error) {
-	if label == "" {
-		return "", fmt.Errorf("token: service label is required")
-	}
-	return i.sign(uuid.Nil, false, label, scopes)
+	return i.sign(userID, azp, scopes)
 }

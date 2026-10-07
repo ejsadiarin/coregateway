@@ -160,8 +160,10 @@ GET {{host}}/api/services/{{service_id}}/stats
 
 
 # ─── API Keys (session + admin) ──────────────────────────────────────────────
-# Management for programmatic and service keys. Plaintext is returned
-# exactly once by Create; List never exposes secrets.
+# Owned keys only (owner = caller). Plaintext is returned exactly once
+# by Create; List never exposes secrets. Valid scopes: "admin",
+# "<service>:read|write|admin" (e.g. "corefinance:read"). Unknown
+# scopes → 400. An admin key is scopes=["admin"] with no expiry.
 
 ### Create API Key
 
@@ -170,7 +172,17 @@ Content-Type: application/json
 
 {
   "label": "ops-script",
-  "scopes": ["finance:read"]
+  "scopes": ["corefinance:read"]
+}
+
+### Create Admin API Key (admin session; never expires)
+
+POST {{host}}/api/auth/keys
+Content-Type: application/json
+
+{
+  "label": "ops-admin",
+  "scopes": ["admin"]
 }
 
 ### List API Keys (metadata only)
@@ -180,15 +192,6 @@ GET {{host}}/api/auth/keys
 ### Revoke API Key (immediate effect; 204)
 
 DELETE {{host}}/api/auth/keys/{{key_id}}
-
-### Exchange Service Key for Service JWT (public; key is the credential)
-
-POST {{host}}/api/auth/token
-Content-Type: application/json
-
-{
-  "key": "cgw_live_PASTE_SERVICE_KEY_HERE"
-}
 
 
 # ─── Budget (reverse-proxied to corefinance) ─────────────────────────────────

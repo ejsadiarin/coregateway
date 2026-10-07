@@ -193,7 +193,7 @@ func (s stubValidator) ValidateKey(_ context.Context, _ string) (uuid.UUID, stri
 func TestEdgeIdentityValidKey(t *testing.T) {
 	iss := testIssuer(t)
 	userID := uuid.New()
-	keys := stubValidator{userID: userID, keyID: "key-1", scopes: []string{"finance:read"}}
+	keys := stubValidator{userID: userID, keyID: "key-1", scopes: []string{"corefinance:read"}}
 
 	var gotAuth string
 	var gotScopes []string
@@ -222,7 +222,7 @@ func TestEdgeIdentityValidKey(t *testing.T) {
 	if claims.Azp != "api-key:key-1" {
 		t.Errorf("azp = %q", claims.Azp)
 	}
-	if len(gotScopes) != 1 || gotScopes[0] != "finance:read" {
+	if len(gotScopes) != 1 || gotScopes[0] != "corefinance:read" {
 		t.Errorf("context scopes = %v", gotScopes)
 	}
 }
@@ -246,26 +246,6 @@ func TestEdgeIdentityInvalidKeyRejected(t *testing.T) {
 	}
 }
 
-func TestEdgeIdentityServiceKeyRejectedAtProxy(t *testing.T) {
-	iss := testIssuer(t)
-	// Ownerless service key validates but carries no user.
-	keys := stubValidator{userID: uuid.Nil, keyID: "svc-1", scopes: []string{"finance:read"}}
-	nextCalled := false
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { nextCalled = true })
-
-	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
-	req.Header.Set("Authorization", "Bearer service-key-material")
-	rec := httptest.NewRecorder()
-	EdgeIdentity(iss, keys)(next).ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("status = %d, want 401", rec.Code)
-	}
-	if nextCalled {
-		t.Error("service keys belong to the token exchange, not the proxy")
-	}
-}
-
 func TestRequireScope(t *testing.T) {
 	pass := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
 
@@ -275,13 +255,13 @@ func TestRequireScope(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"admin", "finance:read"}))
+	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"admin", "corefinance:read"}))
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("scoped request: status = %d, want 204", rec.Code)
 	}
 
 	rec = httptest.NewRecorder()
-	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"finance:read"}))
+	RequireScope("admin")(pass).ServeHTTP(rec, withScopesReq([]string{"corefinance:read"}))
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("unscoped request: status = %d, want 403", rec.Code)
 	}

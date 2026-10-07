@@ -39,18 +39,16 @@ func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator) func(http.Handler)
 				issue(w, r, next, issuer, user.ID, "session", scopes)
 				return
 			}
-			if keys != nil {
-				if presented, ok := bearerToken(r); ok {
-					userID, keyID, scopes, err := keys.ValidateKey(r.Context(), presented)
-					// Ownerless (service) keys carry no user and cannot pass
-					// the user-scoped proxy leg; they belong to the token
-					// exchange (POST /api/auth/token).
-					if err == nil && userID != uuid.Nil {
-						issue(w, r, next, issuer, userID, "api-key:"+keyID, scopes)
-						return
-					}
+		if keys != nil {
+			if presented, ok := bearerToken(r); ok {
+				userID, keyID, scopes, err := keys.ValidateKey(r.Context(), presented)
+				// All keys are owned; validity alone suffices.
+				if err == nil {
+					issue(w, r, next, issuer, userID, "api-key:"+keyID, scopes)
+					return
 				}
 			}
+		}
 			helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
 		})
 	}

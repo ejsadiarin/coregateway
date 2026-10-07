@@ -14,11 +14,10 @@ authorize locally:
 3. **Verify locally.** Fetch the gateway JWKS, cache 5–10 min, refresh on
    unknown `kid`. Check signature, `iss`, `aud`, `exp` (±60s leeway).
    Fail closed when the JWKS is unreachable at startup.
-4. **Service-originated calls use service tokens**, not user tokens: hold an
-   ownerless `api_keys` row, trade it at `POST /api/auth/token`, call
-   scope-gated `/internal/*` endpoints directly (never via the gateway).
-   A service token opens no user-scoped route, and a user token opens no
-   service route.
+4. **Service-originated work uses no token.** Workers hit the database
+   directly with their own role (the corefinance worker pattern).
+   Service-to-service HTTP, when it arrives, will be async; there is no
+   sync service credential and no `/internal/*` route family.
 5. **The gateway holds all credential material** (users, sessions,
    `api_keys`). Downstream services hold public keys only.
 
@@ -71,14 +70,13 @@ authorize locally:
 - **Neon `MIGRATION_URL` targets the pooler host** with `options=` +
   `channel_binding=require`, which hangs goose. Point it at the direct
   host per the Makefile docs, then run `make migrate-up` (migration
-  `002_create_api_keys.sql`). Key/exchange flows are integration-tested
+  `003_api_keys_owned_only.sql`). Key flows are integration-tested
   but have not run against Neon yet.
 - **Rotate `neondb_owner`** — the password appeared in plaintext in a
   tool traceback during this implementation.
 - Key-flow live check post-migration: as admin, `POST /api/auth/keys`
-  → exchange at `POST /api/auth/token` → service JWT → direct
-  `GET :6969/internal/recurring/active` (200), same token on
-  `/api/budget/expenses/` (401), user JWT on `/internal/*` (403).
+  with `scopes=["admin"]` → key 200s `POST /api/budget/admin/backfill?dry_run=true`
+  via the gateway; `POST /api/auth/token` and `GET :6969/internal/*` → 404.
 
 ## Accepted posture
 
@@ -87,7 +85,6 @@ authorize locally:
   this change).
 - `/api/budget/priority-groups` intentionally stays public via the
   verifier's `PublicPaths` bypass (reference data, no user scope).
-- Everything else under `/api/budget`, and everything under `/internal`,
-  requires a gateway-minted JWT; scoped routes additionally enforce
-  scope (`RequireScope("admin")` at the gateway edge,
-  `RequireServiceScope` downstream).
+- Everything else under `/api/budget` requires a gateway-minted JWT;
+  admin routes additionally enforce scope (`RequireScope("admin")` at the
+  gateway edge, `HasScope("admin")` downstream defense-in-depth).

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/crypto"
@@ -28,9 +29,9 @@ var (
 	ErrInvalidKey = errors.New("invalid API key")
 	// ErrKeyNotFound covers missing and already-revoked keys on management calls.
 	ErrKeyNotFound = errors.New("API key not found")
-	// ErrNotServiceKey rejects owned (human) keys at the token exchange,
-	// where exchanging would silently drop the user's identity.
-	ErrNotServiceKey = errors.New("key is not a service key")
+	// ErrInvalidScope covers scope strings outside the vocabulary
+	// (`admin`, `<service>:read|write|admin`). The handler maps it to 400.
+	ErrInvalidScope = errors.New("invalid scope")
 )
 
 // KeysService owns the api_keys lifecycle: issuance, validation at the
@@ -63,8 +64,22 @@ func HashAPIKey(presented string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// scopePattern admits the vocabulary: `admin`, or
+// `<service>:read|write|admin` (e.g. `corefinance:read`).
+var scopePattern = regexp.MustCompile(`^(admin|[a-z0-9-]+:(read|write|admin))$`)
+
+// validateScopes rejects any scope outside the vocabulary.
+func validateScopes(scopes []string) error {
+	for _, s := range scopes {
+		if !scopePattern.MatchString(s) {
+			return fmt.Errorf("%w: %q", ErrInvalidScope, s)
+		}
+	}
+	return nil
+}
+
 // CreateKeyRequest carries key creation parameters. ExpiresAt nil means
-// the key never expires; OwnerID nil means the key is ownerless (service use).
+// the key never expires. OwnerID is required: keys are always owned.
 type CreateKeyRequest struct {
 	Label     string
 	OwnerID   *uuid.UUID
@@ -77,22 +92,26 @@ func (s *KeysService) CreateKey(ctx context.Context, req CreateKeyRequest) (plai
 	if req.Label == "" {
 		return "", db.CoregatewayApiKey{}, fmt.Errorf("label is required")
 	}
-	plaintext, hash, err := GenerateAPIKey()
-	if err != nil {
-		return "", db.CoregatewayApiKey{}, err
+	if req.OwnerID == nil {
+		return "", db.CoregatewayApiKey{}, fmt.Errorf("owner is required")
 	}
 	scopes := req.Scopes
 	if scopes == nil {
 		scopes = []string{}
 	}
-	params := db.CreateApiKeyParams{
-		KeyPrefix: ApiKeyPrefix,
-		KeyHash:   hash,
-		Label:     req.Label,
-		Scopes:    scopes,
+	if err := validateScopes(scopes); err != nil {
+		return "", db.CoregatewayApiKey{}, err
 	}
-	if req.OwnerID != nil {
-		params.OwnerUserID = pgtype.UUID{Bytes: *req.OwnerID, Valid: true}
+	plaintext, hash, err := GenerateAPIKey()
+	if err != nil {
+		return "", db.CoregatewayApiKey{}, err
+	}
+	params := db.CreateApiKeyParams{
+		KeyPrefix:   ApiKeyPrefix,
+		KeyHash:     hash,
+		Label:       req.Label,
+		Scopes:      scopes,
+		OwnerUserID: *req.OwnerID,
 	}
 	if req.ExpiresAt != nil {
 		params.ExpiresAt = pgtype.Timestamptz{Time: *req.ExpiresAt, Valid: true}
@@ -103,27 +122,6 @@ func (s *KeysService) CreateKey(ctx context.Context, req CreateKeyRequest) (plai
 	}
 	slog.Info("apikeys: key created", "key_id", row.ID, "label", req.Label)
 	return plaintext, row, nil
-}
-
-// CreateServiceKeyRequest carries ownerless key creation parameters.
-// ExpiresAt nil means the key never expires.
-type CreateServiceKeyRequest struct {
-	Label     string
-	Scopes    []string
-	ExpiresAt *time.Time
-}
-
-// CreateServiceKey stores a new ownerless (service) key row and returns the
-// plaintext exactly once. Storage holds only the prefix + SHA-256 hash;
-// owner_user_id is NULL so the key validates at the token exchange but is
-// rejected on the user-scoped proxy leg.
-func (s *KeysService) CreateServiceKey(ctx context.Context, req CreateServiceKeyRequest) (string, db.CoregatewayApiKey, error) {
-	return s.CreateKey(ctx, CreateKeyRequest{
-		Label:     req.Label,
-		OwnerID:   nil,
-		Scopes:    req.Scopes,
-		ExpiresAt: req.ExpiresAt,
-	})
 }
 
 // ListKeys returns key metadata newest-first. Hashes are never selected.
@@ -166,33 +164,17 @@ func (s *KeysService) validatedRow(ctx context.Context, presented string) (db.Co
 	return row, nil
 }
 
-// ValidateKey implements middleware.APIKeyValidator. Ownerless (service)
-// keys return uuid.Nil as the user: the proxy leg rejects those (it needs
-// a user), while the token exchange accepts them.
+// ValidateKey implements middleware.APIKeyValidator. All keys are owned,
+// so the returned user is always the key owner.
 func (s *KeysService) ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error) {
 	row, err := s.validatedRow(ctx, presented)
 	if err != nil {
 		return uuid.Nil, "", nil, err
 	}
-	if row.OwnerUserID.Valid {
-		userID = row.OwnerUserID.Bytes
+	if row.OwnerUserID == uuid.Nil {
+		return uuid.Nil, "", nil, ErrInvalidKey
 	}
-	return userID, row.ID.String(), row.Scopes, nil
-}
-
-// ValidateServiceKey validates a key for the token exchange. Only
-// ownerless keys qualify: an owned (human) key exchanged here would mint
-// a user-less token and silently drop the user's identity, so owned keys
-// are rejected outright.
-func (s *KeysService) ValidateServiceKey(ctx context.Context, presented string) (db.CoregatewayApiKey, error) {
-	row, err := s.validatedRow(ctx, presented)
-	if err != nil {
-		return db.CoregatewayApiKey{}, err
-	}
-	if row.OwnerUserID.Valid {
-		return db.CoregatewayApiKey{}, ErrNotServiceKey
-	}
-	return row, nil
+	return row.OwnerUserID, row.ID.String(), row.Scopes, nil
 }
 
 // touchLastUsed updates last_used_at off the request path. Failures are

@@ -55,11 +55,10 @@ const mirrorDefaultCacheTTL = 5 * time.Minute
 const mirrorNegativeCacheTTL = 30 * time.Second
 
 // mirrorIdentity is the test-local established identity, mirroring what the
-// source verifier injects into the request context (user ID + scopes, or a
-// service label + scopes for sub-less tokens).
+// source verifier injects into the request context (user ID + scopes).
+// Sub-less tokens are rejected, so there is no service-identity shape.
 type mirrorIdentity struct {
 	userID uuid.UUID
-	label  string
 	scopes []string
 }
 
@@ -274,11 +273,9 @@ func (v *mirrorVerifier) middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), mirrorIdentityKey, &mirrorIdentity{
-			label:  claims.Azp,
-			scopes: strings.Fields(claims.Scope),
-		})
-		next.ServeHTTP(w, r.WithContext(ctx))
+		// No service tokens exist (no minter): a token without a subject
+		// satisfies no endpoint.
+		mirrorUnauthorized(w)
 	})
 }
 

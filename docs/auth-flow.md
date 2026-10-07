@@ -76,7 +76,8 @@ downstream (corefinance :6969)
 5. corefinance's verifier (`services/corefinance/internal/auth/verifier.go`) - or any downstream service
     - checks the token (see ["What the downstream service checks"](what-the-downstream-service-checks)-), 
     - puts the user ID and scopes into the request context, 
-    - and the handler authorizes locally (e.g. `RequireServiceScope` on `/internal/*`, user-scoped SQL queries elsewhere).
+    - and the handler authorizes locally (e.g. `HasScope("admin")` on admin
+      maintenance endpoints, user-scoped SQL queries elsewhere).
 
 **Takeaway**: the cookie authenticates the *browser to the gateway*; the
 JWT authenticates the *gateway to the downstream on the user's behalf*.
@@ -84,10 +85,11 @@ The downstream never touches the session store.
 
 ---
 
-## Flow 2 — API keys (scripts, integrations, services)
+## Flow 2 — API keys (scripts, integrations)
 
 API keys live in the gateway database (schema-qualified
-`coregateway.api_keys`, migration `002_create_api_keys.sql`). Only a
+`coregateway.api_keys`, migration `003_api_keys_owned_only.sql`).
+`owner_user_id` is `NOT NULL`: every key is owned. Only a
 SHA-256 hash is stored — a leaked database dump yields no usable keys.
 
 **Management** (`internal/auth/keys_handler.go`, admin-only via
@@ -95,46 +97,31 @@ SHA-256 hash is stored — a leaked database dump yields no usable keys.
 
 - `POST /api/auth/keys` — create an **owned** key. Body: `{"label":
   "...", "scopes": ["..."], "expires_at": ...}` (`label` required;
-  unknown fields such as `name` / `is_service_key` are ignored). The
-  owner is always the caller, so this endpoint can only create
-  user-owned keys. Returns `201` with the plaintext in the `key` field
+  unknown fields are ignored). The
+  owner is always the caller. Returns `201` with the plaintext in the `key` field
   **once** — it is never stored and can never be retrieved again.
+  Unknown scope strings → `400`.
 - `GET /api/auth/keys` — list metadata: `id`, `key_prefix`, `label`,
   `scopes`, `expires_at`, `created_at`. (`last_used_at` is tracked but
   not returned.) No secrets.
 - `DELETE /api/auth/keys/{id}` — revoke (soft delete via `revoked_at`).
 
-There is **no `is_service_key` column or field**. A "service" key is
-simply an *ownerless* row (`owner_user_id IS NULL`), provisioned via
-`POST /api/auth/keys/service` (same admin guards, same once-only
-plaintext response as above). Only ownerless keys are accepted at the
-exchange below.
+**Scope vocabulary** (enforced in `KeysService.CreateKey`): `admin`,
+or `<service>:read|write|admin` (e.g. `corefinance:read`). An admin key
+is an owned key with `scopes=["admin"]` and no `expires_at` (never
+expires), created by an admin session. Only admin sessions can create
+keys at all, so admin issuance is admin-gated by construction.
 
 **Use:** send the key as `Authorization: Bearer cgw_live_...` to the
 gateway. The edge validates it (`KeysService.ValidateKey`), then mints
 an internal JWT carrying `sub` = owner, `azp` = `api-key:<keyID>`,
 `scope` = the key's scopes, and proxies as in Flow 1.
-Invalid/expired/revoked keys get `401 {"error":"Authentication required"}` —
-and so do ownerless (service) keys on this path: they carry no user, so
-the proxy leg rejects them and they must use the exchange instead.
+Invalid/expired/revoked keys get `401 {"error":"Authentication required"}`.
 
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`
 (role-derived vs key scopes) both arrive in the verified claims. What it
 never sees is the raw API key itself.
-
-**Service keys and token exchange** (Pattern B): an ownerless key
-represents a *service*, not a user. It calls the public
-`POST /api/auth/token` with the key in the JSON body — `{"key":
-"cgw_live_..."}` (the `Authorization` header is ignored here) — and gets
-back a short-lived service JWT with `azp` = the key's `label`, `scope` =
-its scopes, and **no `sub`**. Errors: empty/malformed body →
-`400 {"error":"invalid request body"}`; unknown/revoked/expired key →
-`401 {"error":"Invalid API key"}`; owned (user) key →
-`403 {"error":"Key is not a service key"}`. Service tokens authorize
-`/internal/*` endpoints (e.g. `GET /internal/recurring/active`, used for
-cross-user background work). Exchanging at the edge keeps raw API keys
-off the wire between services.
 
 **Why keys live in the gateway, not in each service:** one place to
 issue, scope, rotate, and revoke; downstream services stay stateless
@@ -182,8 +169,8 @@ Claims (5 minutes lifetime):
 {
   "iss": "https://gateway.internal",
   "aud": "corefinance",
-  "sub": "<user-uuid>",   // absent on service tokens
-  "azp": "session",       // "session" | "api-key:<keyID>" | service name
+  "sub": "<user-uuid>",   // always present — sub-less tokens are rejected
+  "azp": "session",       // "session" | "api-key:<keyID>"
   "scope": "admin",       // space-separated; absent if none
   "iat": 1758883200,
   "exp": 1758883500

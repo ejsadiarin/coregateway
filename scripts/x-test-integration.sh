@@ -15,10 +15,10 @@
 #   X3  cookie session chain reaches downstream (remaining 200)
 #   X4  anonymous budget access is 401 with the exact error body
 #   X5  forged X-User-ID is ignored (byte-identical data)
-#   X6  Pattern B: raw service key 401 at edge (+ service JWT 401 at edge:
-#       internal JWTs are not edge credentials) -> exchange -> service JWT
-#       200 direct-to-downstream on /internal/recurring/active, while a bare
-#       cookie there is 401
+#   X6  Admin API key: owned scopes=["admin"] key 200 at edge (remaining +
+#       admin backfill dry-run) and 404s on removed endpoints
+#       (/api/auth/token, /api/auth/keys/service, /internal/*);
+#       unknown scope → 400 on create
 #   X7  rotation overlap (2 kids, old session passes) + cut (1 kid)
 #
 # Guarantees / non-goals (see design.md):
@@ -42,7 +42,7 @@ FIN=http://localhost:6969
 TS=$(date +%s)
 ADMIN_EMAIL="e2e-admin-$TS@example.com"
 USER_EMAIL="e2e-user-$TS@example.com"
-SVC_LABEL="e2e-svc-$TS"
+SVC_LABEL="e2e-admin-key-$TS"
 PASS=0
 FAIL=0
 
@@ -55,7 +55,7 @@ ADMIN_JAR="$TMPDIR_RUN/admin-jar"
 cleanup() {
   shred -u "$KEY_A" "$KEY_B" 2>/dev/null || true
   rm -rf "$TMPDIR_RUN"
-  unset ADMIN_PASSWORD USER_PASSWORD SVC_KEY SVC_JWT \
+  unset ADMIN_PASSWORD USER_PASSWORD ADMIN_KEY \
     JWT_PRIVATE_KEY_PEM JWT_PREV_PRIVATE_KEY_PEM 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -166,36 +166,36 @@ BODY_FORGED=$(curl -s -b "$JAR" -H "X-User-ID: 00000000-0000-0000-0000-000000000
   "$GW/api/budget/remaining")
 expect_eq "forged header ignored (byte-identical)" "$BODY_REAL" "$BODY_FORGED"
 
-# --- X6 Pattern B ----------------------------------------------------------
-echo "-- X6 Pattern B service token --"
+# --- X6 admin API key ------------------------------------------------------
+echo "-- X6 admin API key --"
 alogin=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/login" -c "$ADMIN_JAR" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}")
 expect_eq "admin login 200 (seed-at-boot)" "200" "$alogin"
-prov=$(curl -s -w '\n%{http_code}' -b "$ADMIN_JAR" -X POST "$GW/api/auth/keys/service" \
+prov=$(curl -s -w '\n%{http_code}' -b "$ADMIN_JAR" -X POST "$GW/api/auth/keys" \
   -H 'Content-Type: application/json' \
-  -d "{\"label\":\"$SVC_LABEL\",\"scopes\":[\"finance:read\"]}")
-expect_eq "provision 201" "201" "$(printf '%s' "$prov" | tail -1)"
-SVC_KEY=$(printf '%s' "$prov" | head -n -1 | jq -r '.key' 2>/dev/null || echo "")
+  -d "{\"label\":\"$SVC_LABEL\",\"scopes\":[\"admin\"]}")
+expect_eq "admin key provision 201" "201" "$(printf '%s' "$prov" | tail -1)"
+ADMIN_KEY=$(printf '%s' "$prov" | head -n -1 | jq -r '.key' 2>/dev/null || echo "")
 SVC_ID=$(printf '%s' "$prov" | head -n -1 | jq -r '.id' 2>/dev/null || echo "")
-[ -n "$SVC_KEY" ] && [ "$SVC_KEY" != "null" ] || { fail "provision" "no key"; exit 1; }
-expect_eq "raw service key 401 at edge" "401" \
-  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SVC_KEY" \
+[ -n "$ADMIN_KEY" ] && [ "$ADMIN_KEY" != "null" ] || { fail "provision" "no key"; exit 1; }
+expect_eq "unknown scope 400 on create" "400" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$ADMIN_JAR" -X POST "$GW/api/auth/keys" \
+    -H 'Content-Type: application/json' -d '{"label":"bad-scope","scopes":["bogus"]}' )"
+expect_eq "admin key 200 at edge (remaining)" "200" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
     "$GW/api/budget/remaining")"
-SVC_JWT=$(curl -s -X POST "$GW/api/auth/token" \
-  -H 'Content-Type: application/json' -d "{\"key\":\"$SVC_KEY\"}" | jq -r '.token' 2>/dev/null || echo "")
-[ -n "$SVC_JWT" ] && [ "$SVC_JWT" != "null" ] || { fail "exchange" "no token"; exit 1; }
-pass "exchange yields service JWT"
-expect_eq "service token has no sub" "" "$(jwt_field "$SVC_JWT" '.sub // ""')"
-expect_eq "service token azp = label" "$SVC_LABEL" "$(jwt_field "$SVC_JWT" '.azp')"
-expect_eq "service JWT 401 at edge (internal JWTs are not edge credentials)" "401" \
-  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SVC_JWT" \
-    "$GW/api/budget/remaining")"
-expect_eq "service JWT 200 direct-to-downstream" "200" \
-  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SVC_JWT" \
-    "$FIN/internal/recurring/active")"
-expect_eq "bare cookie 401 direct-to-downstream" "401" \
-  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" \
+expect_eq "admin key 200 admin backfill dry-run" "200" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
+    -X POST "$GW/api/budget/admin/backfill?dry_run=true")"
+expect_eq "removed exchange 404" "404" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/token" \
+    -H 'Content-Type: application/json' -d '{"key":"cgw_live_dead"}')"
+expect_eq "removed service provision 404" "404" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$ADMIN_JAR" -X POST "$GW/api/auth/keys/service" \
+    -H 'Content-Type: application/json' -d '{"label":"x","scopes":["admin"]}')"
+expect_eq "removed internal route 404" "404" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
     "$FIN/internal/recurring/active")"
 
 # --- X7 rotation -----------------------------------------------------------
@@ -225,7 +225,7 @@ expect_eq "session 200 after cut" "200" \
 
 # --- cleanup (best-effort, public API) -------------------------------------
 echo "-- cleanup --"
-expect_eq "revoke service key" "204" \
+expect_eq "revoke admin key" "204" \
   "$(curl -s -o /dev/null -w '%{http_code}' -b "$ADMIN_JAR" -X DELETE \
     "$GW/api/auth/keys/$SVC_ID")"
 expect_eq "delete e2e user" "204" \

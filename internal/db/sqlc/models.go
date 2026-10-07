@@ -14,7 +14,7 @@ type CoregatewayApiKey struct {
 	KeyPrefix   string             `json:"key_prefix"`
 	KeyHash     string             `json:"key_hash"`
 	Label       string             `json:"label"`
-	OwnerUserID pgtype.UUID        `json:"owner_user_id"`
+	OwnerUserID uuid.UUID          `json:"owner_user_id"`
 	Scopes      []string           `json:"scopes"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`

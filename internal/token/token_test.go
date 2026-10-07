@@ -94,34 +94,15 @@ func TestCreateUserTokenClaims(t *testing.T) {
 
 func TestCreateUserTokenScopesJoined(t *testing.T) {
 	iss := testIssuer(t)
-	tokenString, err := iss.CreateUserToken(uuid.New(), "api-key:abc", []string{"finance:read", "finance:write"})
+	tokenString, err := iss.CreateUserToken(uuid.New(), "api-key:abc", []string{"corefinance:read", "corefinance:write"})
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 	claims := parseWith(t, tokenString, iss.current.Public)
-	if claims.Scope != "finance:read finance:write" {
+	if claims.Scope != "corefinance:read corefinance:write" {
 		t.Errorf("scope = %q", claims.Scope)
 	}
 	if claims.Azp != "api-key:abc" {
-		t.Errorf("azp = %q", claims.Azp)
-	}
-}
-
-func TestCreateServiceTokenHasNoSubject(t *testing.T) {
-	iss := testIssuer(t)
-	tokenString, err := iss.CreateServiceToken("corereminder", []string{"finance:read"})
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	if strings.Contains(tokenString, "sub") {
-		// crude check that payload omits sub; verified structurally below
-		t.Logf("note: raw token contains 'sub' substring (may be coincidental)")
-	}
-	claims := parseWith(t, tokenString, iss.current.Public)
-	if claims.Subject != "" {
-		t.Errorf("service token sub = %q, want empty", claims.Subject)
-	}
-	if claims.Azp != "corereminder" {
 		t.Errorf("azp = %q", claims.Azp)
 	}
 }

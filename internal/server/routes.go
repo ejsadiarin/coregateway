@@ -60,16 +60,12 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
 	r.Get("/api/auth/me", s.AuthHandler.Me)
 
-	// Service token exchange: public, the presented service key is the
-	// credential. Trades an ownerless key for a short-lived service JWT.
-	r.Post("/api/auth/token", s.KeysHandler.Exchange)
-
 	// API key management: session + admin only. Plaintext appears in the
-	// create response exactly once.
+	// create response exactly once. Keys are always owned (owner_user_id
+	// set to the caller); an admin key is an owned key with scopes=["admin"].
 	r.Route("/api/auth/keys", func(r chi.Router) {
 		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
 		r.Post("/", s.KeysHandler.Create)
-		r.Post("/service", s.KeysHandler.CreateServiceKey)
 		r.Get("/", s.KeysHandler.List)
 		r.Delete("/{id}", s.KeysHandler.Revoke)
 	})

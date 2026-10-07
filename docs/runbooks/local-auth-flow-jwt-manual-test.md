@@ -1,6 +1,6 @@
 # Runbook: local manual test — auth flow + JWT (compose)
 
-End-to-end drill from key generation to browser login, service keys, and
+End-to-end drill from key generation to browser login, API keys, and
 a rotation overlap — all against `compose.yml`. Concept reference:
 `docs/auth-flow.md`.
 
@@ -28,7 +28,7 @@ hand-off). Everywhere else it is a **string value with real newlines**:
 
 ```bash
 # Gateway does NOT auto-migrate on boot — DB must already be migrated:
-make migrate-status   # expect 002_create_api_keys applied; else: make migrate-up
+make migrate-status   # expect 003_api_keys_owned_only applied; else: make migrate-up
 # If migrate-status hangs/fails from a bare shell, the MIGRATION_URL in
 # .env likely points at the -pooler host (poolers reject the
 # options=search_path param): retry against the direct host per the
@@ -64,9 +64,9 @@ docker compose logs -f coregateway-api   # wait for listening on :8080, no JWT e
 docker compose up -d --build
 ```
 
-Staged because corefinance fail-closes at boot when JWKS is unreachable.
-If `corefinance-api` crashes with a JWKS error, re-run
-`docker compose up -d corefinance-api` once the gateway is up.
+Staged because corefinance fail-closes at boot when JWKS is unreachable
+(compose also orders this via the gateway healthcheck + `depends_on:
+service_healthy`, but a manual staged boot shows the seam).
 
 Negative test (optional): `unset JWT_PRIVATE_KEY_PEM` and boot — the
 gateway must refuse to start. That is fail-closed working. Always
@@ -107,23 +107,31 @@ curl -s -b $cj localhost:8080/api/budget/remaining \
 # still your data — forged header stripped at edge AND downstream
 ```
 
-## 6. Service keys end-to-end (Pattern B)
+## 6. API keys end-to-end (owned keys + scope vocabulary)
 
 ```bash
-key=$(curl -s -b $cj -X POST localhost:8080/api/auth/keys/service \
+key=$(curl -s -b $cj -X POST localhost:8080/api/auth/keys \
   -H 'Content-Type: application/json' \
-  -d '{"label":"manual-test","scopes":["finance:read"]}' | jq -r .key)
-# cgw_live_... — shown once, never again. Scopes matter: /internal/*
-# requires finance:read, so provision with it (empty scopes → 403 there).
+  -d '{"label":"manual-test","scopes":["corefinance:read"]}' | jq -r .key)
+# cgw_live_... — shown once, never again. Valid scopes: "admin",
+# "<service>:read|write|admin". Unknown scope → 400:
+curl -s -b $cj -X POST localhost:8080/api/auth/keys \
+  -H 'Content-Type: application/json' \
+  -d '{"label":"bad","scopes":["bogus"]}'  # 400
 
-curl -s localhost:8080/api/budget/remaining -H "Authorization: Bearer $key"  # 401 (no user — correct)
+# owned key at the edge mints a user JWT and proxies:
+curl -s localhost:8080/api/budget/remaining -H "Authorization: Bearer $key" | head -c 200
 
-svc=$(curl -s -X POST localhost:8080/api/auth/token \
-  -H 'Content-Type: application/json' -d "{\"key\":\"$key\"}" | jq -r .token)
+# admin key: owned, scopes=["admin"], no expiry (admin session only):
+adm=$(curl -s -b $cj -X POST localhost:8080/api/auth/keys \
+  -H 'Content-Type: application/json' \
+  -d '{"label":"manual-admin","scopes":["admin"]}' | jq -r .key)
+curl -s -X POST localhost:8080/api/budget/admin/backfill?dry_run=true \
+  -H "Authorization: Bearer $adm" | head -c 200  # 200, counts only
 
-# service JWT straight at the downstream, bypassing the gateway:
-curl -s localhost:6969/internal/recurring/active -H "Authorization: Bearer $svc" | head -c 200
-# no sub, azp = label, scope-gated, verified off cached JWKS
+# removed endpoints stay removed:
+curl -s -X POST localhost:8080/api/auth/token \
+  -H 'Content-Type: application/json' -d '{"key":"cgw_live_dead"}'  # 404
 ```
 
 ## 7. Rotation drill (overlap, then cut)

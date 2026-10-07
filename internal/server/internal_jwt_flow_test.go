@@ -40,14 +40,13 @@ import (
 // docker flakiness.
 //
 // So this file is the closest valuable test: real token.Issuer minting
-// (via the real EdgeIdentity proxy leg and the real token-exchange handler),
-// the real ServeJWKS handler served over real HTTP, and verification with
-// the exact option set the downstream verifier uses (EdDSA + kid lookup +
-// iss/aud + exp-required + 60s leeway). It covers what the gateway owns:
+// (via the real EdgeIdentity proxy leg), the real ServeJWKS handler served
+// over real HTTP, and verification with the exact option set the downstream
+// verifier uses (EdDSA + kid lookup + iss/aud + exp-required + 60s leeway).
+// It covers what the gateway owns:
 //   - minted user tokens verify against the served JWKS document (sub, azp,
 //     iss, aud, exp-TTL, kid, alg) — edge-hygiene: no X-User-ID, no Cookie
-//   - minted service tokens verify with no sub and azp = key label
-//     (service-key-provisioning Pattern B shape)
+//   - sub-less tokens are rejected (no service-token shape exists anymore)
 //   - rotation overlap: prev-kid tokens still verify while both kids are
 //     published (vault-rotation two-phase, jwks-resilience rotation)
 //   - forged-kid and wrong iss/aud tokens are rejected
@@ -222,59 +221,6 @@ func TestInternalJWTFlowUserTokenVerifiesViaJWKS(t *testing.T) {
 	}
 	if unverified.Header["alg"] != "EdDSA" {
 		t.Errorf("alg = %v, want EdDSA", unverified.Header["alg"])
-	}
-}
-
-// TestInternalJWTFlowServiceTokenVerifiesViaJWKS proves the Pattern B shape
-// against the served JWKS: a provisioned ownerless key exchanged at
-// POST /api/auth/token yields a service JWT with no sub and azp = label
-// that verifies via HTTP-fetched JWKS.
-func TestInternalJWTFlowServiceTokenVerifiesViaJWKS(t *testing.T) {
-	s, _, iss := servicePatternSetup(t)
-	adminH := proxyRouter(s, auth.RoleAdmin, uuid.New())
-	anonH := proxyRouter(s, "", uuid.Nil)
-
-	provision := httptest.NewRequest(http.MethodPost, "/api/auth/keys/service",
-		strings.NewReader(`{"label":"svc-jwks-e2e","scopes":["finance:read"]}`))
-	provision.Header.Set("Content-Type", "application/json")
-	provisionRec := httptest.NewRecorder()
-	adminH.ServeHTTP(provisionRec, provision)
-	if provisionRec.Code != http.StatusCreated {
-		t.Fatalf("provision: status = %d, want 201", provisionRec.Code)
-	}
-	var created struct {
-		Key   string `json:"key"`
-		Label string `json:"label"`
-	}
-	if err := json.NewDecoder(provisionRec.Body).Decode(&created); err != nil {
-		t.Fatalf("decode provision: %v", err)
-	}
-
-	exchangeBody, _ := json.Marshal(map[string]string{"key": created.Key})
-	exchangeReq := httptest.NewRequest(http.MethodPost, "/api/auth/token", strings.NewReader(string(exchangeBody)))
-	exchangeReq.Header.Set("Content-Type", "application/json")
-	exchangeRec := httptest.NewRecorder()
-	anonH.ServeHTTP(exchangeRec, exchangeReq)
-	if exchangeRec.Code != http.StatusOK {
-		t.Fatalf("exchange: status = %d, want 200", exchangeRec.Code)
-	}
-	var exchanged struct {
-		Token string `json:"token"`
-	}
-	if err := json.NewDecoder(exchangeRec.Body).Decode(&exchanged); err != nil {
-		t.Fatalf("decode exchange: %v", err)
-	}
-
-	keys := fetchFlowJWKSKeys(t, serveFlowJWKS(t, iss).URL)
-	claims := verifyFlowToken(t, exchanged.Token, keys)
-	if claims.Subject != "" {
-		t.Errorf("service token sub = %q, want empty", claims.Subject)
-	}
-	if claims.Azp != "svc-jwks-e2e" {
-		t.Errorf("azp = %q, want svc-jwks-e2e", claims.Azp)
-	}
-	if claims.Scope != "finance:read" {
-		t.Errorf("scope = %q, want finance:read", claims.Scope)
 	}
 }
 

@@ -123,7 +123,7 @@ func TestApiKeyStorageHoldsHashOnly_Integration(t *testing.T) {
 	plaintext, row, err := svc.CreateKey(ctx, CreateKeyRequest{
 		Label:   "ci",
 		OwnerID: &owner,
-		Scopes:  []string{"finance:read"},
+		Scopes:  []string{"corefinance:read"},
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -170,7 +170,8 @@ func TestApiKeyRevocationTakesEffectImmediately_Integration(t *testing.T) {
 	svc := NewKeysService(queries)
 	ctx := context.Background()
 
-	plaintext, row, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "temp"})
+	owner := uuid.New()
+	plaintext, row, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "temp", OwnerID: &owner})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -194,7 +195,8 @@ func TestApiKeyExpiryRejects_Integration(t *testing.T) {
 	ctx := context.Background()
 
 	past := time.Now().Add(-time.Hour)
-	plaintext, _, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "old", ExpiresAt: &past})
+	owner := uuid.New()
+	plaintext, _, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "old", OwnerID: &owner, ExpiresAt: &past})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -208,7 +210,8 @@ func TestApiKeyListExcludesSecrets_Integration(t *testing.T) {
 	svc := NewKeysService(queries)
 	ctx := context.Background()
 
-	if _, _, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "a"}); err != nil {
+	owner := uuid.New()
+	if _, _, err := svc.CreateKey(ctx, CreateKeyRequest{Label: "a", OwnerID: &owner}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	rows, err := svc.ListKeys(ctx)
