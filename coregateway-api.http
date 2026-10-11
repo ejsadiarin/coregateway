@@ -204,13 +204,16 @@ GET {{host}}/api/services/{{service_id}}/history
 GET {{host}}/api/services/{{service_id}}/stats
 
 
-# ─── API Keys (session + admin) ──────────────────────────────────────────────
+# ─── API Keys (self-service mint; admin-only list/revoke) ───────────────────
 # Owned keys only (owner = caller). Plaintext is returned exactly once
-# by Create; List never exposes secrets. Valid scopes: "admin",
-# "<service>:read|write|admin" (e.g. "corefinance:read"). Unknown
-# scopes → 400. An admin key is scopes=["admin"] with no expiry.
-# Key-authed callers may only mint scopes they hold (`admin` presenter
-# may mint anything); low-scope mint of unheld scope → 403.
+# by Create; List never exposes secrets. Any authenticated session may mint;
+# non-admin-role callers may mint any scope except "admin" (403 + nothing).
+# Valid scopes: "admin", "<service>:read|write|admin"
+# (e.g. "corefinance:read"). Unknown scopes → 400. An admin key is
+# scopes=["admin"] with no expiry. Key-authed callers may only mint scopes
+# they hold (`admin` presenter may mint anything); low-scope mint of unheld
+# scope → 403. List/Revoke stay admin-only (global inventory; owner-scoped
+# listing is a follow-up — non-admins revoke via admin assist).
 
 ### Create API Key
 
@@ -254,6 +257,27 @@ Content-Type: application/json
 {
   "label": "script-key",
   "scopes": ["corefinance:read"]
+}
+
+### Self-service mint (non-admin session; 201, owner = caller)
+
+# Log in as a non-admin user first (cookie session), then:
+POST {{host}}/api/auth/keys
+Content-Type: application/json
+
+{
+  "label": "my-read-key",
+  "scopes": ["corefinance:read"]
+}
+
+### Self-service mint of admin scope (non-admin session; expect 403, creates nothing)
+
+POST {{host}}/api/auth/keys
+Content-Type: application/json
+
+{
+  "label": "evil",
+  "scopes": ["admin"]
 }
 
 

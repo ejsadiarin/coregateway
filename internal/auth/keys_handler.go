@@ -53,7 +53,7 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	// Key-authed callers can only mint scopes they hold (scope-down, never
 	// up), with one exception: a presenter holding the `admin` scope may
-	// mint any scope. Session callers are unchanged (admin role at route).
+	// mint any scope.
 	if presenterScopes, ok := KeyScopesFromContext(r); ok && !KeyHasScope(r, "admin") {
 		for _, s := range req.Scopes {
 			held := false
@@ -67,6 +67,15 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 				helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
 				return
 			}
+		}
+	}
+	// The `admin` scope is mintable only by admin-role callers, on every
+	// presenter path. (Key presenters are already covered by the subset
+	// rule above; this closes the session path now that POST is open.)
+	for _, s := range req.Scopes {
+		if s == "admin" && caller.Role != RoleAdmin {
+			helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+			return
 		}
 	}
 	plaintext, row, err := h.keys.CreateKey(r.Context(), CreateKeyRequest{

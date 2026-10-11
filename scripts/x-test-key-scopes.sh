@@ -25,6 +25,9 @@ GW="${GW:-http://localhost:8080}"
 #       admin session GET → 200 (sessions exempt)
 #   S6  targeting unchanged: admin key + ?user_id=<other> → 200,
 #       read key + ?user_id=<other> → 403
+#   §B  self-service mint: fresh non-admin user logs in, mints read key
+#       (201, contrast with admin-minted shapes); key reads own budget 200
+#       and other budget 403; non-admin mint of ["admin"] → 403
 #
 # Cleanup (trap): revokes all minted keys + deletes the helper user via the
 # admin session. Your admin row is never touched.
@@ -42,6 +45,7 @@ JAR="$TMPDIR_RUN/jar"
 : > "$JAR"
 MINTED_IDS=""
 HELPER_ID=""
+B_USER_ID=""
 
 cleanup() {
   if [ -s "$JAR" ]; then
@@ -51,9 +55,12 @@ cleanup() {
     if [ -n "$HELPER_ID" ]; then
       curl -s -o /dev/null -b "$JAR" -X DELETE "$GW/api/users/$HELPER_ID" || true
     fi
+    if [ -n "$B_USER_ID" ]; then
+      curl -s -o /dev/null -b "$JAR" -X DELETE "$GW/api/users/$B_USER_ID" || true
+    fi
   fi
   rm -rf "$TMPDIR_RUN"
-  unset ADMIN_PASSWORD K_ADMIN K_SVCADMIN K_READ K_WRITE 2>/dev/null || true
+  unset ADMIN_PASSWORD K_ADMIN K_SVCADMIN K_READ K_WRITE USER_KEY 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -66,9 +73,9 @@ expect_ne() {
   if [ "$2" != "$3" ]; then pass "$1"; else fail "$1" "want anything but [$3]"; fi
 }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-mint() { # mint <label> <scopes-json-array> -> sets MINT_KEY/MINT_ID
-  local out http
-  out=$(curl -s -w '\n%{http_code}' -b "$JAR" -X POST "$GW/api/auth/keys" \
+mint() { # mint <label> <scopes-json-array> [jar] -> sets MINT_KEY/MINT_ID
+  local out http jar="${3:-$JAR}"
+  out=$(curl -s -w '\n%{http_code}' -b "$jar" -X POST "$GW/api/auth/keys" \
     -H 'Content-Type: application/json' \
     -d "{\"label\":\"$1\",\"scopes\":$2}")
   http=$(printf '%s' "$out" | tail -1)
@@ -179,6 +186,35 @@ expect_eq "read key targeted read 403" "403" \
   "$(code -H "Authorization: Bearer $K_READ" "$GW/api/budget/remaining?user_id=$HELPER_ID")"
 expect_eq "admin key malformed target 400" "400" \
   "$(code -H "Authorization: Bearer $K_ADMIN" "$GW/api/budget/remaining?user_id=zzz")"
+
+# --- §B self-service mint (non-admin user) -------------------------------------
+echo "-- §B self-service mint --"
+BU_EMAIL="e2e-scope-minter-$TS@example.com"
+buout=$(curl -s -w '\n%{http_code}' -b "$JAR" -X POST "$GW/api/users" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$BU_EMAIL\",\"password\":\"password123\",\"role\":\"user\"}")
+expect_eq "minter user 201" "201" "$(printf '%s' "$buout" | tail -1)"
+B_USER_ID=$(printf '%s' "$buout" | head -n -1 | jq -r '.id')
+UJAR="$TMPDIR_RUN/ujar"
+: > "$UJAR"
+ulogin=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/login" -c "$UJAR" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$BU_EMAIL\",\"password\":\"password123\"}")
+expect_eq "minter login 200" "200" "$ulogin"
+BU_ME=$(curl -s -b "$UJAR" "$GW/api/auth/me" | jq -r '.id')
+# Non-admin mints a read key for own data (contrast: the four shapes above
+# were admin-minted; the mint lands in MINTED_IDS so admin-jar cleanup
+# revokes it — revoke stays admin-only).
+mint "scope-e2e-self-$TS" '["corefinance:read"]' "$UJAR" && USER_KEY=$MINT_KEY
+[ -n "${USER_KEY:-}" ] || { fail "self mint" "no key"; exit 1; }
+expect_eq "self-minted key reads own budget 200" "200" \
+  "$(code -H "Authorization: Bearer $USER_KEY" "$GW/api/budget/remaining")"
+expect_eq "self-minted key reads other budget 403" "403" \
+  "$(code -H "Authorization: Bearer $USER_KEY" "$GW/api/budget/remaining?user_id=$HELPER_ID")"
+expect_eq "non-admin mints admin scope 403" "403" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$UJAR" -X POST "$GW/api/auth/keys" \
+    -H 'Content-Type: application/json' \
+    -d "{\"label\":\"scope-e2e-evil-$TS\",\"scopes\":[\"admin\"]}")"
 
 echo "== x-test-key-scopes: PASS=$PASS FAIL=$FAIL =="
 [ "$FAIL" = 0 ]

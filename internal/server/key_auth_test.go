@@ -3,11 +3,14 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,6 +21,8 @@ import (
 	"github.com/ejsadiarin/coregateway/internal/crypto"
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 	monitor "github.com/ejsadiarin/coregateway/internal/monitor"
+	"github.com/ejsadiarin/coregateway/internal/services/corefinance"
+	"github.com/ejsadiarin/coregateway/internal/token"
 	"github.com/ejsadiarin/coregateway/internal/user"
 )
 
@@ -143,13 +148,29 @@ func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUI
 	}
 	authSvc := auth.NewService(q)
 	keysSvc := auth.NewKeysService(q)
+	fake := &fakeDownstream{}
+	downstream := httptest.NewServer(fake)
+	t.Cleanup(downstream.Close)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	iss, err := token.NewIssuer(
+		token.Key{KID: "2026-09-a", Private: priv, Public: pub},
+		nil, "https://gateway.internal", []string{"corefinance"}, 300*time.Second,
+	)
+	if err != nil {
+		t.Fatalf("new issuer: %v", err)
+	}
 	s := &Server{
-		AuthService:    authSvc,
-		AuthHandler:    auth.NewHandler(authSvc),
-		KeysService:    keysSvc,
-		KeysHandler:    auth.NewKeysHandler(keysSvc),
-		UserHandler:    user.NewHandler(user.NewService(q)),
-		ServiceHandler: monitor.NewHandler(monitor.NewService(q)),
+		AuthService:       authSvc,
+		AuthHandler:       auth.NewHandler(authSvc),
+		KeysService:       keysSvc,
+		KeysHandler:       auth.NewKeysHandler(keysSvc),
+		UserHandler:       user.NewHandler(user.NewService(q)),
+		ServiceHandler:    monitor.NewHandler(monitor.NewService(q)),
+		CorefinanceClient: corefinance.New(downstream.URL),
+		TokenIssuer:       iss,
 	}
 	return s.RegisterRoutes(&config.Config{}), q, adminID, userID
 }
@@ -169,6 +190,107 @@ func doKeyRequest(t *testing.T, h http.Handler, key, method, target, body string
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+// doSessionRequest injects a session identity (no Bearer key).
+func doSessionRequest(t *testing.T, h http.Handler, id uuid.UUID, role, method, target, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var req *http.Request
+	if body == "" {
+		req = httptest.NewRequest(method, target, nil)
+	} else {
+		req = httptest.NewRequest(method, target, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req = req.WithContext(auth.ContextWithUser(req.Context(), &auth.UserContext{
+		ID: id, Email: role + "@example.com", Role: role,
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// mintPlaintext POSTs a key and returns the one-time plaintext.
+func mintPlaintext(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode mint response: %v", err)
+	}
+	key, _ := resp["key"].(string)
+	if key == "" {
+		t.Fatal("mint response has no one-time plaintext key")
+	}
+	return key
+}
+
+func TestSelfServiceMintMatrix(t *testing.T) {
+	t.Run("non-admin session mints read key, key reads own budget", func(t *testing.T) {
+		h, q, _, userID := keyAuthTestSetup(t)
+		rec := doSessionRequest(t, h, userID, auth.RoleUser, http.MethodPost, "/api/auth/keys", `{"label":"mine","scopes":["corefinance:read"]}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("mint status = %d, want 201", rec.Code)
+		}
+		if len(q.keysCreated) != 1 {
+			t.Fatalf("keysCreated = %d, want 1", len(q.keysCreated))
+		}
+		created := q.keysCreated[0]
+		if created.OwnerUserID != userID {
+			t.Errorf("owner = %s, want caller %s", created.OwnerUserID, userID)
+		}
+		// Register the minted key as known, then prove it works.
+		key := mintPlaintext(t, rec)
+		q.keyByHash[auth.HashAPIKey(key)] = db.CoregatewayApiKey{
+			ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"corefinance:read"},
+		}
+		if rec := doKeyRequest(t, h, key, http.MethodGet, "/api/budget/remaining", ""); rec.Code != http.StatusOK {
+			t.Errorf("budget status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("non-admin session cannot mint admin scope", func(t *testing.T) {
+		h, q, _, userID := keyAuthTestSetup(t)
+		rec := doSessionRequest(t, h, userID, auth.RoleUser, http.MethodPost, "/api/auth/keys", `{"label":"evil","scopes":["admin"]}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+		if len(q.keysCreated) != 0 {
+			t.Errorf("keysCreated = %d, want 0", len(q.keysCreated))
+		}
+	})
+
+	t.Run("non-admin key cannot mint admin scope", func(t *testing.T) {
+		h, q, _, _ := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testReadKeyPlaintext, http.MethodPost, "/api/auth/keys", `{"label":"evil","scopes":["admin"]}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+		if len(q.keysCreated) != 0 {
+			t.Errorf("keysCreated = %d, want 0", len(q.keysCreated))
+		}
+	})
+
+	t.Run("non-admin read key mints read key (scope-down)", func(t *testing.T) {
+		h, q, _, userID := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testReadKeyPlaintext, http.MethodPost, "/api/auth/keys", `{"label":"sub","scopes":["corefinance:read"]}`)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want 201", rec.Code)
+		}
+		if len(q.keysCreated) != 1 || q.keysCreated[0].OwnerUserID != userID {
+			t.Errorf("keysCreated = %+v, want one key owned by %s", q.keysCreated, userID)
+		}
+	})
+
+	t.Run("admin session mint unchanged", func(t *testing.T) {
+		h, q, adminID, _ := keyAuthTestSetup(t)
+		rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodPost, "/api/auth/keys", `{"label":"ops","scopes":["admin"]}`)
+		if rec.Code != http.StatusCreated {
+			t.Errorf("status = %d, want 201", rec.Code)
+		}
+		if len(q.keysCreated) != 1 {
+			t.Errorf("keysCreated = %d, want 1", len(q.keysCreated))
+		}
+	})
 }
 
 func TestSessionOrKeyIdentityMatrix(t *testing.T) {

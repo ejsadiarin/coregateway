@@ -135,6 +135,16 @@ reads/updates, all writes (`POST`/`DELETE /api/users`,
 scope-down-only — a key may mint only scopes it holds, except an
 `admin`-scoped key may mint anything.
 
+**Self-service minting:** any authenticated session may `POST
+/api/auth/keys` — owner is always the caller, so minting can never target
+another user. Non-admin-role callers may mint any scope except `admin`
+(403 + creates nothing); admin sessions may mint anything. Transitivity
+is closed: a non-admin's keys can never hold `admin` (can't mint it,
+can't receive it), so key-to-key minting can never launder it.
+`GET` (global inventory) and `DELETE /api/auth/keys` stay admin-only —
+non-admins have no API list/revoke in v1 (owner-scoped listing is a
+follow-up; revocation path is delete-user or admin assist).
+
 **Budget routes enforce service cover** (`RequireServiceKeyScope` after
 the edge, before proxying): key-authed `GET`/`HEAD` needs
 `corefinance:read` cover, other methods need `corefinance:write` cover;

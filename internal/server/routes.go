@@ -64,16 +64,20 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
 	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/auth/me", s.AuthHandler.Me)
 
-	// API key management: session + admin only. Plaintext appears in the
-	// create response exactly once. Keys are always owned (owner_user_id
-	// set to the caller); an admin key is an owned key with scopes=["admin"].
-	// Key-authed callers additionally need the admin scope to create/revoke.
+	// API key management: any authenticated caller may mint (owner is
+	// always the caller); the handler rejects `admin`-scope requests from
+	// non-admin-role callers. Plaintext appears in the create response
+	// exactly once. List/revoke stay admin-only; key-authed callers
+	// additionally need the admin scope for list/revoke.
 	r.Route("/api/auth/keys", func(r chi.Router) {
 		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
-		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
-		r.With(auth.RequireKeyScope("admin")).Post("/", s.KeysHandler.Create)
-		r.With(auth.RequireKeyScope("admin")).Get("/", s.KeysHandler.List)
-		r.With(auth.RequireKeyScope("admin")).Delete("/{id}", s.KeysHandler.Revoke)
+		r.Use(auth.RequireAuth())
+		r.Post("/", s.KeysHandler.Create)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.RoleAdmin))
+			r.With(auth.RequireKeyScope("admin")).Get("/", s.KeysHandler.List)
+			r.With(auth.RequireKeyScope("admin")).Delete("/{id}", s.KeysHandler.Revoke)
+		})
 	})
 
 	// users — list/create/delete are admin-only. Get/Update stay ungated
