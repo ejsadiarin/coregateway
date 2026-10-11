@@ -23,28 +23,28 @@ export function SystemStatus() {
             label: "CPU Usage", 
             value: data.cpu, 
             unit: "%", 
-            color: "#00e5cc" 
+            color: "#e26d4d" 
         },
         { 
             icon: HardDrive, 
             label: "Storage", 
             value: data.storage, 
             unit: "%", 
-            color: "#10b981" 
+            color: "#34d399" 
         },
         { 
             icon: Activity, 
             label: "Memory", 
             value: data.memory, 
             unit: "%", 
-            color: "#6366f1" 
+            color: "#d4a373" 
         },
         { 
             icon: Thermometer, 
             label: "Temperature", 
             value: data.temperature, 
             unit: "°C", 
-            color: "#ec4899" 
+            color: "#fb7185" 
         },
     ];
 

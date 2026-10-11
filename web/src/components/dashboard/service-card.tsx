@@ -1,4 +1,5 @@
 
+import { useRef } from "react";
 import { motion } from "motion/react";
 import {
   Globe,
@@ -97,9 +98,20 @@ function formatLastCheck(timestamp?: string): string {
 export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
   const Icon = getServiceIcon(service);
   const status: ServiceStatus = service.current_status ?? "unknown";
+  const ref = useRef<HTMLDivElement>(null);
+
+  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+    el.style.setProperty("--my", `${e.clientY - rect.top}px`);
+  }
 
   return (
     <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
       className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors duration-200 hover:border-primary/50 cursor-pointer"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
@@ -109,6 +121,14 @@ export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
     >
       {/* Top signal tick on hover */}
       <div className="absolute top-0 left-4 right-4 h-[2px] bg-primary opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+      {/* Spotlight follow */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+        style={{
+          background:
+            "radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(226, 109, 77, 0.12), transparent 70%)",
+        }}
+      />
 
       <div className="relative">
         {/* Header */}

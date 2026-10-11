@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { Server, Zap, Shield, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Particles } from "@/components/ui/particles";
 import { useNavigate } from "react-router-dom";
 
 export function EntrancePortal() {
@@ -14,8 +15,8 @@ export function EntrancePortal() {
           className="absolute inset-0"
           style={{
             backgroundImage: `
-            linear-gradient(rgba(0, 229, 204, 0.1) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0, 229, 204, 0.1) 1px, transparent 1px)
+            linear-gradient(rgba(226, 109, 77, 0.07) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(226, 109, 77, 0.07) 1px, transparent 1px)
           `,
             backgroundSize: "50px 50px",
             animation: "grid-glow 4s ease-in-out infinite",
@@ -30,25 +31,14 @@ export function EntrancePortal() {
 
       {/* Floating Particles */}
       <div className="absolute inset-0 pointer-events-none">
-        {[...Array(20)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute w-1 h-1 bg-primary rounded-full"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-            }}
-            animate={{
-              y: [0, -30, 0],
-              opacity: [0, 1, 0],
-            }}
-            transition={{
-              duration: 3 + Math.random() * 2,
-              repeat: Infinity,
-              delay: Math.random() * 2,
-            }}
-          />
-        ))}
+        <Particles
+          className="absolute inset-0"
+          quantity={40}
+          color="#e26d4d"
+          staticity={60}
+          ease={60}
+          size={0.6}
+        />
       </div>
 
       {/* Main Content */}
@@ -136,9 +126,9 @@ export function EntrancePortal() {
                   x2="100%"
                   y2="100%"
                 >
-                  <stop offset="0%" stopColor="#00e5cc" stopOpacity="0.8" />
-                  <stop offset="50%" stopColor="#10b981" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.8" />
+                  <stop offset="0%" stopColor="#e26d4d" stopOpacity="0.8" />
+                  <stop offset="50%" stopColor="#f59e0b" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#d4a373" stopOpacity="0.8" />
                 </linearGradient>
                 <filter id="glow">
                   <feGaussianBlur stdDeviation="2" result="coloredBlur" />
@@ -178,7 +168,7 @@ export function EntrancePortal() {
                   delay: 0.5,
                 }}
               />
-              <circle cx="50" cy="50" r="8" fill="#00e5cc" opacity="0.6">
+              <circle cx="50" cy="50" r="8" fill="#e26d4d" opacity="0.6">
                 <animate
                   attributeName="r"
                   values="6;10;6"

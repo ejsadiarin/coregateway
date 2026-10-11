@@ -7,87 +7,87 @@
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --background: #0a0e1a;
-  --foreground: #e0f2f1;
+  --background: #141110;
+  --foreground: #eae3d8;
   
-  --card: rgba(15, 23, 42, 0.6);
-  --card-foreground: #e0f2f1;
+  --card: rgba(28, 25, 23, 0.65);
+  --card-foreground: #eae3d8;
   
-  --popover: #0f172a;
-  --popover-foreground: #e0f2f1;
+  --popover: #1c1917;
+  --popover-foreground: #eae3d8;
   
-  --primary: #00e5cc;
-  --primary-foreground: #0a0e1a;
+  --primary: #e26d4d;
+  --primary-foreground: #1c1917;
   
-  --secondary: #6366f1;
-  --secondary-foreground: #e0f2f1;
+  --secondary: #d4a373;
+  --secondary-foreground: #eae3d8;
   
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
+  --muted: #292524;
+  --muted-foreground: #a8a29e;
   
-  --accent: #10b981;
-  --accent-foreground: #e0f2f1;
+  --accent: #f59e0b;
+  --accent-foreground: #1c1917;
   
-  --destructive: #ef4444;
+  --destructive: #e5484d;
   --destructive-foreground: #ffffff;
   
-  --border: rgba(0, 229, 204, 0.14);
-  --input: rgba(30, 41, 59, 0.5);
-  --input-background: rgba(30, 41, 59, 0.5);
+  --border: rgba(231, 229, 228, 0.10);
+  --input: rgba(41, 37, 36, 0.6);
+  --input-background: rgba(41, 37, 36, 0.6);
   
-  --ring: #00e5cc;
+  --ring: #e26d4d;
   
   --radius: 0.5rem;
   
-  --chart-1: #00e5cc;
-  --chart-2: #10b981;
-  --chart-3: #6366f1;
-  --chart-4: #a855f7;
-  --chart-5: #ec4899;
+  --chart-1: #e26d4d;
+  --chart-2: #34d399;
+  --chart-3: #d4a373;
+  --chart-4: #f59e0b;
+  --chart-5: #fb7185;
   
-  --sidebar: rgba(10, 14, 26, 0.95);
-  --sidebar-foreground: #e0f2f1;
-  --sidebar-primary: #00e5cc;
-  --sidebar-primary-foreground: #0a0e1a;
-  --sidebar-accent: rgba(30, 41, 59, 0.8);
-  --sidebar-accent-foreground: #e0f2f1;
-  --sidebar-border: rgba(0, 229, 204, 0.14);
-  --sidebar-ring: #00e5cc;
+  --sidebar: rgba(20, 17, 16, 0.95);
+  --sidebar-foreground: #eae3d8;
+  --sidebar-primary: #e26d4d;
+  --sidebar-primary-foreground: #1c1917;
+  --sidebar-accent: rgba(41, 37, 36, 0.8);
+  --sidebar-accent-foreground: #eae3d8;
+  --sidebar-border: rgba(231, 229, 228, 0.10);
+  --sidebar-ring: #e26d4d;
 }
 
 .dark {
-  --background: #0a0e1a;
-  --foreground: #e0f2f1;
-  --card: rgba(15, 23, 42, 0.6);
-  --card-foreground: #e0f2f1;
-  --popover: #0f172a;
-  --popover-foreground: #e0f2f1;
-  --primary: #00e5cc;
-  --primary-foreground: #0a0e1a;
-  --secondary: #6366f1;
-  --secondary-foreground: #e0f2f1;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --accent: #10b981;
-  --accent-foreground: #e0f2f1;
-  --destructive: #ef4444;
+  --background: #141110;
+  --foreground: #eae3d8;
+  --card: rgba(28, 25, 23, 0.65);
+  --card-foreground: #eae3d8;
+  --popover: #1c1917;
+  --popover-foreground: #eae3d8;
+  --primary: #e26d4d;
+  --primary-foreground: #1c1917;
+  --secondary: #d4a373;
+  --secondary-foreground: #eae3d8;
+  --muted: #292524;
+  --muted-foreground: #a8a29e;
+  --accent: #f59e0b;
+  --accent-foreground: #1c1917;
+  --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 229, 204, 0.14);
-  --input: rgba(30, 41, 59, 0.5);
-  --ring: #00e5cc;
-  --chart-1: #00e5cc;
-  --chart-2: #10b981;
-  --chart-3: #6366f1;
-  --chart-4: #a855f7;
-  --chart-5: #ec4899;
-  --sidebar: rgba(10, 14, 26, 0.95);
-  --sidebar-foreground: #e0f2f1;
-  --sidebar-primary: #00e5cc;
-  --sidebar-primary-foreground: #0a0e1a;
-  --sidebar-accent: rgba(30, 41, 59, 0.8);
-  --sidebar-accent-foreground: #e0f2f1;
-  --sidebar-border: rgba(0, 229, 204, 0.14);
-  --sidebar-ring: #00e5cc;
+  --border: rgba(231, 229, 228, 0.10);
+  --input: rgba(41, 37, 36, 0.6);
+  --ring: #e26d4d;
+  --chart-1: #e26d4d;
+  --chart-2: #34d399;
+  --chart-3: #d4a373;
+  --chart-4: #f59e0b;
+  --chart-5: #fb7185;
+  --sidebar: rgba(20, 17, 16, 0.95);
+  --sidebar-foreground: #eae3d8;
+  --sidebar-primary: #e26d4d;
+  --sidebar-primary-foreground: #1c1917;
+  --sidebar-accent: rgba(41, 37, 36, 0.8);
+  --sidebar-accent-foreground: #eae3d8;
+  --sidebar-border: rgba(231, 229, 228, 0.10);
+  --sidebar-ring: #e26d4d;
 }
 
 @theme inline {

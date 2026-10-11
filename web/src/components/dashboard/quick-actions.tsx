@@ -10,11 +10,11 @@ interface ActionButton {
 }
 
 const actions: ActionButton[] = [
-  { icon: Play, label: "Start All", variant: "default", color: "#10b981" },
-  { icon: Pause, label: "Pause", variant: "outline", color: "#6366f1" },
-  { icon: RotateCcw, label: "Restart", variant: "outline", color: "#00e5cc" },
-  { icon: RefreshCw, label: "Refresh", variant: "outline", color: "#ec4899" },
-  { icon: Power, label: "Shutdown", variant: "destructive", color: "#ef4444" },
+  { icon: Play, label: "Start All", variant: "default", color: "#34d399" },
+  { icon: Pause, label: "Pause", variant: "outline", color: "#d4a373" },
+  { icon: RotateCcw, label: "Restart", variant: "outline", color: "#e26d4d" },
+  { icon: RefreshCw, label: "Refresh", variant: "outline", color: "#fb7185" },
+  { icon: Power, label: "Shutdown", variant: "destructive", color: "#e5484d" },
 ];
 
 export function QuickActions() {

@@ -8,7 +8,7 @@
 
 Restrained architecture studio meets live status window. Deep-blue abyss canvas, hairline telemetry dividers, mono micro-labels, one glowing signal color. Calm at rest, alive on change.
 
-Dense like Cloudflare, crisp like Valorant HUD, warm-craft restraint like Claude — but **no beige, no serif dashboards, no neon slop**. Keep current deep blue.
+Dense like Cloudflare, crisp like Valorant HUD, warm-craft restraint like Ember + Claude — but **no beige surfaces, no serif dashboards, no neon slop**. Warm craft dark: espresso canvas, terracotta signal, amber highlights.
 
 Signature moments (use sparingly, max 1 per view):
 - HUD corner brackets on entrance portal + service-detail modal only.
@@ -21,25 +21,25 @@ Density 8 = cockpit. Data breathes in plain layout with 1px dividers, not boxed 
 
 Locked. One brand accent. Statuses are functional, not brand.
 
-- **Abyss** (#0A0E1A) — app background. Never pure black.
-- **Panel Deep** (#0F172A) — popover, dropdown, raised surface.
-- **Card Veil** (rgba(15,23,42,0.60)) — card fill. Always pair with inner top highlight, never outer glow.
-- **Ink Foam** (#E0F2F1) — primary text.
-- **Muted Slate** (#94A3B8) — secondary text, timestamps, metadata.
-- **Whisper Line** (rgba(0,229,204,0.14)) — 1px hairlines, card borders, dividers. Was 0.20, drop to 0.14 for restraint.
-- **Signal Teal** (#00E5CC) — SOLE brand accent. CTAs, active nav, focus rings, live dots. `text-primary / bg-primary / border-primary` map here.
-- **Input Wash** (rgba(30,41,59,0.50)) — input fill.
+- **Espresso** (#141110) — app background. Never pure black.
+- **Hearth Deep** (#1C1917) — popover, dropdown, raised surface.
+- **Card Veil** (rgba(28,25,23,0.65)) — card fill. Always pair with inner top highlight, never outer glow.
+- **Bone Ink** (#EAE3D8) — primary text.
+- **Warm Ash** (#A8A29E) — secondary text, timestamps, metadata.
+- **Whisper Line** (rgba(231,229,228,0.10)) — 1px hairlines, card borders, dividers. Warm neutral, never accent-tinted (Ember rule: terracotta is for interactive only).
+- **Ember Terracotta** (#E26D4D) — SOLE brand accent. CTAs, active nav, focus rings, live dots. `text-primary / bg-primary / border-primary` map here.
+- **Input Wash** (rgba(41,37,36,0.60)) — input fill.
 
 Functional status only (never for CTAs/marketing):
-- **Online Emerald** (#10B981) — online, success.
+- **Online Emerald** (#34D399) — online, success.
 - **Degraded Amber** (#F59E0B) — degraded, warning. Replaces `yellow-500`.
-- **Offline Red** (#EF4444) — offline, destructive.
-- **Maintenance Indigo** (#6366F1) — maintenance, info.
-- **Unknown Slate** (#64748B) — unknown, muted.
+- **Offline Red** (#E5484d) — offline, destructive.
+- **Maintenance Tan** (#D4A373) — maintenance, info. No cool indigo in warm theme.
+- **Unknown Stone** (#78716C) — unknown, muted.
 
-Charts reuse: `#00E5CC, #10B981, #6366F1, #A855F7, #EC4899` in that order. No new hues without review.
+Charts reuse: `#E26D4D, #34D399, #D4A373, #F59E0B, #FB7185` in that order. No new hues without review.
 
-Banned: pure `#000000` / `#FFFFFF`, AI purple-blue gradient washes, teal outer glows (`glow-box`, `glow-text`), warm beige `#FAFAF9` in dashboard surfaces.
+Banned: pure `#000000` / `#FFFFFF`, AI purple-blue gradient washes, teal/cyan anywhere (`#00E5CC`, `cyan-*`, `#020617`), neon outer glows.
 
 ## 3. Typography Rules
 
@@ -52,7 +52,7 @@ Banned: pure `#000000` / `#FFFFFF`, AI purple-blue gradient washes, teal outer g
 ## 4. Component Stylings
 
 - **Buttons:** flat, no `glow-box`. `rounded-lg` (8px). Primary = Signal fill + Abyss text. Secondary = ghost/outline Whisper Line. Tactile `active:scale-[0.98]` + `-translate-y-[1px]`. Labels 1-2 words, single line at desktop, 44px min target. Valorant corner-cut (`clip-path` 8-10px cut) ONLY on primary HUD actions — not global.
-- **Cards:** `rounded-xl` (12px). `bg-card/60 backdrop-blur-sm` allowed on fixed header only, not scrolling lists. Inner highlight `shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]`, hairline `border-border`. No outer neon shadow. High-density rule: if a metric can live as a divider row, don't box it. ServiceCard keeps box (hierarchy) minus shimmer-gradient + bottom rainbow line — replace with 2px Signal top-tick on hover/focus.
+- **Cards:** `rounded-xl` (12px). `bg-card/60 backdrop-blur-sm` allowed on fixed header only, not scrolling lists. Inner highlight `shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]`, hairline `border-border`. No outer neon shadow. Service cards add mouse-tracking spotlight (`radial-gradient(240px … rgba(226,109,77,0.12))` via `--mx/--my` CSS vars, no re-render) + 2px Signal top-tick on hover. High-density rule: if a metric can live as a divider row, don't box it.
 - **Status pills / badges:** `rounded-full`, mono `text-[10px] uppercase tracking-[0.18em]`, dot + pulse. Pattern: `● ONLINE`, `● TRACKING PED 04 — click empty or Esc`. One pulse loop per view cluster.
 - **HUD brackets:** 16px L-corners `border-primary/50`, entrance + detail modal only. Not on every card.
 - **Inputs:** label above, `gap-2` block, error below. Focus ring Signal. No placeholder-as-label. Contrast AA min.
