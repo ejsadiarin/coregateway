@@ -9,7 +9,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       {/* desktop sidebar */}
       <Sidebar />
 

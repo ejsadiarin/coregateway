@@ -51,7 +51,7 @@ type StatusFilter = "all" | "online" | "offline" | "degraded" | "maintenance";
 const statusColors: Record<string, string> = {
   online: "text-accent border-accent/50 bg-accent/10",
   offline: "text-destructive border-destructive/50 bg-destructive/10",
-  degraded: "text-yellow-500 border-yellow-500/50 bg-yellow-500/10",
+  degraded: "text-amber-500 border-amber-500/50 bg-amber-500/10",
   maintenance: "text-secondary border-secondary/50 bg-secondary/10",
   unknown: "text-muted-foreground border-muted-foreground/50 bg-muted-foreground/10",
 };
@@ -63,7 +63,7 @@ function getStatusIcon(status: string) {
     case "offline":
       return <XCircle className="w-4 h-4 text-destructive" />;
     case "degraded":
-      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+      return <AlertTriangle className="w-4 h-4 text-amber-500" />;
     default:
       return <Activity className="w-4 h-4 text-muted-foreground" />;
   }
@@ -196,9 +196,9 @@ export default function ServicesPage() {
           <p className="text-xs text-muted-foreground mb-1">Offline</p>
           <p className="text-2xl font-bold text-destructive">{stats.offline}</p>
         </div>
-        <div className="p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
           <p className="text-xs text-muted-foreground mb-1">Degraded</p>
-          <p className="text-2xl font-bold text-yellow-500">{stats.degraded}</p>
+          <p className="text-2xl font-bold text-amber-500">{stats.degraded}</p>
         </div>
       </motion.div>
 

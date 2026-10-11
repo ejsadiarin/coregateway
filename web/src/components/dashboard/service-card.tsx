@@ -66,7 +66,7 @@ interface ServiceCardProps {
 const statusColors: Record<ServiceStatus, string> = {
   online: "text-accent border-accent/50 bg-accent/10",
   offline: "text-destructive border-destructive/50 bg-destructive/10",
-  degraded: "text-yellow-500 border-yellow-500/50 bg-yellow-500/10",
+  degraded: "text-amber-500 border-amber-500/50 bg-amber-500/10",
   maintenance: "text-secondary border-secondary/50 bg-secondary/10",
   unknown: "text-muted-foreground border-muted-foreground/50 bg-muted-foreground/10",
 };
@@ -100,22 +100,15 @@ export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
 
   return (
     <motion.div
-      className="group relative overflow-hidden rounded-lg border border-border bg-card backdrop-blur-md p-6 transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/20 cursor-pointer"
-      initial={{ opacity: 0, y: 20 }}
+      className="group relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors duration-200 hover:border-primary/50 cursor-pointer"
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
-      whileHover={{ y: -5 }}
+      transition={{ duration: 0.25, delay: Math.min(delay, 0.3) }}
+      whileHover={{ y: -2 }}
       onClick={onClick}
     >
-      {/* Shimmer Effect on Hover */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-        <div
-          className="absolute inset-0 w-1/2 h-full bg-gradient-to-r from-transparent via-primary/10 to-transparent"
-          style={{
-            animation: "shimmer 2s ease-in-out infinite",
-          }}
-        />
-      </div>
+      {/* Top signal tick on hover */}
+      <div className="absolute top-0 left-4 right-4 h-[2px] bg-primary opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
 
       <div className="relative">
         {/* Header */}
@@ -140,26 +133,18 @@ export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
         {/* Metrics */}
         <div className="grid grid-cols-2 gap-3 pt-4 border-t border-border/50">
           <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground">Response Time</span>
-            <span className="text-sm text-card-foreground mt-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Response Time</span>
+            <span className="font-mono tabular-nums text-sm text-card-foreground mt-1">
               {formatResponseTime(service.response_time)}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground">Last Check</span>
-            <span className="text-sm text-card-foreground mt-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Last Check</span>
+            <span className="font-mono tabular-nums text-sm text-card-foreground mt-1">
               {formatLastCheck(service.last_check)}
             </span>
           </div>
         </div>
-
-        {/* Hover Accent Line */}
-        <motion.div
-          className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-primary via-accent to-secondary"
-          initial={{ width: 0 }}
-          whileHover={{ width: "100%" }}
-          transition={{ duration: 0.3 }}
-        />
       </div>
     </motion.div>
   );
@@ -169,7 +154,7 @@ export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
 export function ServiceCardSkeleton({ delay = 0 }: { delay?: number }) {
   return (
     <motion.div
-      className="relative overflow-hidden rounded-lg border border-border bg-card backdrop-blur-md p-6"
+      className="relative overflow-hidden rounded-xl border border-border bg-card p-6"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}

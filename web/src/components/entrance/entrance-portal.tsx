@@ -7,7 +7,7 @@ export function EntrancePortal() {
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+    <div className="relative min-h-dvh flex items-center justify-center overflow-hidden">
       {/* Animated Grid Background */}
       <div className="absolute inset-0 opacity-30">
         <div
@@ -88,7 +88,7 @@ export function EntrancePortal() {
 
           {/* Main Title */}
           <motion.h1
-            className="mb-6 glow-text text-primary text-4xl md:text-6xl font-bold tracking-tighter"
+            className="mb-6 text-primary text-4xl md:text-6xl font-bold tracking-tighter"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.3 }}
@@ -207,7 +207,7 @@ export function EntrancePortal() {
             </p>
             <Button
               size="lg"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 glow-box"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => navigate("/login")}
             >
               <LogIn className="w-5 h-5 mr-2" />

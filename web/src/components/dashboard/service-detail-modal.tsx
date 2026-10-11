@@ -34,7 +34,7 @@ type ServiceStatus = "online" | "offline" | "degraded" | "maintenance" | "unknow
 const statusColors: Record<ServiceStatus, string> = {
   online: "text-accent border-accent/50 bg-accent/10",
   offline: "text-destructive border-destructive/50 bg-destructive/10",
-  degraded: "text-yellow-500 border-yellow-500/50 bg-yellow-500/10",
+  degraded: "text-amber-500 border-amber-500/50 bg-amber-500/10",
   maintenance: "text-secondary border-secondary/50 bg-secondary/10",
   unknown: "text-muted-foreground border-muted-foreground/50 bg-muted-foreground/10",
 };
@@ -54,7 +54,7 @@ function getStatusIcon(status: string) {
     case "offline":
       return <XCircle className="w-4 h-4 text-destructive" />;
     case "degraded":
-      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+      return <AlertTriangle className="w-4 h-4 text-amber-500" />;
     default:
       return <Activity className="w-4 h-4 text-muted-foreground" />;
   }
@@ -80,7 +80,7 @@ function UptimeCard({
   delay: number;
 }) {
   const color =
-    value >= 99 ? "text-accent" : value >= 95 ? "text-yellow-500" : "text-destructive";
+    value >= 99 ? "text-accent" : value >= 95 ? "text-amber-500" : "text-destructive";
 
   return (
     <motion.div

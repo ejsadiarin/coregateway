@@ -20,16 +20,13 @@ export function Sidebar() {
 
   return (
     <TooltipProvider delayDuration={0}>
-      <motion.aside
+      <aside
         className={cn(
-          "hidden md:flex flex-col h-screen sticky top-0 z-40",
+          "hidden md:flex flex-col h-dvh sticky top-0 z-40",
           "bg-sidebar border-r border-sidebar-border",
-          "backdrop-blur-xl",
+          "transition-[width] duration-200 ease-out",
         )}
-        animate={{
-          width: isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED,
-        }}
-        transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+        style={{ width: isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED }}
       >
         {/* header: logo + collapse toggle */}
         <div className={cn(
@@ -117,7 +114,7 @@ export function Sidebar() {
           animate={{ opacity: [0.2, 0.5, 0.2] }}
           transition={{ duration: 4, repeat: Infinity }}
         />
-      </motion.aside>
+      </aside>
     </TooltipProvider>
   );
 }

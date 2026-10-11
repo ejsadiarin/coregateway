@@ -48,7 +48,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden px-4">
+    <div className="min-h-dvh flex items-center justify-center relative overflow-hidden px-4">
       {/* Animated Background */}
       <div className="absolute inset-0 opacity-30">
         <div
@@ -76,22 +76,14 @@ export default function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div className="rounded-lg border border-border bg-card/80 backdrop-blur-xl p-8 glow-box">
+        <div className="rounded-xl border border-border bg-card/80 backdrop-blur-xl p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
           {/* Header */}
           <div className="text-center mb-8">
-            <motion.div
+            <div
               className="inline-flex items-center justify-center w-16 h-16 rounded-lg bg-primary/10 border border-primary/30 mb-4"
-              animate={{
-                boxShadow: [
-                  "0 0 20px rgba(0, 229, 204, 0.3)",
-                  "0 0 40px rgba(0, 229, 204, 0.5)",
-                  "0 0 20px rgba(0, 229, 204, 0.3)",
-                ],
-              }}
-              transition={{ duration: 2, repeat: Infinity }}
             >
               <Terminal className="w-8 h-8 text-primary" />
-            </motion.div>
+            </div>
             <h1 className="text-primary mb-2">SECURE ACCESS</h1>
             <p className="text-sm text-muted-foreground">
               Enter your credentials to access the Core System
