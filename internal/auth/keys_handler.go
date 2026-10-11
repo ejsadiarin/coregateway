@@ -51,6 +51,24 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 		helper.RespondErrorJSON(w, http.StatusBadRequest, "label is required")
 		return
 	}
+	// Key-authed callers can only mint scopes they hold (scope-down, never
+	// up), with one exception: a presenter holding the `admin` scope may
+	// mint any scope. Session callers are unchanged (admin role at route).
+	if presenterScopes, ok := KeyScopesFromContext(r); ok && !KeyHasScope(r, "admin") {
+		for _, s := range req.Scopes {
+			held := false
+			for _, p := range presenterScopes {
+				if p == s {
+					held = true
+					break
+				}
+			}
+			if !held {
+				helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+				return
+			}
+		}
+	}
 	plaintext, row, err := h.keys.CreateKey(r.Context(), CreateKeyRequest{
 		Label:     req.Label,
 		OwnerID:   &caller.ID,

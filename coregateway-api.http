@@ -61,12 +61,17 @@ GET {{host}}/api/auth/me
 
 # ─── Users ───────────────────────────────────────────────────────────────────
 # {id} = UUID. Path param is `{id}`, not `{user_id}`.
+# List/create/delete are admin-session-only. Self-registration lives at
+# POST /api/auth/register (role forced to `user`).
+# Native routes also accept `Authorization: Bearer <api-key>` (key acts as
+# its owner): self-reads OK on any owned key; create/delete need the
+# `admin` key scope on top of the route role gate.
 
-### List Users (public — no auth check in handler)
+### List Users (admin session; 401 anonymous, 403 non-admin)
 
 GET {{host}}/api/users
 
-### Create User (public; role: guest | user | admin)
+### Create User (admin session; role from body trusted — admins only)
 
 POST {{host}}/api/users
 Content-Type: application/json
@@ -99,13 +104,42 @@ Content-Type: application/json
   "password": "newpassword123"
 }
 
-### Delete User (session required; cannot delete self or demo@example.com; 204)
+### Delete User (admin session; cannot delete self or demo@example.com; 204)
 
 DELETE {{host}}/api/users/{{user_id}}
 
+### Get Self with API key (any owned key; 200)
+
+GET {{host}}/api/users/{{user_id}}
+Authorization: Bearer cgw_live_PASTE_USER_KEY_HERE
+
+### Create User with low-scope API key (expect 403, creates nothing)
+
+POST {{host}}/api/users
+Authorization: Bearer cgw_live_PASTE_READ_KEY_HERE
+Content-Type: application/json
+
+{
+  "email": "nope@example.com",
+  "password": "password123",
+  "role": "user"
+}
+
+### Create User with admin API key (201)
+
+POST {{host}}/api/users
+Authorization: Bearer cgw_live_PASTE_ADMIN_KEY_HERE
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "password": "password123",
+  "role": "user"
+}
+
 
 # ─── Services (monitor) ──────────────────────────────────────────────────────
-# {id} = UUID. All routes are public (no auth check).
+# {id} = UUID. All routes are admin-session-only (401 anonymous, 403 non-admin).
 
 ### Create Service (defaults: interval 60, method GET, timeout 5000, codes [200,204])
 
@@ -164,6 +198,8 @@ GET {{host}}/api/services/{{service_id}}/stats
 # by Create; List never exposes secrets. Valid scopes: "admin",
 # "<service>:read|write|admin" (e.g. "corefinance:read"). Unknown
 # scopes → 400. An admin key is scopes=["admin"] with no expiry.
+# Key-authed callers may only mint scopes they hold (`admin` presenter
+# may mint anything); low-scope mint of unheld scope → 403.
 
 ### Create API Key
 
@@ -193,6 +229,17 @@ GET {{host}}/api/auth/keys
 
 DELETE {{host}}/api/auth/keys/{{key_id}}
 
+### Mint with admin API key (key acts as owner; 201 + one-time plaintext)
+
+POST {{host}}/api/auth/keys
+Authorization: Bearer cgw_live_PASTE_ADMIN_KEY_HERE
+Content-Type: application/json
+
+{
+  "label": "script-key",
+  "scopes": ["corefinance:read"]
+}
+
 
 # ─── Budget (reverse-proxied to corefinance) ─────────────────────────────────
 # Any method/subpath under /api/budget/** is proxied to COREFINANCE_URL.
@@ -216,6 +263,18 @@ GET {{host}}/api/budget/incomes/
 ### Budget Remaining (requires session)
 
 GET {{host}}/api/budget/remaining
+
+### Budget Remaining targeted (admin session; edge validates ?user_id=)
+
+GET {{host}}/api/budget/remaining?user_id=PASTE_TARGET_USER_UUID_HERE
+
+### Budget targeted with malformed user_id (expect 400)
+
+GET {{host}}/api/budget/remaining?user_id=zzz
+
+### Budget targeted as non-admin (expect 403)
+
+GET {{host}}/api/budget/remaining?user_id=PASTE_OTHER_USER_UUID_HERE
 
 ### Stats Summary (requires session)
 

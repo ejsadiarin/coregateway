@@ -19,43 +19,113 @@ type APIKeyValidator interface {
 	ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error)
 }
 
+// UserExistsFunc reports whether a user id exists. It backs ?user_id=
+// validation at the edge, keeping user authority in the gateway.
+type UserExistsFunc func(ctx context.Context, id uuid.UUID) (bool, error)
+
 // EdgeIdentity authenticates proxied requests once at the edge and creates
 // the short-lived internal JWT that downstream services verify. It accepts
 // a valid session (populated by the global AuthMiddleware) or, when a
 // validator is configured, a valid API key. Anything else is rejected with
 // 401 and never proxied. The created token is the only identity that
 // travels downstream.
-func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator) func(http.Handler) http.Handler {
+//
+// On GET/HEAD requests carrying ?user_id=<uuid>, the edge validates the
+// target (malformed → 400, other-target without admin scope → 403,
+// unknown user → 404) and mints a signed act_as claim, stripping the raw
+// param. Non-GET/HEAD requests ignore the param entirely.
+func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator, userExists UserExistsFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var userID uuid.UUID
+			var azp string
+			var scopes []string
 			if user := auth.GetUserFromContext(r); user != nil {
 				// The edge knows the user's role; downstream does not. Grant
 				// the admin scope here so admin endpoints can authorize
 				// locally from the verified scope claim.
-				var scopes []string
 				if user.Role == auth.RoleAdmin {
 					scopes = []string{"admin"}
 				}
-				issue(w, r, next, issuer, user.ID, "session", scopes)
-				return
-			}
-		if keys != nil {
-			if presented, ok := bearerToken(r); ok {
-				userID, keyID, scopes, err := keys.ValidateKey(r.Context(), presented)
-				// All keys are owned; validity alone suffices.
-				if err == nil {
-					issue(w, r, next, issuer, userID, "api-key:"+keyID, scopes)
-					return
+				userID, azp = user.ID, "session"
+			} else if keys != nil {
+				if presented, ok := bearerToken(r); ok {
+					id, keyID, keyScopes, err := keys.ValidateKey(r.Context(), presented)
+					// All keys are owned; validity alone suffices.
+					if err == nil {
+						userID, azp, scopes = id, "api-key:"+keyID, keyScopes
+					}
 				}
 			}
-		}
-			helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
+			if userID == uuid.Nil {
+				helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
+				return
+			}
+			actAs, ok := targeting(w, r, userID, scopes, userExists)
+			if !ok {
+				return // targeting already responded
+			}
+			issue(w, r, next, issuer, userID, azp, scopes, actAs)
 		})
 	}
 }
 
-func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, userID uuid.UUID, azp string, scopes []string) {
-	signed, err := issuer.CreateUserToken(userID, azp, scopes)
+// targeting validates ?user_id= on reads and returns the act_as target
+// (uuid.Nil for self/untargeted). It strips the raw param in all cases and
+// responds directly on rejection, returning ok=false.
+func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes []string, userExists UserExistsFunc) (actAs uuid.UUID, ok bool) {
+	raw := r.URL.Query().Get("user_id")
+	strip := func() {
+		q := r.URL.Query()
+		q.Del("user_id")
+		r.URL.RawQuery = q.Encode()
+	}
+	if raw == "" {
+		return uuid.Nil, true
+	}
+	// Writes never target: strip silently, validate nothing.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		strip()
+		return uuid.Nil, true
+	}
+	target, err := uuid.Parse(raw)
+	if err != nil {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid user_id")
+		return uuid.Nil, false
+	}
+	strip()
+	if target == caller {
+		return uuid.Nil, true // own ID: exists by construction
+	}
+	admin := false
+	for _, s := range scopes {
+		if s == "admin" {
+			admin = true
+			break
+		}
+	}
+	if !admin {
+		helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+		return uuid.Nil, false
+	}
+	if userExists == nil {
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to validate target user")
+		return uuid.Nil, false
+	}
+	exists, err := userExists(r.Context(), target)
+	if err != nil {
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to validate target user")
+		return uuid.Nil, false
+	}
+	if !exists {
+		helper.RespondErrorJSON(w, http.StatusNotFound, "target user not found")
+		return uuid.Nil, false
+	}
+	return target, true
+}
+
+func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) {
+	signed, err := issuer.CreateTargetedToken(userID, azp, scopes, actAs)
 	if err != nil {
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to establish request identity")
 		return

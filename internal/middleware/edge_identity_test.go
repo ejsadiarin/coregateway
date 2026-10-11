@@ -57,7 +57,7 @@ func TestEdgeIdentitySessionMintsJWT(t *testing.T) {
 	})
 
 	req := requestWithUser(httptest.NewRequest(http.MethodGet, "/api/budget/remaining", nil), userID)
-	EdgeIdentity(iss, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity(iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	if !nextCalled {
 		t.Fatal("expected next handler to be called")
@@ -98,7 +98,7 @@ func TestEdgeIdentityAdminSessionGrantsAdminScope(t *testing.T) {
 		Email: "admin@example.com",
 		Role:  auth.RoleAdmin,
 	}))
-	EdgeIdentity(iss, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity(iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	presented, ok := bearerToken(mustRequest(t, gotAuth))
 	if !ok {
@@ -131,7 +131,7 @@ func TestEdgeIdentityAnonymousRejected(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/budget/remaining", nil)
-	EdgeIdentity(iss, nil)(next).ServeHTTP(rec, req)
+	EdgeIdentity(iss, nil, nil)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)
@@ -154,7 +154,7 @@ func TestEdgeIdentityMalformedBearerRejected(t *testing.T) {
 		if header != "" {
 			req.Header.Set("Authorization", header)
 		}
-		EdgeIdentity(iss, nil)(next).ServeHTTP(rec, req)
+		EdgeIdentity(iss, nil, nil)(next).ServeHTTP(rec, req)
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("header %q: status = %d, want 401", header, rec.Code)
 		}
@@ -204,7 +204,7 @@ func TestEdgeIdentityValidKey(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
 	req.Header.Set("Authorization", "Bearer user-key-material")
-	EdgeIdentity(iss, keys)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity(iss, keys, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	presented, ok := bearerToken(mustRequest(t, gotAuth))
 	if !ok {
@@ -236,7 +236,7 @@ func TestEdgeIdentityInvalidKeyRejected(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
 	req.Header.Set("Authorization", "Bearer bad-key")
 	rec := httptest.NewRecorder()
-	EdgeIdentity(iss, keys)(next).ServeHTTP(rec, req)
+	EdgeIdentity(iss, keys, nil)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)

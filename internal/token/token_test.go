@@ -92,6 +92,33 @@ func TestCreateUserTokenClaims(t *testing.T) {
 	}
 }
 
+func TestCreateTargetedTokenActAs(t *testing.T) {
+	iss := testIssuer(t)
+	userID := uuid.New()
+	target := uuid.New()
+
+	tokenString, err := iss.CreateTargetedToken(userID, "session", []string{"admin"}, target)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	claims := parseWith(t, tokenString, iss.current.Public)
+	if claims.Subject != userID.String() {
+		t.Errorf("sub = %q, want %q", claims.Subject, userID.String())
+	}
+	if claims.ActAs != target.String() {
+		t.Errorf("act_as = %q, want %q", claims.ActAs, target.String())
+	}
+
+	plain, err := iss.CreateUserToken(userID, "session", nil)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	plainClaims := parseWith(t, plain, iss.current.Public)
+	if plainClaims.ActAs != "" {
+		t.Errorf("act_as should be omitted, got %q", plainClaims.ActAs)
+	}
+}
+
 func TestCreateUserTokenScopesJoined(t *testing.T) {
 	iss := testIssuer(t)
 	tokenString, err := iss.CreateUserToken(uuid.New(), "api-key:abc", []string{"corefinance:read", "corefinance:write"})

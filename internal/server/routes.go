@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	swagger "github.com/swaggo/http-swagger"
 )
 
@@ -58,41 +62,66 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/login", s.AuthHandler.Login)
 	r.Post("/api/auth/logout", s.AuthHandler.Logout)
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
-	r.Get("/api/auth/me", s.AuthHandler.Me)
+	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/auth/me", s.AuthHandler.Me)
 
 	// API key management: session + admin only. Plaintext appears in the
 	// create response exactly once. Keys are always owned (owner_user_id
 	// set to the caller); an admin key is an owned key with scopes=["admin"].
+	// Key-authed callers additionally need the admin scope to create/revoke.
 	r.Route("/api/auth/keys", func(r chi.Router) {
+		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
 		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
-		r.Post("/", s.KeysHandler.Create)
+		r.With(auth.RequireKeyScope("admin")).Post("/", s.KeysHandler.Create)
 		r.Get("/", s.KeysHandler.List)
-		r.Delete("/{id}", s.KeysHandler.Revoke)
+		r.With(auth.RequireKeyScope("admin")).Delete("/{id}", s.KeysHandler.Revoke)
 	})
 
-	// users
-	r.Get("/api/users", s.UserHandler.ListUsers)
-	r.Post("/api/users", s.UserHandler.CreateUser)
-	r.Get("/api/users/{id}", s.UserHandler.GetUser)
-	r.Put("/api/users/{id}", s.UserHandler.UpdateUser)
-	r.Delete("/api/users/{id}", s.UserHandler.DeleteUser)
+	// users — list/create/delete are admin-only. Get/Update stay ungated
+	// at route level; their handlers enforce admin-or-self. Key-authed
+	// callers need the admin scope for create/delete; reads need identity.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
+		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
+		r.Get("/api/users", s.UserHandler.ListUsers)
+		r.With(auth.RequireKeyScope("admin")).Post("/api/users", s.UserHandler.CreateUser)
+		r.With(auth.RequireKeyScope("admin")).Delete("/api/users/{id}", s.UserHandler.DeleteUser)
+	})
+	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/users/{id}", s.UserHandler.GetUser)
+	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Put("/api/users/{id}", s.UserHandler.UpdateUser)
 
-	// services
-	r.Post("/api/services", s.ServiceHandler.CreateService)
-	r.Get("/api/services/list", s.ServiceHandler.ListServices)
-	r.Get("/api/services/stats/all", s.ServiceHandler.GetAllServicesStats)
-	r.Get("/api/services/{id}", s.ServiceHandler.GetService)
-	r.Put("/api/services/{id}", s.ServiceHandler.UpdateService)
-	r.Delete("/api/services/{id}", s.ServiceHandler.DeleteService)
-	r.Get("/api/services/{id}/history", s.ServiceHandler.GetServiceHistory)
-	r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
+	// services (monitor) — admin-only; key callers need the admin scope.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
+		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
+		r.Use(auth.RequireKeyScope("admin"))
+		r.Post("/api/services", s.ServiceHandler.CreateService)
+		r.Get("/api/services/list", s.ServiceHandler.ListServices)
+		r.Get("/api/services/stats/all", s.ServiceHandler.GetAllServicesStats)
+		r.Get("/api/services/{id}", s.ServiceHandler.GetService)
+		r.Put("/api/services/{id}", s.ServiceHandler.UpdateService)
+		r.Delete("/api/services/{id}", s.ServiceHandler.DeleteService)
+		r.Get("/api/services/{id}/history", s.ServiceHandler.GetServiceHistory)
+		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
+	})
 
 	// budget — authenticated at the edge, streamed to corefinance-api.
 	// The internal JWT (not X-User-ID) is the only identity downstream.
 	// chi prefers the static /admin segment over the /* catch-all, so
 	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService))
+		// Existence check for ?user_id= targeting (user authority stays
+		// in the gateway; downstream never looks up users).
+		userExists := func(ctx context.Context, id uuid.UUID) (bool, error) {
+			_, err := s.Queries.GetUser(ctx, id)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return false, nil
+				}
+				return false, err
+			}
+			return true, nil
+		}
+		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
 		r.Use(middleware.ForwardHeaders())
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middleware.RequireScope("admin"))

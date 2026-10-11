@@ -43,6 +43,17 @@ Copy verbatim (only rename the import path): `internal/auth/verifier.go`, `inter
   via `helper.GetUserID` (401 when absent). There are no service identities:
   background work hits the DB directly (the corefinance worker pattern) or
   waits for the future async transport — never a second credential leg.
+- **Targeted reads (`?user_id=` + signed `act_as`).** Admin tooling may
+  read as another user via `GET /api/budget/*?user_id=<uuid>`, but the
+  param is validated ONLY at the gateway edge (malformed → 400, non-admin
+  other-target → 403, unknown user → 404) and translated into a signed
+  `act_as` claim; the raw param is stripped before proxying. Downstream
+  resolves via `helper.ResolveTargetUser` (`act_as` + `admin` scope →
+  target, else `sub`) and NEVER reads the raw query param for identity —
+  direct-to-service callers forging `?user_id=` get `sub` data. Targeted
+  reads go through the gateway by contract; direct access has no targeting.
+  Writes stay `sub`-bound. Tag routes are excluded (no user binding at
+  all — separate follow-up).
 - **401 vs 403** (exact bodies from the copied code):
   - `401 {"error":"valid internal credentials are required"}` - from the verifier middleware (missing/malformed `Authorization`, bad signature, wrong `iss`/`aud`, expired beyond leeway, unparsable or missing `sub`) and from `helper.GetUserID` when no user is in context. Identity was never established.
   - `403 {"error":"admin scope required"}` - from admin handlers checking `HasScope("admin")`; `403 {"error":"Insufficient permissions"}` - from the gateway's `RequireScope`. Identity verified, privilege missing. Rule of thumb: 401 = who are you, 403 = you may not.

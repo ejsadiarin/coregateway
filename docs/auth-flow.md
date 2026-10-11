@@ -93,7 +93,8 @@ API keys live in the gateway database (schema-qualified
 SHA-256 hash is stored — a leaked database dump yields no usable keys.
 
 **Management** (`internal/auth/keys_handler.go`, admin-only via
-`RequireAuth` + `RequireRole(admin)` — no scope check on these routes):
+`RequireAuth` + `RequireRole(admin)`; key-authed callers additionally
+need the `admin` key scope to create/revoke):
 
 - `POST /api/auth/keys` — create an **owned** key. Body: `{"label":
   "...", "scopes": ["..."], "expires_at": ...}` (`label` required;
@@ -118,6 +119,18 @@ an internal JWT carrying `sub` = owner, `azp` = `api-key:<keyID>`,
 `scope` = the key's scopes, and proxies as in Flow 1.
 Invalid/expired/revoked keys get `401 {"error":"Authentication required"}`.
 
+**Native routes accept keys too** (unified session-or-key identity,
+`internal/auth/identity.go`): on `/api/users/*`, `/api/services/*`,
+`/api/auth/keys/*`, and `/api/auth/me`, a valid Bearer key establishes
+the owner's `UserContext` exactly as their session would (sessions win
+if both are present; `login`/`register`/`demo` stay key-free — they issue
+identity). Two scope rules apply to key-authed callers on top of the
+route role gates: privileged endpoints (`POST`/`DELETE /api/users`,
+`POST`/`DELETE /api/auth/keys`, all of `/api/services/*`) require the
+`admin` key scope (403 otherwise, changes nothing), and key creation is
+scope-down-only — a key may mint only scopes it holds, except an
+`admin`-scoped key may mint anything.
+
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`
 (role-derived vs key scopes) both arrive in the verified claims. What it
@@ -126,6 +139,25 @@ never sees is the raw API key itself.
 **Why keys live in the gateway, not in each service:** one place to
 issue, scope, rotate, and revoke; downstream services stay stateless
 verifiers with no credential database to keep in sync.
+
+## Targeted reads (`?user_id=` → signed `act_as`)
+
+Admin tooling reads another user's data via `GET /api/budget/*?user_id=<uuid>`.
+The raw param is user-controlled and unsigned, so it is validated exactly
+once at the gateway edge (`internal/middleware/edge_identity.go`, GET/HEAD
+only): malformed UUID → 400, non-admin targeting someone else → 403
+(explicit, never silent fallback), unknown user → 404 (user authority
+stays in the gateway — downstream never looks up users). Own ID is
+accepted for any identity without a lookup. A valid admin target is minted
+into the JWT as a signed `act_as` claim and the raw param is stripped.
+
+Downstream (`helper.ResolveTargetUser`) resolves `act_as` when present
+**with** `admin` scope, else `sub`; the raw `?user_id=` is never read for
+identity, so direct-to-service callers forging it get `sub` data, and a
+forged `act_as` fails signature verification. Writes stay `sub`-bound
+(the edge strips the param on non-GET/HEAD without validating). Tag
+routes are excluded (no user binding at all). By contract, targeted reads
+go through the gateway; direct access has no targeting.
 
 ---
 

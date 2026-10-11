@@ -22,6 +22,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 	Azp   string `json:"azp"`
 	Scope string `json:"scope,omitempty"`
+	ActAs string `json:"act_as,omitempty"`
 }
 
 // Key is one Ed25519 signing key with its public identifier.
@@ -135,7 +136,7 @@ func (i *Issuer) Keys() []Key {
 	return keys
 }
 
-func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string) (string, error) {
+func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUID) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -149,6 +150,9 @@ func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string) (string, error
 	}
 	if len(scopes) > 0 {
 		claims.Scope = strings.Join(scopes, " ")
+	}
+	if actAs != uuid.Nil {
+		claims.ActAs = actAs.String()
 	}
 	t := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	t.Header["kid"] = i.current.KID
@@ -164,5 +168,18 @@ func (i *Issuer) CreateUserToken(userID uuid.UUID, azp string, scopes []string) 
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, azp, scopes)
+	return i.sign(userID, azp, scopes, uuid.Nil)
+}
+
+// CreateTargetedToken is CreateUserToken with a signed act_as claim: the
+// edge asserts the caller (sub) may act as actAs. An Nil actAs behaves
+// exactly like CreateUserToken.
+func (i *Issuer) CreateTargetedToken(userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) (string, error) {
+	if userID == uuid.Nil {
+		return "", fmt.Errorf("token: user id is required")
+	}
+	if azp == "" {
+		return "", fmt.Errorf("token: azp is required")
+	}
+	return i.sign(userID, azp, scopes, actAs)
 }
