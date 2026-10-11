@@ -117,6 +117,8 @@ func (q *keyAuthStubQuerier) ListServices(context.Context) ([]db.ListServicesRow
 const (
 	testAdminKeyPlaintext = "test-admin-key"
 	testReadKeyPlaintext  = "test-read-key"
+	testWriteKeyPlaintext = "test-write-key"
+	testAdminReadKeyPlaintext = "test-admin-read-key"
 )
 
 func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUID, uuid.UUID) {
@@ -135,6 +137,8 @@ func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUI
 		keyByHash: map[string]db.CoregatewayApiKey{
 			auth.HashAPIKey(testAdminKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"admin"}},
 			auth.HashAPIKey(testReadKeyPlaintext):  {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"corefinance:read"}},
+			auth.HashAPIKey(testWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:write"}},
+			auth.HashAPIKey(testAdminReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:read"}},
 		},
 	}
 	authSvc := auth.NewService(q)
@@ -284,6 +288,70 @@ func TestSessionOrKeyIdentityMatrix(t *testing.T) {
 		}
 		if strings.Contains(rec.Header().Get("Set-Cookie"), "session_token") == false {
 			t.Error("login did not issue session cookie")
+		}
+	})
+}
+
+func TestKeyScopeListGates(t *testing.T) {
+	t.Run("write-only key cannot list users, leaks nothing", func(t *testing.T) {
+		h, _, _, _ := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testWriteKeyPlaintext, http.MethodGet, "/api/users", "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+		for _, leak := range []string{"admin@example.com", "user@example.com"} {
+			if strings.Contains(rec.Body.String(), leak) {
+				t.Errorf("rejection body leaks %q", leak)
+			}
+		}
+	})
+
+	t.Run("write-only key cannot list key inventory, leaks nothing", func(t *testing.T) {
+		h, _, _, _ := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testWriteKeyPlaintext, http.MethodGet, "/api/auth/keys", "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+		for _, leak := range []string{"test-admin-key", "key_prefix"} {
+			if strings.Contains(rec.Body.String(), leak) {
+				t.Errorf("rejection body leaks %q", leak)
+			}
+		}
+	})
+
+	t.Run("admin key lists both", func(t *testing.T) {
+		h, _, _, _ := keyAuthTestSetup(t)
+		if rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/users", ""); rec.Code != http.StatusOK {
+			t.Errorf("users status = %d, want 200", rec.Code)
+		}
+		if rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/auth/keys", ""); rec.Code != http.StatusOK {
+			t.Errorf("keys status = %d, want 200", rec.Code)
+		}
+	})
+}
+
+func TestKeyScopeOtherReads(t *testing.T) {
+	t.Run("admin-owned read key cannot read other profile", func(t *testing.T) {
+		h, _, _, userID := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testAdminReadKeyPlaintext, http.MethodGet, "/api/users/"+userID.String(), "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("admin-owned read key reads self scope-free", func(t *testing.T) {
+		h, _, adminID, _ := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testAdminReadKeyPlaintext, http.MethodGet, "/api/users/"+adminID.String(), "")
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("write-only key reads self scope-free", func(t *testing.T) {
+		h, _, adminID, _ := keyAuthTestSetup(t)
+		rec := doKeyRequest(t, h, testWriteKeyPlaintext, http.MethodGet, "/api/users/"+adminID.String(), "")
+		if rec.Code != http.StatusOK {
+			t.Errorf("status = %d, want 200", rec.Code)
 		}
 	})
 }

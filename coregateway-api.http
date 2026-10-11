@@ -64,12 +64,18 @@ GET {{host}}/api/auth/me
 # List/create/delete are admin-session-only. Self-registration lives at
 # POST /api/auth/register (role forced to `user`).
 # Native routes also accept `Authorization: Bearer <api-key>` (key acts as
-# its owner): self-reads OK on any owned key; create/delete need the
-# `admin` key scope on top of the route role gate.
+# its owner): self-reads and /me need identity only; list/create/delete
+# and key management need the `admin` key scope; other-user reads need
+# `admin` scope too (403 otherwise, even for admin-owned read keys).
 
-### List Users (admin session; 401 anonymous, 403 non-admin)
+### List Users (admin session or admin-scoped key; 401 anonymous, 403 non-admin)
 
 GET {{host}}/api/users
+
+### List Users with write-only API key (expect 403, leaks nothing)
+
+GET {{host}}/api/users
+Authorization: Bearer cgw_live_PASTE_WRITE_KEY_HERE
 
 ### Create User (admin session; role from body trusted — admins only)
 
@@ -82,9 +88,14 @@ Content-Type: application/json
   "role": "user"
 }
 
-### Get User (session required; 403 unless admin or self)
+### Get User (session or key; 403 unless admin-or-self; key needs admin scope for other users)
 
 GET {{host}}/api/users/{{user_id}}
+
+### Get Other User with admin-owned read API key (expect 403 — no admin scope)
+
+GET {{host}}/api/users/{{user_id}}
+Authorization: Bearer cgw_live_PASTE_ADMIN_READ_KEY_HERE
 
 ### Update User (session required; admin or self; role change requires admin)
 
@@ -221,9 +232,14 @@ Content-Type: application/json
   "scopes": ["admin"]
 }
 
-### List API Keys (metadata only)
+### List API Keys (admin session or admin-scoped key; write-only key → 403)
 
 GET {{host}}/api/auth/keys
+
+### List API Keys with write-only API key (expect 403, leaks nothing)
+
+GET {{host}}/api/auth/keys
+Authorization: Bearer cgw_live_PASTE_WRITE_KEY_HERE
 
 ### Revoke API Key (immediate effect; 204)
 
@@ -246,6 +262,9 @@ Content-Type: application/json
 # The edge authenticates (session cookie OR API key), creates a short-lived
 # internal JWT, and forwards it as Authorization: Bearer. No session and no
 # key → 401, never proxied. X-User-ID is never accepted downstream.
+# Key callers need service cover: GET/HEAD needs `<svc>:read` cover,
+# writes need `<svc>:write` cover (`admin` and `<svc>:admin` pass both);
+# sessions pass through. Uncovered keys → 403, never proxied.
 # Full endpoint list: services/corefinance/budget-api.http
 
 ### Priority Groups (public downstream; via gateway still needs edge identity)
@@ -288,6 +307,21 @@ GET {{host}}/api/budget/export
 
 GET {{host}}/api/budget/remaining
 Authorization: Bearer cgw_live_PASTE_USER_KEY_HERE
+
+### Budget GET with write-only API key (expect 403, never proxied)
+
+GET {{host}}/api/budget/remaining
+Authorization: Bearer cgw_live_PASTE_WRITE_KEY_HERE
+
+### Budget POST with read-only API key (expect 403, never proxied)
+
+POST {{host}}/api/budget/expenses
+Authorization: Bearer cgw_live_PASTE_READ_KEY_HERE
+Content-Type: application/json
+
+{
+  "amount": 1
+}
 
 ### Budget without credentials (expect 401, never proxied)
 

@@ -72,17 +72,18 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
 		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
 		r.With(auth.RequireKeyScope("admin")).Post("/", s.KeysHandler.Create)
-		r.Get("/", s.KeysHandler.List)
+		r.With(auth.RequireKeyScope("admin")).Get("/", s.KeysHandler.List)
 		r.With(auth.RequireKeyScope("admin")).Delete("/{id}", s.KeysHandler.Revoke)
 	})
 
 	// users — list/create/delete are admin-only. Get/Update stay ungated
 	// at route level; their handlers enforce admin-or-self. Key-authed
-	// callers need the admin scope for create/delete; reads need identity.
+	// callers need the admin scope for list/create/delete; self-reads
+	// need identity only.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
 		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
-		r.Get("/api/users", s.UserHandler.ListUsers)
+		r.With(auth.RequireKeyScope("admin")).Get("/api/users", s.UserHandler.ListUsers)
 		r.With(auth.RequireKeyScope("admin")).Post("/api/users", s.UserHandler.CreateUser)
 		r.With(auth.RequireKeyScope("admin")).Delete("/api/users/{id}", s.UserHandler.DeleteUser)
 	})
@@ -122,6 +123,9 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 			return true, nil
 		}
 		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
+		// Key-authed callers need service cover (read for GET/HEAD, write
+		// otherwise); sessions pass through to downstream role checks.
+		r.Use(auth.RequireServiceKeyScope("corefinance"))
 		r.Use(middleware.ForwardHeaders())
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middleware.RequireScope("admin"))

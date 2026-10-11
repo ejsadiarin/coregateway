@@ -53,11 +53,36 @@ func RequireIdentity(sessions *Service, keys *KeysService) func(http.Handler) ht
 	}
 }
 
+// ContextWithKeyScopes marks the request as key-authed with the given
+// scopes. The edge sets it when the key branch validates; sessions never
+// carry it, so its presence is the session/key discriminator for
+// downstream scope gates.
+func ContextWithKeyScopes(ctx context.Context, scopes []string) context.Context {
+	return context.WithValue(ctx, keyScopesContextKey, scopes)
+}
+
 // KeyScopesFromContext returns the presented key's scopes. The second value
 // is false for session-authed (or anonymous) requests.
 func KeyScopesFromContext(r *http.Request) ([]string, bool) {
 	scopes, ok := r.Context().Value(keyScopesContextKey).([]string)
 	return scopes, ok
+}
+
+// KeyCoversScope reports whether held scopes cover need, where need is
+// `admin` or `<service>:<read|write|admin>`. `admin` covers everything;
+// `<svc>:admin` covers that service's read and write; otherwise exact match.
+func KeyCoversScope(held []string, need string) bool {
+	for _, h := range held {
+		if h == "admin" || h == need {
+			return true
+		}
+		if svc, op, ok := strings.Cut(h, ":"); ok && op == "admin" {
+			if wantSvc, wantOp, ok := strings.Cut(need, ":"); ok && wantSvc == svc && (wantOp == "read" || wantOp == "write") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // KeyHasScope reports whether the caller authed via a key holding scope.
@@ -73,6 +98,40 @@ func KeyHasScope(r *http.Request, scope string) bool {
 		}
 	}
 	return false
+}
+
+// RequireServiceKeyScope gates key-authed callers by HTTP method: GET/HEAD
+// need `<service>:read` cover, everything else `<service>:write` cover
+// (via KeyCoversScope, so `admin` and `<service>:admin` pass both).
+// Session callers pass through to the role gates.
+func RequireServiceKeyScope(service string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			write := r.Method != http.MethodGet && r.Method != http.MethodHead
+			RequireKeyScopeFor(service, write)(next).ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireKeyScopeFor enforces service coverage for key-authed callers: a
+// presented key must cover `<service>:read` (read gate) or
+// `<service>:write` (write gate) via KeyCoversScope, else 403. Session
+// callers pass through to the role gates; anonymous passes through to
+// downstream gates.
+func RequireKeyScopeFor(service string, write bool) func(http.Handler) http.Handler {
+	need := service + ":read"
+	if write {
+		need = service + ":write"
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if scopes, ok := KeyScopesFromContext(r); ok && !KeyCoversScope(scopes, need) {
+				helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RequireKeyScope enforces scope for key-authed callers: a presented key

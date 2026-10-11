@@ -124,12 +124,24 @@ Invalid/expired/revoked keys get `401 {"error":"Authentication required"}`.
 `/api/auth/keys/*`, and `/api/auth/me`, a valid Bearer key establishes
 the owner's `UserContext` exactly as their session would (sessions win
 if both are present; `login`/`register`/`demo` stay key-free — they issue
-identity). Two scope rules apply to key-authed callers on top of the
-route role gates: privileged endpoints (`POST`/`DELETE /api/users`,
-`POST`/`DELETE /api/auth/keys`, all of `/api/services/*`) require the
-`admin` key scope (403 otherwise, changes nothing), and key creation is
+identity). Scope cover (`KeyCoversScope`: `admin` covers everything,
+`<svc>:admin` covers that service's read+write, otherwise exact match)
+gates key-authed callers on top of the route role gates — sessions are
+fully exempt. The rules: self-profile reads and `/me` need identity only;
+`GET /api/users` (list), `GET /api/auth/keys` (list), other-user
+reads/updates, all writes (`POST`/`DELETE /api/users`,
+`POST`/`DELETE /api/auth/keys`, all of `/api/services/*`) require
+`admin` scope cover (403 otherwise, changes nothing). Key creation is
 scope-down-only — a key may mint only scopes it holds, except an
 `admin`-scoped key may mint anything.
+
+**Budget routes enforce service cover** (`RequireServiceKeyScope` after
+the edge, before proxying): key-authed `GET`/`HEAD` needs
+`corefinance:read` cover, other methods need `corefinance:write` cover;
+uncovered keys get 403 and are never proxied. Sessions pass through to
+the downstream checks. Run the matrix live with
+`scripts/x-test-key-scopes.sh` (fill in `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+at the top, or point `ADMIN_JAR` at a live admin cookie jar).
 
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`

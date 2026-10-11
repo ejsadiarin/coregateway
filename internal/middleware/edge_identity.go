@@ -51,9 +51,12 @@ func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator, userExists UserExi
 			} else if keys != nil {
 				if presented, ok := bearerToken(r); ok {
 					id, keyID, keyScopes, err := keys.ValidateKey(r.Context(), presented)
-					// All keys are owned; validity alone suffices.
+					// All keys are owned; validity alone suffices. Record the
+					// key scopes in context so downstream scope gates can tell
+					// key callers from sessions (sessions never carry them).
 					if err == nil {
 						userID, azp, scopes = id, "api-key:"+keyID, keyScopes
+						r = r.WithContext(auth.ContextWithKeyScopes(r.Context(), keyScopes))
 					}
 				}
 			}

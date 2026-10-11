@@ -82,6 +82,15 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Key-authed callers need the admin scope to reach other users;
+	// self-reads stay scope-free (owner-bound, no excess privilege).
+	if !isSelf {
+		if scopes, ok := auth.KeyScopesFromContext(r); ok && !auth.KeyCoversScope(scopes, "admin") {
+			helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+			return
+		}
+	}
+
 	slog.Debug("user.Handler.GetUser: request received", "id", id)
 	user, err := h.service.GetUser(r.Context(), id)
 	if err != nil {
@@ -115,6 +124,15 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin && !isSelf {
 		helper.RespondErrorJSON(w, http.StatusForbidden, "Access denied")
 		return
+	}
+
+	// Key-authed callers need the admin scope to reach other users;
+	// self-updates stay scope-free (owner-bound, no cross-user effect).
+	if !isSelf {
+		if scopes, ok := auth.KeyScopesFromContext(r); ok && !auth.KeyCoversScope(scopes, "admin") {
+			helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
+			return
+		}
 	}
 
 	var req UpdateUserRequest
