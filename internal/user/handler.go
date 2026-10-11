@@ -7,7 +7,6 @@ import (
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
 	"github.com/ejsadiarin/coregateway/internal/helper"
-	"github.com/google/uuid"
 )
 
 type CreateUserRequest struct {
@@ -152,6 +151,8 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Route middleware (RequireAuth) guarantees a caller here; the nil
+	// check below is defense-in-depth (a missing caller would nil-deref).
 	caller := auth.GetUserFromContext(r)
 	if caller == nil {
 		helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
@@ -173,9 +174,4 @@ func (h *Handler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("user.Handler.DeleteUser: user deleted", "id", id)
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func parseUUID(s string) uuid.UUID {
-	id, _ := uuid.Parse(s)
-	return id
 }
