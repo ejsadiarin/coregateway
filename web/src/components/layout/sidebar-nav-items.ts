@@ -5,6 +5,8 @@ import {
   TrendingUp,
   SlidersHorizontal,
   Server,
+  FlaskConical,
+  Radar,
   BarChart3,
   FileText,
   Users,
@@ -40,6 +42,18 @@ export const navItems: NavItem[] = [
     label: "Budget",
     icon: Wallet,
     path: "/dashboard/budget",
+    section: "finance",
+  },
+  {
+    label: "Budget 2",
+    icon: FlaskConical,
+    path: "/dashboard/budget2",
+    section: "finance",
+  },
+  {
+    label: "Budget 3",
+    icon: Radar,
+    path: "/dashboard/budget3",
     section: "finance",
   },
   {
