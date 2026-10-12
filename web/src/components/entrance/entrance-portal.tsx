@@ -35,7 +35,7 @@ export function EntrancePortal() {
       <div className="absolute inset-0 pointer-events-none">
         <Particles
           className="absolute inset-0"
-          quantity={40}
+          quantity={typeof window !== "undefined" && window.innerWidth < 768 ? 16 : 40}
           color={themeMeta(theme).particle}
           staticity={60}
           ease={60}

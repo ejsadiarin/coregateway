@@ -51,6 +51,10 @@ Four client-side themes, one token shape. Switcher lives in the header (Palette 
 - **valorant** — gunmetal `#0F1923` HUD + tactical red `#FF4655` signal, off-white nominal states, sharp `--radius: 0.25rem`.
 Rules for theme-safe accents: hardcoded hexes are banned outside `theme.ts` — use `var(--chart-N)` / `color-mix(in srgb, var(--primary) …)` so every surface follows the switch. Canvas APIs (Particles) read per-theme hex from `themeMeta()`.
 
+## 2c. Mobile / PWA (Android-first)
+
+Installable via `public/manifest.webmanifest` + `public/sw.js` (offline shell, network-only `/api`, registered in PROD only). `theme-color` meta syncs per theme in `applyTheme()`. Viewport uses `viewport-fit=cover`; bottom nav already spacers `env(safe-area-inset-bottom)`. Perf rules: entrance particles drop to 16 under 768px, `backdrop-blur` on fixed chrome only, 44px touch targets, single-column collapse <768px with no horizontal scroll.
+
 ## 3. Typography Rules
 
 - **Display:** `Space Grotesk` — track-tight (`tracking-tighter leading-none`), `text-2xl md:text-4xl` max for dashboard headers. Weight-driven hierarchy, not scale. Add via `@fontsource/space-grotesk`, self-hosted, `font-display: swap`. No Google `<link>` in prod.

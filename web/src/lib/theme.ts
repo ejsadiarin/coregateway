@@ -73,6 +73,8 @@ export function getStoredTheme(): ThemeId {
 
 export function applyTheme(id: ThemeId) {
   document.documentElement.dataset.theme = id;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", themeMeta(id).swatches[0]);
   try {
     localStorage.setItem(STORAGE_KEY, id);
   } catch {
