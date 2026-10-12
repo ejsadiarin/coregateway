@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type ThemeId = "ember" | "abyss" | "paper" | "mono";
+export type ThemeId = "ember" | "abyss" | "paper" | "mono" | "valorant";
 
 const STORAGE_KEY = "core-theme";
 const THEME_EVENT = "core-theme-change";
@@ -44,10 +44,17 @@ export const THEMES: ThemeMeta[] = [
     swatches: ["#0e0e0e", "#c8ff2e"],
     particle: "#c8ff2e",
   },
+  {
+    id: "valorant",
+    label: "Valorant Tech",
+    blurb: "Gunmetal HUD + tactical red",
+    swatches: ["#0f1923", "#ff4655"],
+    particle: "#ff4655",
+  },
 ];
 
 export function isThemeId(v: string | null): v is ThemeId {
-  return v === "ember" || v === "abyss" || v === "paper" || v === "mono";
+  return v === "ember" || v === "abyss" || v === "paper" || v === "mono" || v === "valorant";
 }
 
 export function getStoredTheme(): ThemeId {

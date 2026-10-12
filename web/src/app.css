@@ -200,6 +200,43 @@
   --sidebar-ring: #c8ff2e;
 }
 
+[data-theme="valorant"] {
+  --background: #0f1923;
+  --foreground: #ece8e1;
+  --card: rgba(21, 32, 44, 0.7);
+  --card-foreground: #ece8e1;
+  --popover: #131d29;
+  --popover-foreground: #ece8e1;
+  --primary: #ff4655;
+  --primary-foreground: #ffffff;
+  --secondary: #768079;
+  --secondary-foreground: #0f1923;
+  --muted: #1b2735;
+  --muted-foreground: #768079;
+  --accent: #ece8e1;
+  --accent-foreground: #0f1923;
+  --destructive: #a41623;
+  --destructive-foreground: #ffffff;
+  --border: rgba(236, 232, 225, 0.12);
+  --input: rgba(27, 39, 53, 0.7);
+  --input-background: rgba(27, 39, 53, 0.7);
+  --ring: #ff4655;
+  --radius: 0.25rem;
+  --chart-1: #ff4655;
+  --chart-2: #ece8e1;
+  --chart-3: #768079;
+  --chart-4: #3a4450;
+  --chart-5: #ff8a90;
+  --sidebar: rgba(15, 25, 35, 0.95);
+  --sidebar-foreground: #ece8e1;
+  --sidebar-primary: #ff4655;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(27, 39, 53, 0.8);
+  --sidebar-accent-foreground: #ece8e1;
+  --sidebar-border: rgba(236, 232, 225, 0.12);
+  --sidebar-ring: #ff4655;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

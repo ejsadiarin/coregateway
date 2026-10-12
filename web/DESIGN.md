@@ -48,6 +48,7 @@ Four client-side themes, one token shape. Switcher lives in the header (Palette 
 - **abyss** — refined abyss blue: `#0A0E1A` canvas, `#00E5CC` signal, `#6366F1` info.
 - **paper** — warm light: `#FAFAF9` canvas, `#1C1917` ink, `#C2410C` CTAs.
 - **mono** — off-black `#0E0E0E` + electric lime `#C8FF2E` pop.
+- **valorant** — gunmetal `#0F1923` HUD + tactical red `#FF4655` signal, off-white nominal states, sharp `--radius: 0.25rem`.
 Rules for theme-safe accents: hardcoded hexes are banned outside `theme.ts` — use `var(--chart-N)` / `color-mix(in srgb, var(--primary) …)` so every surface follows the switch. Canvas APIs (Particles) read per-theme hex from `themeMeta()`.
 
 ## 3. Typography Rules
