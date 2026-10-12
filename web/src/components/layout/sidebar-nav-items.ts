@@ -7,6 +7,7 @@ import {
   Server,
   FlaskConical,
   Radar,
+  Sparkles,
   BarChart3,
   FileText,
   Users,
@@ -54,6 +55,12 @@ export const navItems: NavItem[] = [
     label: "Budget 3",
     icon: Radar,
     path: "/dashboard/budget3",
+    section: "finance",
+  },
+  {
+    label: "Budget 4",
+    icon: Sparkles,
+    path: "/dashboard/budget4",
     section: "finance",
   },
   {
