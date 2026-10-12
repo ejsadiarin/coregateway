@@ -90,6 +90,116 @@
   --sidebar-ring: #e26d4d;
 }
 
+/* Runtime color schemes (see src/lib/theme.ts). Ember Craft is the base
+   above; these overrides win on equal specificity by source order. */
+[data-theme="abyss"] {
+  --background: #0a0e1a;
+  --foreground: #e0f2f1;
+  --card: rgba(15, 23, 42, 0.6);
+  --card-foreground: #e0f2f1;
+  --popover: #0f172a;
+  --popover-foreground: #e0f2f1;
+  --primary: #00e5cc;
+  --primary-foreground: #0a0e1a;
+  --secondary: #6366f1;
+  --secondary-foreground: #e0f2f1;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #10b981;
+  --accent-foreground: #e0f2f1;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 229, 204, 0.14);
+  --input: rgba(30, 41, 59, 0.5);
+  --input-background: rgba(30, 41, 59, 0.5);
+  --ring: #00e5cc;
+  --chart-1: #00e5cc;
+  --chart-2: #10b981;
+  --chart-3: #6366f1;
+  --chart-4: #a855f7;
+  --chart-5: #ec4899;
+  --sidebar: rgba(10, 14, 26, 0.95);
+  --sidebar-foreground: #e0f2f1;
+  --sidebar-primary: #00e5cc;
+  --sidebar-primary-foreground: #0a0e1a;
+  --sidebar-accent: rgba(30, 41, 59, 0.8);
+  --sidebar-accent-foreground: #e0f2f1;
+  --sidebar-border: rgba(0, 229, 204, 0.14);
+  --sidebar-ring: #00e5cc;
+}
+
+[data-theme="paper"] {
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --secondary: #57534e;
+  --secondary-foreground: #ffffff;
+  --muted: #e7e5e4;
+  --muted-foreground: #78716c;
+  --accent: #f59e0b;
+  --accent-foreground: #1c1917;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #d6d3d1;
+  --input: #ffffff;
+  --input-background: #f5f5f4;
+  --ring: #c2410c;
+  --chart-1: #c2410c;
+  --chart-2: #16a34a;
+  --chart-3: #b45309;
+  --chart-4: #f59e0b;
+  --chart-5: #78716c;
+  --sidebar: #f5f5f4;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e7e5e4;
+  --sidebar-accent-foreground: #1c1917;
+  --sidebar-border: #d6d3d1;
+  --sidebar-ring: #c2410c;
+}
+
+[data-theme="mono"] {
+  --background: #0e0e0e;
+  --foreground: #f2f2f0;
+  --card: rgba(24, 24, 24, 0.7);
+  --card-foreground: #f2f2f0;
+  --popover: #161616;
+  --popover-foreground: #f2f2f0;
+  --primary: #c8ff2e;
+  --primary-foreground: #0e0e0e;
+  --secondary: #a3a3a3;
+  --secondary-foreground: #0e0e0e;
+  --muted: #1c1c1c;
+  --muted-foreground: #8a8a8a;
+  --accent: #c8ff2e;
+  --accent-foreground: #0e0e0e;
+  --destructive: #ff5c5c;
+  --destructive-foreground: #0e0e0e;
+  --border: rgba(242, 242, 240, 0.12);
+  --input: rgba(28, 28, 28, 0.7);
+  --input-background: rgba(28, 28, 28, 0.7);
+  --ring: #c8ff2e;
+  --chart-1: #c8ff2e;
+  --chart-2: #f5f5f4;
+  --chart-3: #a3a3a3;
+  --chart-4: #737373;
+  --chart-5: #404040;
+  --sidebar: rgba(14, 14, 14, 0.95);
+  --sidebar-foreground: #f2f2f0;
+  --sidebar-primary: #c8ff2e;
+  --sidebar-primary-foreground: #0e0e0e;
+  --sidebar-accent: rgba(28, 28, 28, 0.8);
+  --sidebar-accent-foreground: #f2f2f0;
+  --sidebar-border: rgba(242, 242, 240, 0.12);
+  --sidebar-ring: #c8ff2e;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

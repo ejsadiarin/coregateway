@@ -61,8 +61,8 @@ export default function RegisterPage() {
           className="absolute inset-0"
           style={{
             backgroundImage: `
-              linear-gradient(rgba(226, 109, 77, 0.07) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(226, 109, 77, 0.07) 1px, transparent 1px)
+              linear-gradient(color-mix(in srgb, var(--primary) 9%, transparent) 1px, transparent 1px),
+              linear-gradient(90deg, color-mix(in srgb, var(--primary) 9%, transparent) 1px, transparent 1px)
             `,
             backgroundSize: "50px 50px",
             animation: "grid-glow 4s ease-in-out infinite",

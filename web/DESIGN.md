@@ -41,6 +41,15 @@ Charts reuse: `#E26D4D, #34D399, #D4A373, #F59E0B, #FB7185` in that order. No ne
 
 Banned: pure `#000000` / `#FFFFFF`, AI purple-blue gradient washes, teal/cyan anywhere (`#00E5CC`, `cyan-*`, `#020617`), neon outer glows.
 
+## 2b. Runtime Color Schemes
+
+Four client-side themes, one token shape. Switcher lives in the header (Palette icon), persists to `localStorage`, applies via `data-theme` on `<html>` — no re-render, CSS does the work. Logic: `src/lib/theme.ts`. Never lazy-split theme CSS (3 var blocks, ~1KB); split only if a theme gains real assets.
+- **ember** (default) — palette above.
+- **abyss** — refined abyss blue: `#0A0E1A` canvas, `#00E5CC` signal, `#6366F1` info.
+- **paper** — warm light: `#FAFAF9` canvas, `#1C1917` ink, `#C2410C` CTAs.
+- **mono** — off-black `#0E0E0E` + electric lime `#C8FF2E` pop.
+Rules for theme-safe accents: hardcoded hexes are banned outside `theme.ts` — use `var(--chart-N)` / `color-mix(in srgb, var(--primary) …)` so every surface follows the switch. Canvas APIs (Particles) read per-theme hex from `themeMeta()`.
+
 ## 3. Typography Rules
 
 - **Display:** `Space Grotesk` — track-tight (`tracking-tighter leading-none`), `text-2xl md:text-4xl` max for dashboard headers. Weight-driven hierarchy, not scale. Add via `@fontsource/space-grotesk`, self-hosted, `font-display: swap`. No Google `<link>` in prod.

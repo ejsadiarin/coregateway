@@ -1,8 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-theme="ember">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      try {
+        var t = localStorage.getItem("core-theme");
+        if (t === "ember" || t === "abyss" || t === "paper" || t === "mono") {
+          document.documentElement.dataset.theme = t;
+        }
+      } catch (e) {}
+    </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

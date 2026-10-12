@@ -2,10 +2,12 @@ import { motion } from "motion/react";
 import { Server, Zap, Shield, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Particles } from "@/components/ui/particles";
+import { themeMeta, useTheme } from "@/lib/theme";
 import { useNavigate } from "react-router-dom";
 
 export function EntrancePortal() {
   const navigate = useNavigate();
+  const [theme] = useTheme();
 
   return (
     <div className="relative min-h-dvh flex items-center justify-center overflow-hidden">
@@ -15,8 +17,8 @@ export function EntrancePortal() {
           className="absolute inset-0"
           style={{
             backgroundImage: `
-            linear-gradient(rgba(226, 109, 77, 0.07) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(226, 109, 77, 0.07) 1px, transparent 1px)
+            linear-gradient(color-mix(in srgb, var(--primary) 9%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--primary) 9%, transparent) 1px, transparent 1px)
           `,
             backgroundSize: "50px 50px",
             animation: "grid-glow 4s ease-in-out infinite",
@@ -34,7 +36,7 @@ export function EntrancePortal() {
         <Particles
           className="absolute inset-0"
           quantity={40}
-          color="#e26d4d"
+          color={themeMeta(theme).particle}
           staticity={60}
           ease={60}
           size={0.6}
@@ -126,9 +128,9 @@ export function EntrancePortal() {
                   x2="100%"
                   y2="100%"
                 >
-                  <stop offset="0%" stopColor="#e26d4d" stopOpacity="0.8" />
-                  <stop offset="50%" stopColor="#f59e0b" stopOpacity="0.6" />
-                  <stop offset="100%" stopColor="#d4a373" stopOpacity="0.8" />
+                  <stop offset="0%" stopOpacity="0.8" style={{ stopColor: "var(--primary)" }} />
+                  <stop offset="50%" stopOpacity="0.6" style={{ stopColor: "var(--accent)" }} />
+                  <stop offset="100%" stopOpacity="0.8" style={{ stopColor: "var(--secondary)" }} />
                 </linearGradient>
                 <filter id="glow">
                   <feGaussianBlur stdDeviation="2" result="coloredBlur" />
@@ -168,7 +170,7 @@ export function EntrancePortal() {
                   delay: 0.5,
                 }}
               />
-              <circle cx="50" cy="50" r="8" fill="#e26d4d" opacity="0.6">
+              <circle cx="50" cy="50" r="8" fill="currentColor" className="text-primary" opacity="0.6">
                 <animate
                   attributeName="r"
                   values="6;10;6"

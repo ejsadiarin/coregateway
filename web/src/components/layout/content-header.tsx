@@ -6,6 +6,8 @@ import {
   LogOut,
   Shield,
   ChevronRight,
+  Palette,
+  Check,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { navItems } from "./sidebar-nav-items";
+import { THEMES, useTheme } from "@/lib/theme";
 
 // derive breadcrumbs from pathname
 function useBreadcrumbs() {
@@ -63,6 +66,7 @@ export function ContentHeader() {
   const queryClient = useQueryClient();
   const { user, logout, isGuest, isAdmin } = useAuth();
   const breadcrumbs = useBreadcrumbs();
+  const [theme, setTheme] = useTheme();
 
   const handleLogout = async () => {
     await logout();
@@ -112,6 +116,49 @@ export function ContentHeader() {
             Guest Mode
           </Badge>
         )}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 w-8"
+              aria-label="Color scheme"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Color scheme
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {THEMES.map((t) => (
+              <DropdownMenuItem
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className="flex items-center gap-3"
+              >
+                <span
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border"
+                  style={{ background: t.swatches[0] }}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: t.swatches[1] }}
+                  />
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-xs">{t.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{t.blurb}</span>
+                </span>
+                {theme === t.id && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           variant="ghost"

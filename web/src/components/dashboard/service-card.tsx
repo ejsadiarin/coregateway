@@ -126,7 +126,7 @@ export function ServiceCard({ service, onClick, delay = 0 }: ServiceCardProps) {
         className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
         style={{
           background:
-            "radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(226, 109, 77, 0.12), transparent 70%)",
+            "radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--primary) 14%, transparent), transparent 70%)",
         }}
       />
 

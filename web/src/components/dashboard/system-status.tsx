@@ -23,28 +23,28 @@ export function SystemStatus() {
             label: "CPU Usage", 
             value: data.cpu, 
             unit: "%", 
-            color: "#e26d4d" 
+            color: "var(--chart-1)" 
         },
         { 
             icon: HardDrive, 
             label: "Storage", 
             value: data.storage, 
             unit: "%", 
-            color: "#34d399" 
+            color: "var(--chart-2)" 
         },
         { 
             icon: Activity, 
             label: "Memory", 
             value: data.memory, 
             unit: "%", 
-            color: "#d4a373" 
+            color: "var(--chart-3)" 
         },
         { 
             icon: Thermometer, 
             label: "Temperature", 
             value: data.temperature, 
             unit: "°C", 
-            color: "#fb7185" 
+            color: "var(--chart-5)" 
         },
     ];
 
@@ -84,8 +84,8 @@ export function SystemStatus() {
                             <motion.div
                                 className="absolute top-0 left-0 h-full rounded-full"
                                 style={{
-                                    background: `linear-gradient(90deg, ${metric.color}, ${metric.color}dd)`,
-                                    boxShadow: `0 0 10px ${metric.color}66`,
+                                    background: metric.color,
+                                    boxShadow: `0 0 8px color-mix(in srgb, ${metric.color} 45%, transparent)`,
                                 }}
                                 initial={{ width: 0 }}
                                 animate={{ width: `${metric.value}%` }}
