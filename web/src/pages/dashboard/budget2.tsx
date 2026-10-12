@@ -49,10 +49,10 @@ export default function BudgetTacticalDeck() {
     8,
   );
 
-  const spent = stats?.total_expenses ?? 0;
-  const income = stats?.total_incomes ?? 0;
-  const left = remaining?.remaining ?? 0;
-  const burn = velocity?.avg_monthly_spending ?? 0;
+  const spent = Number(stats?.total_expenses) || 0;
+  const income = Number(stats?.total_incomes) || 0;
+  const left = Number(remaining?.remaining) || 0;
+  const burn = Number(velocity?.avg_monthly_spending) || 0;
   const usedPct = spent + left > 0 ? Math.min(100, (spent / (spent + left)) * 100) : 0;
   const feed = expenses?.data ?? [];
   const ops = Array.isArray(bills) ? bills.slice(0, 5) : [];

@@ -34,10 +34,10 @@ export default function BudgetSignalDeck() {
   const { data: breakdown } = useCategoryBreakdown(range.startDate, range.endDate);
   const { data: bills } = useUpcomingBills();
 
-  const income = stats?.total_incomes ?? 0;
-  const spent = stats?.total_expenses ?? 0;
+  const income = Number(stats?.total_incomes) || 0;
+  const spent = Number(stats?.total_expenses) || 0;
   const net = income - spent;
-  const rate = savings?.savings_rate ?? 0;
+  const rate = Number(savings?.savings_rate) || 0;
   const cats = [...(breakdown ?? [])].sort((a, b) => b.total_amount - a.total_amount).slice(0, 8);
   const maxCat = cats[0]?.total_amount ?? 1;
   const ops = Array.isArray(bills) ? bills.slice(0, 6) : [];
