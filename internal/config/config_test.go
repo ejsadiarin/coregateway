@@ -21,7 +21,7 @@ func TestJWTAudienceList(t *testing.T) {
 		t.Fatalf("aud = %v, want [corefinance corereminder]", got)
 	}
 	os.Unsetenv("JWT_AUDIENCE")
-	if got := Load().JWTAudience; !reflect.DeepEqual(got, []string{"corefinance"}) {
-		t.Fatalf("default aud = %v, want [corefinance]", got)
+	if got := Load().JWTAudience; !reflect.DeepEqual(got, []string{"corefinance", "coredraw"}) {
+		t.Fatalf("default aud = %v, want [corefinance coredraw]", got)
 	}
 }

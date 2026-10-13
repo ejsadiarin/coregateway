@@ -18,6 +18,7 @@ type Config struct {
 	AdminPass           string
 	AllowedOrigins      string
 	CorefinanceURL      string
+	CoredrawURL         string
 	// Internal JWT identity (gateway is the sole signer).
 	JWTPrivateKeyPEM     string
 	JWTPrevPrivateKeyPEM string
@@ -25,7 +26,7 @@ type Config struct {
 	JWTPrevKID           string
 	JWTIssuer            string
 	// JWTAudience lists every downstream the minted tokens are valid for.
-	// Comma-separated in JWT_AUDIENCE (e.g. "corefinance,corereminder").
+	// Comma-separated in JWT_AUDIENCE (e.g. "corefinance,coredraw").
 	JWTAudience   []string
 	JWTTTLSeconds int
 }
@@ -41,12 +42,13 @@ func Load() *Config {
 		AdminPass:            os.Getenv("ADMIN_PASSWORD"),
 		AllowedOrigins:       getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 		CorefinanceURL:       getEnv("COREFINANCE_URL", "http://localhost:6969"),
+		CoredrawURL:          getEnv("COREDRAW_URL", "http://localhost:6971"),
 		JWTPrivateKeyPEM:     os.Getenv("JWT_PRIVATE_KEY_PEM"),
 		JWTPrevPrivateKeyPEM: os.Getenv("JWT_PREV_PRIVATE_KEY_PEM"),
 		JWTKID:               os.Getenv("JWT_KID"),
 		JWTPrevKID:           os.Getenv("JWT_PREV_KID"),
 		JWTIssuer:            getEnv("JWT_ISSUER", "https://gateway.internal"),
-		JWTAudience:          getEnvList("JWT_AUDIENCE", "corefinance"),
+		JWTAudience:          getEnvList("JWT_AUDIENCE", "corefinance,coredraw"),
 		JWTTTLSeconds:        getEnvInt("JWT_TTL_SECONDS", 300),
 	}
 }

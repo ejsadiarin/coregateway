@@ -119,23 +119,25 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 
+	// Existence check for ?user_id= targeting (user authority stays
+	// in the gateway; downstream never looks up users). Shared by the
+	// budget and boards proxies.
+	userExists := func(ctx context.Context, id uuid.UUID) (bool, error) {
+		_, err := s.Queries.GetUser(ctx, id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return false, nil
+			}
+			return false, err
+		}
+		return true, nil
+	}
+
 	// budget — authenticated at the edge, streamed to corefinance-api.
 	// The internal JWT (not X-User-ID) is the only identity downstream.
 	// chi prefers the static /admin segment over the /* catch-all, so
 	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
-		// Existence check for ?user_id= targeting (user authority stays
-		// in the gateway; downstream never looks up users).
-		userExists := func(ctx context.Context, id uuid.UUID) (bool, error) {
-			_, err := s.Queries.GetUser(ctx, id)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					return false, nil
-				}
-				return false, err
-			}
-			return true, nil
-		}
 		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
 		// Key-authed callers need service cover (read for GET/HEAD, write
 		// otherwise); sessions pass through to downstream role checks.
@@ -146,6 +148,17 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 			r.Handle("/*", s.CorefinanceClient.Proxy())
 		})
 		r.Handle("/*", s.CorefinanceClient.Proxy())
+	})
+
+	// boards — authenticated at the edge, streamed to coredraw-api.
+	// Same proxy contract as budget: internal JWT downstream, per-service
+	// key scopes at the edge (coredraw:read for GET/HEAD, coredraw:write
+	// otherwise), sessions pass through to downstream checks.
+	r.Route("/api/coredraw", func(r chi.Router) {
+		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
+		r.Use(auth.RequireServiceKeyScope("coredraw"))
+		r.Use(middleware.ForwardHeaders())
+		r.Handle("/*", s.CoredrawClient.Proxy())
 	})
 
 	return r

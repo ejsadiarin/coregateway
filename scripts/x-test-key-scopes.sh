@@ -25,6 +25,10 @@ GW="${GW:-http://localhost:8080}"
 #       admin session GET → 200 (sessions exempt)
 #   S6  targeting unchanged: admin key + ?user_id=<other> → 200,
 #       read key + ?user_id=<other> → 403
+#   S7  boards gate: coredraw write key GET → 403, coredraw read key
+#       GET → 200, coredraw read key PUT → 403, coredraw write key PUT
+#       passes the gate (never 403), budget read key on boards → 403
+#       (uncovered at the edge)
 #   §B  self-service mint: fresh non-admin user logs in, mints read key
 #       (201, contrast with admin-minted shapes); key reads own budget 200
 #       and other budget 403; non-admin mint of ["admin"] → 403
@@ -60,7 +64,7 @@ cleanup() {
     fi
   fi
   rm -rf "$TMPDIR_RUN"
-  unset ADMIN_PASSWORD K_ADMIN K_SVCADMIN K_READ K_WRITE USER_KEY 2>/dev/null || true
+  unset ADMIN_PASSWORD K_ADMIN K_SVCADMIN K_READ K_WRITE K_DRAW_READ K_DRAW_WRITE USER_KEY 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -122,9 +126,12 @@ mint "scope-e2e-admin-$TS" '["admin"]'             && K_ADMIN=$MINT_KEY
 mint "scope-e2e-svcadmin-$TS" '["corefinance:admin"]' && K_SVCADMIN=$MINT_KEY
 mint "scope-e2e-read-$TS" '["corefinance:read"]'  && K_READ=$MINT_KEY
 mint "scope-e2e-write-$TS" '["corefinance:write"]' && K_WRITE=$MINT_KEY
+mint "scope-e2e-draw-read-$TS" '["coredraw:read"]' && K_DRAW_READ=$MINT_KEY
+mint "scope-e2e-draw-write-$TS" '["coredraw:write"]' && K_DRAW_WRITE=$MINT_KEY
 [ -n "${K_ADMIN:-}" ] && [ -n "${K_SVCADMIN:-}" ] && [ -n "${K_READ:-}" ] && [ -n "${K_WRITE:-}" ] \
+  && [ -n "${K_DRAW_READ:-}" ] && [ -n "${K_DRAW_WRITE:-}" ] \
   || { fail "mint" "a key shape failed"; exit 1; }
-pass "minted admin/svc-admin/read/write keys"
+pass "minted admin/svc-admin/read/write/draw-read/draw-write keys"
 
 # --- S1 lists need admin scope ---------------------------------------------
 echo "-- S1 lists --"
@@ -186,6 +193,21 @@ expect_eq "read key targeted read 403" "403" \
   "$(code -H "Authorization: Bearer $K_READ" "$GW/api/budget/remaining?user_id=$HELPER_ID")"
 expect_eq "admin key malformed target 400" "400" \
   "$(code -H "Authorization: Bearer $K_ADMIN" "$GW/api/budget/remaining?user_id=zzz")"
+
+# --- S7 boards gate ------------------------------------------------------------
+echo "-- S7 boards gate --"
+expect_eq "draw-write key boards GET 403" "403" \
+  "$(code -H "Authorization: Bearer $K_DRAW_WRITE" "$GW/api/coredraw/boards")"
+expect_eq "draw-read key boards GET 200" "200" \
+  "$(code -H "Authorization: Bearer $K_DRAW_READ" "$GW/api/coredraw/boards")"
+expect_eq "draw-read key boards PUT 403" "403" \
+  "$(code -H "Authorization: Bearer $K_DRAW_READ" -X PUT "$GW/api/coredraw/boards/00000000-0000-0000-0000-000000000000" \
+    -H 'Content-Type: application/json' -d '{"revision":1}')"
+expect_ne "draw-write key boards PUT passes gate (never 403)" "403" \
+  "$(code -H "Authorization: Bearer $K_DRAW_WRITE" -X PUT "$GW/api/coredraw/boards/00000000-0000-0000-0000-000000000000" \
+    -H 'Content-Type: application/json' -d '{"revision":1}')"
+expect_eq "budget read key on boards 403 (uncovered)" "403" \
+  "$(code -H "Authorization: Bearer $K_READ" "$GW/api/coredraw/boards")"
 
 # --- §B self-service mint (non-admin user) -------------------------------------
 echo "-- §B self-service mint --"

@@ -363,4 +363,63 @@ POST {{host}}/api/budget/admin/backfill?dry_run=true
 
 POST {{host}}/api/budget/admin/backfill?user_id=PASTE_TARGET_USER_UUID_HERE
 
+
+# ─── Boards (reverse-proxied to coredraw) ──────────────────────────────────
+# Any method/subpath under /api/coredraw/** is proxied to COREDRAW_URL.
+# Same edge contract as budget: session cookie OR API key, internal JWT
+# downstream, no credentials → 401. Key callers need `coredraw:read` cover
+# for GET/HEAD and `coredraw:write` for writes; uncovered keys → 403.
+# Full endpoint list: services/coredraw/coredraw-api.http
+
+### List boards (requires session)
+
+GET {{host}}/api/coredraw/boards?limit=50&offset=0
+
+### Create board (requires session)
+
+POST {{host}}/api/coredraw/boards
+Content-Type: application/json
+
+{
+  "title": "payments"
+}
+
+### Get board (requires session)
+
+GET {{host}}/api/coredraw/boards/PASTE_BOARD_UUID_HERE
+
+### Save board (requires session; stale revision → 409 from downstream)
+
+PUT {{host}}/api/coredraw/boards/PASTE_BOARD_UUID_HERE
+Content-Type: application/json
+
+{
+  "snapshot": {"store": {}},
+  "snapshot_version": 1,
+  "doc": "# payments",
+  "revision": 1
+}
+
+### Boards with read-scoped API key (expect 200)
+
+GET {{host}}/api/coredraw/boards
+Authorization: Bearer cgw_live_PASTE_COREDRAW_READ_KEY_HERE
+
+### Boards write with read-only API key (expect 403, never proxied)
+
+PUT {{host}}/api/coredraw/boards/PASTE_BOARD_UUID_HERE
+Authorization: Bearer cgw_live_PASTE_COREDRAW_READ_KEY_HERE
+Content-Type: application/json
+
+{
+  "snapshot": {},
+  "snapshot_version": 1,
+  "doc": "",
+  "revision": 1
+}
+
+### Boards without credentials (expect 401, never proxied)
+
+GET {{host}}/api/coredraw/boards
+
 # @key_id = 00000000-0000-0000-0000-000000000000

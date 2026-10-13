@@ -2,12 +2,12 @@
 # scripts/x-test-integration.sh — cross-service (x-) integration test.
 #
 # NOTE on the `x-` prefix: this script runs against the COMPOSED system
-# (compose.yml: real gateway + corefinance containers, real DBs, real JWKS
-# fetch over HTTP). It is deliberately NOT part of either Go module's
-# `test-*` suites — those stay single-module (`go test ./...` never crosses
-# the nested-module boundary, and neither module imports the other). For now
-# only test-related cross-service automation exists (`x-test-*`); the prefix
-# reserves room for future cross-service helpers.
+# (compose.yml: real gateway + corefinance + coredraw containers, real DBs,
+# real JWKS fetch over HTTP). It is deliberately NOT part of either Go
+# module's `test-*` suites — those stay single-module (`go test ./...` never
+# crosses the nested-module boundary, and neither module imports the other).
+# For now only test-related cross-service automation exists (`x-test-*`);
+# the prefix reserves room for future cross-service helpers.
 #
 # What it asserts (black-box over HTTP, cf. proposal in
 # openspec/changes/x-test-e2e/):
@@ -20,6 +20,8 @@
 #       (/api/auth/token, /api/auth/keys/service, /internal/*);
 #       unknown scope → 400 on create
 #   X7  rotation overlap (2 kids, old session passes) + cut (1 kid)
+#   X8  boards chain through the edge (list/create/save/stale-409/delete),
+#       anonymous boards access is 401, rotation cut keeps boards 200
 #
 # Guarantees / non-goals (see design.md):
 #   - Needs: docker (compose v2), curl, jq, openssl, DATABASE_URL resolvable
@@ -39,6 +41,7 @@ cd "$ROOT"
 
 GW=http://localhost:8080
 FIN=http://localhost:6969
+DRAW=http://localhost:6971
 TS=$(date +%s)
 ADMIN_EMAIL="e2e-admin-$TS@example.com"
 USER_EMAIL="e2e-user-$TS@example.com"
@@ -120,14 +123,16 @@ pass "ephemeral key + identities (kid=$KID_A admin=$ADMIN_EMAIL)"
 
 # --- boot ------------------------------------------------------------------
 echo "-- boot stack --"
-docker compose up -d --build coregateway-api corefinance-api
+docker compose up -d --build coregateway-api corefinance-api coredraw-api
 wait_for "gateway healthy" 180 curl -sf "$GW/health"
-# Boot race: finance fail-closes (by design) if the gateway is not serving
-# JWKS yet when it starts. Re-running up starts it if it exited; a no-op if
-# it is already healthy. (A compose healthcheck+depends_on would also fix
-# this, but that belongs to the dev topology, not this script.)
-docker compose up -d corefinance-api
+# Boot race: downstream services fail-close (by design) if the gateway is
+# not serving JWKS yet when they start. Re-running up starts them if they
+# exited; a no-op if already healthy. (A compose healthcheck+depends_on
+# would also fix this, but that belongs to the dev topology, not this
+# script.)
+docker compose up -d corefinance-api coredraw-api
 wait_for "finance reachable" 120 curl -sf "$FIN/api/budget/priority-groups"
+wait_for "coredraw reachable" 120 curl -sf "$DRAW/health"
 wait_for "jwks served" 60 curl -sf "$GW/.well-known/jwks.json"
 expect_eq "X1 jwks serves run kid" "$KID_A" \
   "$(jget "$GW/.well-known/jwks.json" '.keys[0].kid')"
@@ -198,6 +203,26 @@ expect_eq "removed internal route 404" "404" \
   "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
     "$FIN/internal/recurring/active")"
 
+# --- X8 boards chain -------------------------------------------------------
+echo "-- X8 boards via edge --"
+expect_eq "boards list 200 via edge->coredraw" "200" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" "$GW/api/coredraw/boards")"
+expect_eq "boards anon 401" "401" \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$GW/api/coredraw/boards")"
+created=$(curl -s -w '\n%{http_code}' -b "$JAR" -X POST "$GW/api/coredraw/boards" \
+  -H 'Content-Type: application/json' -d '{"title":"e2e-board"}')
+expect_eq "boards create 201" "201" "$(printf '%s' "$created" | tail -1)"
+BOARD_ID=$(printf '%s' "$created" | head -n -1 | jq -r '.id' 2>/dev/null || echo "")
+[ -n "$BOARD_ID" ] && [ "$BOARD_ID" != "null" ] || { fail "boards create" "no board id"; exit 1; }
+saved=$(curl -s -b "$JAR" -X PUT "$GW/api/coredraw/boards/$BOARD_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"snapshot":{"store":{}},"snapshot_version":1,"doc":"# e2e","revision":1}')
+expect_eq "boards save revision 2" "2" "$(printf '%s' "$saved" | jq -r '.revision' 2>/dev/null || echo __fetch_failed__)"
+expect_eq "boards stale save 409" "409" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X PUT "$GW/api/coredraw/boards/$BOARD_ID" \
+    -H 'Content-Type: application/json' \
+    -d '{"snapshot":{},"snapshot_version":1,"doc":"stale","revision":1}')"
+
 # --- X7 rotation -----------------------------------------------------------
 echo "-- X7 rotation overlap + cut --"
 KID_B="e2e-b-$TS"
@@ -222,9 +247,16 @@ expect_eq "cut serves new kid" "$KID_B" \
   "$(jget "$GW/.well-known/jwks.json" '.keys[0].kid')"
 expect_eq "session 200 after cut" "200" \
   "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" "$GW/api/budget/remaining")"
+expect_eq "boards 200 after cut (downstream picks up new kid)" "200" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" "$GW/api/coredraw/boards")"
 
 # --- cleanup (best-effort, public API) -------------------------------------
 echo "-- cleanup --"
+if [ -n "${BOARD_ID:-}" ]; then
+  expect_eq "delete e2e board" "204" \
+    "$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -X DELETE \
+      "$GW/api/coredraw/boards/$BOARD_ID")"
+fi
 expect_eq "revoke admin key" "204" \
   "$(curl -s -o /dev/null -w '%{http_code}' -b "$ADMIN_JAR" -X DELETE \
     "$GW/api/auth/keys/$SVC_ID")"
