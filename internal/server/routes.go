@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
@@ -43,8 +44,17 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Use(middleware.RequestIDResponseHeader)
 	r.Use(middleware.SlogMiddleware)
 	r.Use(auth.AuthMiddleware(s.AuthService))
+	// ALLOWED_ORIGINS (comma-separated) extends the local defaults, so the
+	// API stays reachable from extra hosts (e.g. a tailscale IP) when its
+	// port is bound to them. Empty entries are skipped.
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost:3001"}
+	for _, o := range strings.Split(cfg.AllowedOrigins, ",") {
+		if trimmed := strings.TrimSpace(o); trimmed != "" {
+			allowedOrigins = append(allowedOrigins, trimmed)
+		}
+	}
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:3001"},
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-User-ID"},
 		AllowCredentials: true,

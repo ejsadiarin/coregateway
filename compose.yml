@@ -5,24 +5,26 @@ services:
       context: ./web
       dockerfile: Dockerfile
     ports:
-      - "3000:80"
+      # Localhost + tailnet only (no LAN exposure). Update the tailnet IP if it changes (tailscale ip -4).
+      - "127.0.0.1:3000:80"
+      - "100.119.212.55:3000:80"
     depends_on:
       - coregateway-api
       - corefinance-api
-    environment:
-      - VITE_API_URL=http://localhost:8080
 
   coregateway-api:
     build:
       context: .
       dockerfile: Dockerfile.coregateway-api
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+      - "100.119.212.55:8080:8080"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - MIGRATION_URL=${MIGRATION_URL}
       - PORT=8080
       - ENV=development
-      - ALLOWED_ORIGINS=http://localhost:3000
+      - ALLOWED_ORIGINS=http://localhost:3000,http://100.119.212.55:3000
       - COREFINANCE_URL=http://corefinance-api:6969
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
@@ -37,6 +39,12 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/.well-known/jwks.json"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   corefinance-api:
     build:
@@ -44,7 +52,8 @@ services:
       dockerfile: Dockerfile.corefinance-api
       target: api
     ports:
-      - "6969:6969"
+      # Not needed outside this machine (gateway reaches it by service name).
+      - "127.0.0.1:6969:6969"
     env_file:
       - ./services/corefinance/.env
     environment:
@@ -55,6 +64,9 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
+    depends_on:
+      coregateway-api:
+        condition: service_healthy
 
   corefinance-cron-worker:
     build:
