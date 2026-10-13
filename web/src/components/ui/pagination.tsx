@@ -123,7 +123,7 @@ export function Pagination({
 
       {/* page numbers */}
       <div className="flex items-center gap-1">
-        {pageNumbers.map((page, index) => {
+        {pageNumbers.map((page) => {
           if (page === 'ellipsis-start' || page === 'ellipsis-end') {
             return (
               <span 

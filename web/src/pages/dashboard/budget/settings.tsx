@@ -11,19 +11,209 @@ import {
   useDeleteTag,
   useExportBudgetJSON,
   useImportBudgetJSON,
+  useDryRunBackfill,
+  useExecuteBackfill,
 } from "@/hooks/use-budget";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit2, Save, X, ArrowLeft, Download } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, ArrowLeft, Download, Play, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { Category, Tag, BudgetExportPayload, BudgetImportResult } from "@/types/api";
+import type { Category, Tag, BudgetExportPayload, BudgetImportResult, BackfillResponse } from "@/types/api";
 import { Link } from "react-router-dom";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
+import { useAuth } from "@/contexts/auth-context";
+import { useUsers } from "@/hooks/use-users";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+
+function AdminBackfillCard() {
+  const { showToast } = useToast();
+  const { data: users, isLoading: usersLoading } = useUsers();
+  const dryRun = useDryRunBackfill();
+  const execute = useExecuteBackfill();
+
+  const [targetUserId, setTargetUserId] = useState("self");
+  const [dryRunResult, setDryRunResult] = useState<BackfillResponse | null>(null);
+  const [dryRunTarget, setDryRunTarget] = useState<string | null>(null);
+  const [executeResult, setExecuteResult] = useState<BackfillResponse | null>(null);
+  const [backfillError, setBackfillError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const targetUser = targetUserId === "self" ? undefined : users?.find((u) => u.id === targetUserId);
+  const request = targetUserId === "self" ? {} : { userId: targetUserId };
+  const dryRunFresh = dryRunResult !== null && dryRunTarget === targetUserId;
+  const legacyTotal = dryRunFresh ? (dryRunResult.legacy_total ?? 0) : null;
+  const canExecute = dryRunFresh && (legacyTotal ?? 0) > 0 && !execute.isPending;
+
+  const handleTargetChange = (value: string) => {
+    setTargetUserId(value);
+    setDryRunResult(null);
+    setDryRunTarget(null);
+    setExecuteResult(null);
+    setBackfillError(null);
+  };
+
+  const handleCheck = async () => {
+    try {
+      const result = await dryRun.mutateAsync(request);
+      setDryRunResult(result);
+      setDryRunTarget(targetUserId);
+      setExecuteResult(null);
+      setBackfillError(null);
+    } catch (error) {
+      if (error instanceof GuestBlockedError) {
+        showToast(error.message, "warning");
+        setBackfillError(error.message);
+      } else {
+        const message = error instanceof Error ? error.message : "Failed to check backfill";
+        showToast(message, "error");
+        setBackfillError(message);
+      }
+    }
+  };
+
+  const handleConfirmExecute = async () => {
+    try {
+      const result = await execute.mutateAsync(request);
+      setExecuteResult(result);
+      setBackfillError(null);
+      setConfirmOpen(false);
+      showToast("Backfill completed successfully", "success");
+    } catch (error) {
+      setConfirmOpen(false);
+      if (error instanceof GuestBlockedError) {
+        showToast(error.message, "warning");
+        setBackfillError(error.message);
+      } else {
+        const message = error instanceof Error ? error.message : "Failed to run backfill";
+        showToast(message, "error");
+        setBackfillError(message);
+      }
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Legacy backfill</CardTitle>
+        <CardDescription>
+          Materialize legacy inline recurring rules into records. Check first, then run. This converts rows irreversibly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2">
+          <Label htmlFor="backfill-target">Target user</Label>
+          <Select value={targetUserId} onValueChange={handleTargetChange} disabled={usersLoading}>
+            <SelectTrigger id="backfill-target">
+              <SelectValue placeholder="Self (own rows)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="self">Self (own rows)</SelectItem>
+              {users?.map((user) => (
+                <SelectItem key={user.id} value={user.id}>
+                  {user.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row">
+          <Button onClick={handleCheck} disabled={dryRun.isPending} variant="outline">
+            <Search className="mr-2 h-4 w-4" />
+            {dryRun.isPending ? "Checking..." : "Check"}
+          </Button>
+          <Button onClick={() => setConfirmOpen(true)} disabled={!canExecute}>
+            <Play className="mr-2 h-4 w-4" />
+            {execute.isPending ? "Running..." : "Run backfill"}
+          </Button>
+        </div>
+
+        {dryRunFresh && (
+          <div className="grid gap-2 rounded-lg border p-4 text-sm md:grid-cols-3">
+            <div>
+              <p className="text-muted-foreground">Legacy expenses</p>
+              <p className="font-semibold">{dryRunResult.legacy_expenses ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Legacy incomes</p>
+              <p className="font-semibold">{dryRunResult.legacy_incomes ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Legacy total</p>
+              <p className="font-semibold">{dryRunResult.legacy_total ?? 0}</p>
+            </div>
+            {(legacyTotal ?? 0) === 0 && (
+              <p className="text-muted-foreground md:col-span-3">Nothing to backfill for this target.</p>
+            )}
+          </div>
+        )}
+
+        {executeResult && (
+          <div className="grid gap-2 rounded-lg border p-4 text-sm md:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <p className="text-muted-foreground">Expense rules</p>
+              <p className="font-semibold">{executeResult.expense_rules ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Income rules</p>
+              <p className="font-semibold">{executeResult.income_rules ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Expense instances</p>
+              <p className="font-semibold">{executeResult.expense_instances ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Income instances</p>
+              <p className="font-semibold">{executeResult.income_instances ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Legacy remaining</p>
+              <p className="font-semibold">{executeResult.legacy_remaining ?? 0}</p>
+            </div>
+          </div>
+        )}
+
+        {backfillError && <p className="text-destructive text-sm">{backfillError}</p>}
+      </CardContent>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Run backfill{targetUser ? ` for ${targetUser.email}` : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This converts {legacyTotal ?? 0} legacy row(s){targetUser ? ` for ${targetUser.email}` : " in your own data"} into
+              recurring rules and instances. Converted rows are flipped to one-time and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmExecute}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Run backfill
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const { data: categories, isLoading: categoriesLoading } = useCategories();
@@ -38,6 +228,7 @@ export default function SettingsPage() {
   const exportBudget = useExportBudgetJSON();
   const importBudget = useImportBudgetJSON();
   const { showToast } = useToast();
+  const { isAdmin } = useAuth();
 
   // Category form state
   const [newCategory, setNewCategory] = useState({ name: "", color: "#3b82f6", icon: "" });
@@ -314,6 +505,17 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {isAdmin && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.075 }}
+          className="mb-8"
+        >
+          <AdminBackfillCard />
+        </motion.div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Categories Section */}

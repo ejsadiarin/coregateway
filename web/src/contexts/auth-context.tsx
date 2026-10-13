@@ -1,6 +1,6 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
-import type { User, UserRole, LoginRequest, RegisterRequest } from "@/types/api";
+import type { User, UserRole } from "@/types/api";
 import * as api from "@/lib/api";
 
 interface AuthContextType {

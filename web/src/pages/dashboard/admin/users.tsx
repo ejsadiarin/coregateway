@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/use-users";
-import type { User as UserType, UserRole, CreateUserRequest, UpdateUserRequest } from "@/types/api";
+import type { User as UserType, UserRole, UpdateUserRequest } from "@/types/api";
 
 export default function UsersPage() {
     const navigate = useNavigate();

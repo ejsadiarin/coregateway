@@ -41,10 +41,15 @@ import type {
   BudgetExportPayload,
   BudgetImportResult,
   SkipIncomeRequest,
-  SkipExpenseRequest
+  SkipExpenseRequest,
+  BackfillRequest,
+  BackfillResponse
 } from '@/types/api';
 
-const url = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+// Same-origin ('') in production builds: nginx proxies /api/ to the backends,
+// so the app works on any host (localhost, tailnet IP) with no CORS involved.
+// Explicit VITE_API_URL build arg still wins; `pnpm dev` keeps direct :8080.
+const url = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8080');
 
 function wrapPaginated<T>(data: T[], page: number = 1, pageSize: number = 50): PaginatedResponse<T> {
   const total = data.length;
@@ -568,7 +573,9 @@ export async function fetchTrends(
 // Service Monitoring API Functions
 
 export async function fetchServices(): Promise<Service[]> {
-  const res = await fetch(url + '/api/services/list');
+  const res = await fetch(url + '/api/services/list', {
+    credentials: 'include'
+  });
   if (!res.ok) {
     throw new Error(`Error fetching services: ${res.status}`);
   }
@@ -576,7 +583,9 @@ export async function fetchServices(): Promise<Service[]> {
 }
 
 export async function fetchService(id: string): Promise<Service> {
-  const res = await fetch(url + `/api/services/${id}`);
+  const res = await fetch(url + `/api/services/${id}`, {
+    credentials: 'include'
+  });
   if (!res.ok) {
     throw new Error(`Error fetching service: ${res.status}`);
   }
@@ -589,6 +598,7 @@ export async function createService(data: CreateServiceRequest): Promise<Service
     headers: {
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify(data)
   });
   if (!res.ok) {
@@ -603,6 +613,7 @@ export async function updateService(id: string, data: UpdateServiceRequest): Pro
     headers: {
       'Content-Type': 'application/json'
     },
+    credentials: 'include',
     body: JSON.stringify(data)
   });
   if (!res.ok) {
@@ -613,7 +624,8 @@ export async function updateService(id: string, data: UpdateServiceRequest): Pro
 
 export async function deleteService(id: string): Promise<void> {
   const res = await fetch(url + `/api/services/${id}`, {
-    method: 'DELETE'
+    method: 'DELETE',
+    credentials: 'include'
   });
   if (!res.ok) {
     throw new Error(`Error deleting service: ${res.status}`);
@@ -621,7 +633,9 @@ export async function deleteService(id: string): Promise<void> {
 }
 
 export async function fetchServiceHistory(id: string): Promise<ServiceHealthHistory[]> {
-  const res = await fetch(url + `/api/services/${id}/history`);
+  const res = await fetch(url + `/api/services/${id}/history`, {
+    credentials: 'include'
+  });
   if (!res.ok) {
     throw new Error(`Error fetching service history: ${res.status}`);
   }
@@ -629,7 +643,9 @@ export async function fetchServiceHistory(id: string): Promise<ServiceHealthHist
 }
 
 export async function fetchServiceStats(id: string): Promise<ServiceStats> {
-  const res = await fetch(url + `/api/services/${id}/stats`);
+  const res = await fetch(url + `/api/services/${id}/stats`, {
+    credentials: 'include'
+  });
   if (!res.ok) {
     throw new Error(`Error fetching service stats: ${res.status}`);
   }
@@ -643,7 +659,9 @@ export async function fetchAllServicesStats(): Promise<{
   overall_uptime: number;
   avg_response_time: number;
 }> {
-  const res = await fetch(url + '/api/services/stats/all');
+  const res = await fetch(url + '/api/services/stats/all', {
+    credentials: 'include'
+  });
   if (!res.ok) {
     throw new Error(`Error fetching services stats: ${res.status}`);
   }
@@ -811,6 +829,26 @@ export async function importBudgetJSON(payload: BudgetExportPayload): Promise<Bu
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'Import failed' }));
     throw new Error(error.error || 'Import failed');
+  }
+  return res.json();
+}
+
+export async function backfillBudget({ userId, dryRun }: BackfillRequest): Promise<BackfillResponse> {
+  const params = new URLSearchParams();
+  if (dryRun) {
+    params.set('dry_run', 'true');
+  }
+  if (userId) {
+    params.set('user_id', userId);
+  }
+  const query = params.toString();
+  const res = await fetch(url + `/api/budget/admin/backfill${query ? `?${query}` : ''}`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Backfill failed' }));
+    throw new Error(error.error || 'Backfill failed');
   }
   return res.json();
 }

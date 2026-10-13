@@ -53,3 +53,5 @@ testg/
 
 *-coredb.sql
 main
+*.jar
+*.dump

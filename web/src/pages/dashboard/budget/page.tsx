@@ -104,7 +104,7 @@ export default function BudgetDashboard() {
     }
   };
 
-  const handleEditExpense = async (data: any) => {
+  const handleEditExpense = async (data: CreateExpenseRequest | UpdateExpenseRequest) => {
     try {
       if (!viewingExpense) return;
       await updateExpense.mutateAsync({ id: viewingExpense.id, data });

@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Edit, Trash2, Calendar, Repeat } from "lucide-react";
-import type { Expense } from "@/types/api";
+import type { Expense, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 import { format } from "date-fns";
 import { safeFormat } from "@/lib/utils";
 import { formatSigned, isRecurringType, getRecurringLabel } from "@/lib/format";
@@ -24,7 +24,7 @@ interface ExpenseDetailDialogProps {
   expense: Expense | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onEdit?: (data: any) => void | Promise<void>;
+  onEdit?: (data: CreateExpenseRequest | UpdateExpenseRequest) => void | Promise<void>;
   onDelete?: (id: string) => void;
   showToast?: (message: string, type?: "info" | "warning" | "error" | "success") => void;
   isGuest?: boolean;

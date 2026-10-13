@@ -604,3 +604,21 @@ export interface SkipIncomeRequest {
 export interface SkipExpenseRequest {
     id: string;
 }
+
+export interface BackfillRequest {
+    userId?: string;
+    dryRun: boolean;
+}
+
+export interface BackfillResponse {
+    dry_run: boolean;
+    target_user_id: string;
+    legacy_expenses?: number;
+    legacy_incomes?: number;
+    legacy_total?: number;
+    expense_rules?: number;
+    income_rules?: number;
+    expense_instances?: number;
+    income_instances?: number;
+    legacy_remaining?: number;
+}

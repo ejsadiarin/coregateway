@@ -22,6 +22,7 @@ import {
   deleteIncome,
   exportBudgetJSON,
   importBudgetJSON,
+  backfillBudget,
   skipIncome,
   skipExpense,
   fetchRecurringIncomes,
@@ -64,6 +65,8 @@ import type {
   PaginatedResponse,
   BudgetExportPayload,
   BudgetImportResult,
+  BackfillRequest,
+  BackfillResponse,
   SkipIncomeRequest,
   SkipExpenseRequest,
   PriorityGroup,
@@ -462,6 +465,32 @@ export function useImportBudgetJSON() {
     mutationFn: (payload: BudgetExportPayload): Promise<BudgetImportResult> => {
       if (isGuest) throw new GuestBlockedError('Guest users cannot import budget data');
       return importBudgetJSON(payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
+    }
+  });
+}
+
+export function useDryRunBackfill() {
+  const { isGuest } = useAuth();
+
+  return useMutation({
+    mutationFn: (request: Omit<BackfillRequest, 'dryRun'>): Promise<BackfillResponse> => {
+      if (isGuest) throw new GuestBlockedError('Guest users cannot run backfill');
+      return backfillBudget({ ...request, dryRun: true });
+    }
+  });
+}
+
+export function useExecuteBackfill() {
+  const queryClient = useQueryClient();
+  const { isGuest } = useAuth();
+
+  return useMutation({
+    mutationFn: (request: Omit<BackfillRequest, 'dryRun'>): Promise<BackfillResponse> => {
+      if (isGuest) throw new GuestBlockedError('Guest users cannot run backfill');
+      return backfillBudget({ ...request, dryRun: false });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: budgetKeys.all });

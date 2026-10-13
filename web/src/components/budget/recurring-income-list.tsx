@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useRecurringIncomes, useCreateIncome } from '@/hooks/use-budget';
+import { useRecurringIncomes } from '@/hooks/use-budget';
 import { SkipForward, Calendar, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { safeFormat } from "@/lib/utils";

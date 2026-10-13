@@ -80,7 +80,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     if (debouncedSearchTerm !== searchTerm) return;
     setPage(1);
-  }, [debouncedSearchTerm]);
+  }, [debouncedSearchTerm, searchTerm]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
