@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  PenTool,
   Wallet,
   Receipt,
   TrendingUp,
@@ -37,6 +38,12 @@ export const navItems: NavItem[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     path: "/dashboard",
+    section: "overview",
+  },
+  {
+    label: "Draw",
+    icon: PenTool,
+    path: "/dashboard/draw",
     section: "overview",
   },
   {

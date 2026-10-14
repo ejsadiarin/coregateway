@@ -17,8 +17,10 @@ import Budget3Page from "@/pages/dashboard/budget3";
 import Budget4Page from "@/pages/dashboard/budget4";
 import UsersPage from "@/pages/dashboard/admin/users";
 
-// tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw.
+// tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw/:boardId.
 const DrawPage = lazy(() => import("@/pages/dashboard/draw/page"));
+// The boards list carries no canvas code, so it splits into its own tiny chunk.
+const BoardsPage = lazy(() => import("@/pages/dashboard/draw/boards"));
 
 // Kept inline (not imported from the draw page) so the fallback itself
 // doesn't pull the tldraw chunk into the dashboard bundle.
@@ -59,7 +61,15 @@ export default function App() {
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
         <Route
-          path="draw/:boardId?"
+          path="draw"
+          element={
+            <Suspense fallback={<DrawFallback />}>
+              <BoardsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="draw/:boardId"
           element={
             <Suspense fallback={<DrawFallback />}>
               <DrawPage />

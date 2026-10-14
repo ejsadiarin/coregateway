@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Tldraw, getSnapshot, loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
 import "tldraw/tldraw.css";
 import { fetchBoard, saveBoard, snapshotVersion, StaleRevisionError } from "@/lib/draw";
+import type { SaveBoardInput } from "@/lib/draw";
 import type { Board } from "@/types/draw";
 
 // Debounce between the last user edit and the snapshot PUT. Tight enough
@@ -29,6 +30,12 @@ function asStoreSnapshot(value: unknown): TLStoreSnapshot | null {
   return null;
 }
 
+// The save body for a document + its board meta. Shared by the debounced
+// autosave and the unmount flush so both send the same shape.
+function saveInput(snapshot: TLStoreSnapshot, meta: BoardMeta): SaveBoardInput {
+  return { snapshot, snapshotVersion, doc: meta.doc, revision: meta.revision };
+}
+
 export default function DrawPage() {
   const { boardId } = useParams<{ boardId?: string }>();
   const [phase, setPhase] = useState<Phase>("loading");
@@ -42,6 +49,10 @@ export default function DrawPage() {
   const metaRef = useRef<BoardMeta | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const alive = useRef(true);
+  // An edit waiting out the autosave debounce, with the latest document
+  // cached alongside so unmount can flush it without touching the editor
+  // (already disposed by then — children clean up before parent effects).
+  const pendingRef = useRef<{ snapshot: TLStoreSnapshot } | null>(null);
 
   metaRef.current = meta;
 
@@ -64,6 +75,7 @@ export default function DrawPage() {
         snapshotRef.current = asStoreSnapshot(board.snapshot);
         setMeta({ id: board.id, title: board.title, doc: board.doc, revision: board.revision });
         setSaveState("saved");
+        pendingRef.current = null;
         setPhase("ready");
         applySnapshot();
       } catch (err) {
@@ -84,49 +96,63 @@ export default function DrawPage() {
       setPhase("error");
     }
     return () => {
+      // Switching boards (or leaving the route) unmounts us: flush a
+      // still-debounced edit instead of dropping it. Fire-and-forget — the
+      // revision guard keeps a concurrent save from being overwritten.
       alive.current = false;
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      const meta = metaRef.current;
+      const pending = pendingRef.current;
+      if (meta && pending) {
+        void saveBoard(meta.id, saveInput(pending.snapshot, meta)).catch((err) => {
+          console.warn("board switch flush failed", err);
+        });
+      }
+      pendingRef.current = null;
     };
   }, [boardId, load]);
 
-  const doSave = useCallback(async () => {
+  const doSave = useCallback(async (): Promise<boolean> => {
     const editor = editorRef.current;
     const current = metaRef.current;
-    if (!editor || !current) return;
+    if (!editor || !current) return true;
     setSaveState("saving");
     const document = getSnapshot(editor.store).document;
     try {
-      const updated = await saveBoard(current.id, {
-        snapshot: document,
-        snapshotVersion,
-        doc: current.doc,
-        revision: current.revision,
-      });
-      if (!alive.current) return;
+      const updated = await saveBoard(current.id, saveInput(document, current));
+      if (!alive.current) return true;
       setMeta({ ...current, revision: updated.revision });
       setSaveState("saved");
+      pendingRef.current = null;
+      return true;
     } catch (err) {
-      if (!alive.current) return;
+      if (!alive.current) return false;
       if (err instanceof StaleRevisionError) {
         // Never overwrite: refetch to learn the winning revision, then ask.
         try {
           const latest = await fetchBoard(current.id);
-          if (!alive.current) return;
+          if (!alive.current) return false;
           setConflict({ serverRevision: latest.revision });
         } catch {
-          if (!alive.current) return;
+          if (!alive.current) return false;
           setConflict({ serverRevision: "unavailable" });
         }
         setSaveState("conflict");
       } else {
         // Transient failure: keep the edits locally, retry on the next edit.
+        // pending stays set so unmount still flushes instead of dropping them.
         setSaveState("failed");
       }
+      return false;
     }
   }, []);
 
   const scheduleSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    const editor = editorRef.current;
+    if (editor) {
+      pendingRef.current = { snapshot: getSnapshot(editor.store).document };
+    }
     saveTimer.current = setTimeout(() => void doSave(), AUTOSAVE_DELAY_MS);
   }, [doSave]);
 
@@ -181,10 +207,11 @@ export default function DrawPage() {
   }
 
   return (
-    <div className="relative h-full min-h-[500px]">
-      <Tldraw onMount={onMount} />
-
-      <div className="pointer-events-none absolute bottom-20 right-4 flex items-center gap-2 rounded-md bg-background/90 px-3 py-1.5 text-xs shadow backdrop-blur md:bottom-4">
+    <div className="flex h-full min-h-[500px] flex-col">
+      <div className="flex shrink-0 items-center gap-3 px-4 py-2 text-xs">
+        <Link to="/dashboard/draw" className="font-medium text-primary hover:underline">
+          ‹ Boards
+        </Link>
         <span className="max-w-48 truncate font-medium">{meta.title}</span>
         <span className="text-muted-foreground">
           {saveState === "saving"
@@ -198,32 +225,36 @@ export default function DrawPage() {
         )}
       </div>
 
-      {conflict !== null && (
-        <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
-          <p className="text-sm font-medium">This board changed on another device</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {conflict.serverRevision !== "unavailable"
-              ? `Someone saved revision ${conflict.serverRevision} while you were editing (you have ${meta.revision}). Reloading replaces this canvas with the latest — anything you drew since will be lost.`
-              : "Someone saved while you were editing. Reloading replaces this canvas with the latest — anything you drew since will be lost."}
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={reloadLatest}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Reload latest
-            </button>
-            <button
-              type="button"
-              onClick={() => setConflict(null)}
-              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
-            >
-              Keep editing
-            </button>
+      <div className="relative min-h-0 flex-1">
+        <Tldraw onMount={onMount} />
+
+        {conflict !== null && (
+          <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
+            <p className="text-sm font-medium">This board changed on another device</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {conflict.serverRevision !== "unavailable"
+                ? `Someone saved revision ${conflict.serverRevision} while you were editing (you have ${meta.revision}). Reloading replaces this canvas with the latest — anything you drew since will be lost.`
+                : "Someone saved while you were editing. Reloading replaces this canvas with the latest — anything you drew since will be lost."}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={reloadLatest}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Reload latest
+              </button>
+              <button
+                type="button"
+                onClick={() => setConflict(null)}
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              >
+                Keep editing
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

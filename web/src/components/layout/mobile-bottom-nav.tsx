@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
 LayoutDashboard,
+PenTool,
 Wallet,
 Receipt,
 Server,
@@ -36,6 +37,7 @@ const primaryItems: BottomNavItem[] = [
 ];
 
 const overflowItems: BottomNavItem[] = [
+{ label: "Draw", icon: PenTool, path: "/dashboard/draw" },
 { label: "Incomes", icon: TrendingUp, path: "/dashboard/budget/incomes" },
 { label: "Settings", icon: SlidersHorizontal, path: "/dashboard/budget/settings" },
 { label: "Analytics", icon: BarChart3, path: "/analytics", disabled: true },
