@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/contexts/query-context";
@@ -15,6 +16,19 @@ import Budget2Page from "@/pages/dashboard/budget2";
 import Budget3Page from "@/pages/dashboard/budget3";
 import Budget4Page from "@/pages/dashboard/budget4";
 import UsersPage from "@/pages/dashboard/admin/users";
+
+// tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw.
+const DrawPage = lazy(() => import("@/pages/dashboard/draw/page"));
+
+// Kept inline (not imported from the draw page) so the fallback itself
+// doesn't pull the tldraw chunk into the dashboard bundle.
+function DrawFallback() {
+  return (
+    <div className="flex h-full min-h-[500px] items-center justify-center">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -44,6 +58,14 @@ export default function App() {
         <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
+        <Route
+          path="draw/:boardId?"
+          element={
+            <Suspense fallback={<DrawFallback />}>
+              <DrawPage />
+            </Suspense>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

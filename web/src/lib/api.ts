@@ -51,6 +51,8 @@ import type {
 // Explicit VITE_API_URL build arg still wins; `pnpm dev` keeps direct :8080.
 const url = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8080');
 
+export const apiBaseUrl = url;
+
 function wrapPaginated<T>(data: T[], page: number = 1, pageSize: number = 50): PaginatedResponse<T> {
   const total = data.length;
   const totalPages = Math.ceil(total / pageSize);
