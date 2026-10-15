@@ -3,6 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { Tldraw, getSnapshot, loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
 import "tldraw/tldraw.css";
 import { fetchBoard, saveBoard, snapshotVersion, StaleRevisionError } from "@/lib/draw";
+import { installJsonPasteHandler, isTextEntryTarget } from "@/pages/dashboard/draw/jsonclipboard";
+import { drawUiOverrides } from "@/pages/dashboard/draw/shortcuts";
+import { QuickMenu } from "@/pages/dashboard/draw/quickmenu";
 import type { SaveBoardInput } from "@/lib/draw";
 import type { Board } from "@/types/draw";
 
@@ -43,6 +46,8 @@ export default function DrawPage() {
   const [meta, setMeta] = useState<BoardMeta | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState<Conflict | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mountedEditor, setMountedEditor] = useState<Editor | null>(null);
 
   const editorRef = useRef<Editor | null>(null);
   const snapshotRef = useRef<TLStoreSnapshot | null>(null);
@@ -159,11 +164,15 @@ export default function DrawPage() {
   const onMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+      setMountedEditor(editor);
       applySnapshot();
+      const uninstallPaste = installJsonPasteHandler(editor);
       const unsubscribe = editor.store.listen(scheduleSave, { source: "user", scope: "document" });
       return () => {
         unsubscribe();
+        uninstallPaste();
         editorRef.current = null;
+        setMountedEditor(null);
       };
     },
     [applySnapshot, scheduleSave],
@@ -172,6 +181,23 @@ export default function DrawPage() {
   const reloadLatest = useCallback(() => {
     if (boardId) void load(boardId);
   }, [boardId, load]);
+
+  // `/` opens the quick menu from anywhere on the page except while typing:
+  // text inputs, content-editables, and an in-progress shape edit all keep
+  // it. Window-level (not on the canvas wrapper) so it also works when
+  // focus sits on body itself rather than inside the canvas.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (menuOpen || e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (isTextEntryTarget(e.target)) return;
+      const editor = editorRef.current;
+      if (!editor || editor.getEditingShapeId()) return;
+      e.preventDefault();
+      setMenuOpen(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   if (phase === "loading") {
     return (
@@ -226,7 +252,8 @@ export default function DrawPage() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <Tldraw onMount={onMount} />
+        <Tldraw overrides={drawUiOverrides} onMount={onMount} />
+        <QuickMenu open={menuOpen} onOpenChange={setMenuOpen} editor={mountedEditor} />
 
         {conflict !== null && (
           <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
