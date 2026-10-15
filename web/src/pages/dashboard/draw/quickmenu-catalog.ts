@@ -1,6 +1,7 @@
-import type { Editor, TLShapeId } from "tldraw";
+import { createShapeId, type Editor, type TLShapeId } from "tldraw";
 import { COPY_AS_JSON_SHORTCUT, TOOL_SHORTCUTS } from "@/pages/dashboard/draw/shortcuts";
 import { runCopySelectionAsJson } from "@/pages/dashboard/draw/jsonclipboard";
+import { AWS_ICON_CATALOG, insertAwsIcon } from "@/pages/dashboard/draw/aws-icons";
 
 export interface QuickMenuEntry {
   id: string;
@@ -43,7 +44,7 @@ const GEO_VARIANTS = [
 type GeoVariant = (typeof GEO_VARIANTS)[number];
 
 function newShapeId(): TLShapeId {
-  return `shape:${crypto.randomUUID()}` as TLShapeId;
+  return createShapeId();
 }
 
 function viewportCenter(editor: Editor): { x: number; y: number } {
@@ -105,8 +106,15 @@ const CLIPBOARD_ENTRIES: QuickMenuEntry[] = [
   },
 ];
 
-// Ticket 06 fills this with the AWS sprite catalog; the menu renders whatever it holds.
-const ICON_ENTRIES: QuickMenuEntry[] = [];
+// Ticket 06: the AWS sprite catalog. Snapshots carry only the iconId string;
+// the SVG bytes live in aws-icons.tsx and ride the lazy draw chunk.
+const ICON_ENTRIES: QuickMenuEntry[] = AWS_ICON_CATALOG.map((icon) => ({
+  id: `icon-${icon.id}`,
+  title: `${icon.title} icon`,
+  keywords: ["aws", "icon", icon.id, ...icon.keywords],
+  hint: "insert",
+  run: (editor) => insertAwsIcon(editor, icon.id),
+}));
 
 export function buildQuickMenuSections(): QuickMenuSection[] {
   return [

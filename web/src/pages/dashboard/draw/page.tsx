@@ -4,6 +4,7 @@ import { Tldraw, getSnapshot, loadSnapshot, type Editor, type TLStoreSnapshot } 
 import "tldraw/tldraw.css";
 import { fetchBoard, saveBoard, snapshotVersion, StaleRevisionError } from "@/lib/draw";
 import { installJsonPasteHandler, isTextEntryTarget } from "@/pages/dashboard/draw/jsonclipboard";
+import { AWS_SHAPE_UTILS } from "@/pages/dashboard/draw/aws-icons";
 import { drawUiOverrides } from "@/pages/dashboard/draw/shortcuts";
 import { QuickMenu } from "@/pages/dashboard/draw/quickmenu";
 import type { SaveBoardInput } from "@/lib/draw";
@@ -252,7 +253,7 @@ export default function DrawPage() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <Tldraw overrides={drawUiOverrides} onMount={onMount} />
+        <Tldraw overrides={drawUiOverrides} shapeUtils={AWS_SHAPE_UTILS} onMount={onMount} />
         <QuickMenu open={menuOpen} onOpenChange={setMenuOpen} editor={mountedEditor} />
 
         {conflict !== null && (
