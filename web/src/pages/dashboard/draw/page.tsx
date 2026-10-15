@@ -5,6 +5,7 @@ import "tldraw/tldraw.css";
 import { fetchBoard, saveBoard, snapshotVersion, StaleRevisionError } from "@/lib/draw";
 import { installJsonPasteHandler, isTextEntryTarget } from "@/pages/dashboard/draw/jsonclipboard";
 import { AWS_SHAPE_UTILS } from "@/pages/dashboard/draw/aws-icons";
+import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { drawUiOverrides } from "@/pages/dashboard/draw/shortcuts";
 import { QuickMenu } from "@/pages/dashboard/draw/quickmenu";
 import type { SaveBoardInput } from "@/lib/draw";
@@ -48,6 +49,7 @@ export default function DrawPage() {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [docOpen, setDocOpen] = useState(true);
   const [mountedEditor, setMountedEditor] = useState<Editor | null>(null);
 
   const editorRef = useRef<Editor | null>(null);
@@ -162,6 +164,17 @@ export default function DrawPage() {
     saveTimer.current = setTimeout(() => void doSave(), AUTOSAVE_DELAY_MS);
   }, [doSave]);
 
+  // Doc edits ride the same debounced save as canvas edits: the doc string
+  // lives in the board meta, and doSave reads it from metaRef at fire time
+  // (after this render commits), so no save-path changes are needed.
+  const updateDoc = useCallback(
+    (doc: string) => {
+      setMeta((m) => (m ? { ...m, doc } : m));
+      scheduleSave();
+    },
+    [scheduleSave],
+  );
+
   const onMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
@@ -250,11 +263,19 @@ export default function DrawPage() {
         {saveState === "failed" && (
           <span className="text-destructive">Save failed — will retry on next edit</span>
         )}
+        <button
+          type="button"
+          onClick={() => setDocOpen((open) => !open)}
+          className="ml-auto rounded px-2 py-1 font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          {docOpen ? "Hide notes" : "Show notes"}
+        </button>
       </div>
 
-      <div className="relative min-h-0 flex-1">
-        <Tldraw overrides={drawUiOverrides} shapeUtils={AWS_SHAPE_UTILS} onMount={onMount} />
-        <QuickMenu open={menuOpen} onOpenChange={setMenuOpen} editor={mountedEditor} />
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          <Tldraw overrides={drawUiOverrides} shapeUtils={AWS_SHAPE_UTILS} onMount={onMount} />
+          <QuickMenu open={menuOpen} onOpenChange={setMenuOpen} editor={mountedEditor} />
 
         {conflict !== null && (
           <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
@@ -282,6 +303,8 @@ export default function DrawPage() {
             </div>
           </div>
         )}
+        </div>
+        {docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
       </div>
     </div>
   );
