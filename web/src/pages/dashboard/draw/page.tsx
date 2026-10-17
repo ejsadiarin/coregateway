@@ -1,15 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Tldraw, getSnapshot, loadSnapshot, type Editor, type TLStoreSnapshot } from "tldraw";
+import { useParams } from "react-router-dom";
+import {
+  Tldraw,
+  getSnapshot,
+  loadSnapshot,
+  type Editor,
+  type TLComponents,
+  type TLStoreSnapshot,
+} from "tldraw";
 import "tldraw/tldraw.css";
 import { fetchBoard, saveBoard, snapshotVersion, StaleRevisionError } from "@/lib/draw";
 import { installJsonPasteHandler, isTextEntryTarget } from "@/pages/dashboard/draw/jsonclipboard";
-import { AWS_SHAPE_UTILS } from "@/pages/dashboard/draw/aws-icons";
+import { ICON_SHAPE_UTILS } from "@/pages/dashboard/draw/icon-shape";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { drawUiOverrides } from "@/pages/dashboard/draw/shortcuts";
-import { QuickMenu } from "@/pages/dashboard/draw/quickmenu";
+import { IconPalette, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
 import type { SaveBoardInput } from "@/lib/draw";
 import type { Board } from "@/types/draw";
+
+// Strip tldraw's default chrome so our own rail + palette own the layout.
+// StylePanel, NavigationPanel, context menu, dialogs and the main menu stay
+// (working export/theme/zoom beats a dead button).
+const TLDRAW_COMPONENTS: TLComponents = {
+  Toolbar: null,
+  PageMenu: null,
+  SharePanel: null,
+  HelperButtons: null,
+  Minimap: null,
+  QuickActions: null,
+  DebugPanel: null,
+  DebugMenu: null,
+};
 
 // Debounce between the last user edit and the snapshot PUT. Tight enough
 // that a closed tab loses at most this much work; loose enough that
@@ -48,7 +69,8 @@ export default function DrawPage() {
   const [meta, setMeta] = useState<BoardMeta | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState<Conflict | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
+  const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
   const [docOpen, setDocOpen] = useState(true);
   const [mountedEditor, setMountedEditor] = useState<Editor | null>(null);
 
@@ -196,22 +218,22 @@ export default function DrawPage() {
     if (boardId) void load(boardId);
   }, [boardId, load]);
 
-  // `/` opens the quick menu from anywhere on the page except while typing:
-  // text inputs, content-editables, and an in-progress shape edit all keep
-  // it. Window-level (not on the canvas wrapper) so it also works when
-  // focus sits on body itself rather than inside the canvas.
+  // `/` opens the insert palette (icons tab) from anywhere except while
+  // typing: text inputs, content-editables, and an in-progress shape edit all
+  // keep it. Window-level so it also works when focus sits on body.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (menuOpen || e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTextEntryTarget(e.target)) return;
       const editor = editorRef.current;
       if (!editor || editor.getEditingShapeId()) return;
       e.preventDefault();
-      setMenuOpen(true);
+      setPaletteTab("icons");
+      setPaletteOpen(true);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [menuOpen]);
+  }, []);
 
   if (phase === "loading") {
     return (
@@ -246,36 +268,51 @@ export default function DrawPage() {
     );
   }
 
+  const saveLabel =
+    saveState === "saving"
+      ? "Saving…"
+      : saveState === "failed"
+        ? "Save failed — will retry"
+        : saveState === "conflict"
+          ? `Not saved · rev ${meta.revision} is stale`
+          : `Saved · rev ${meta.revision}`;
+
   return (
     <div className="flex h-full min-h-[500px] flex-col">
-      <div className="flex shrink-0 items-center gap-3 px-4 py-2 text-xs">
-        <Link to="/dashboard/draw" className="font-medium text-primary hover:underline">
-          ‹ Boards
-        </Link>
-        <span className="max-w-48 truncate font-medium">{meta.title}</span>
-        <span className="text-muted-foreground">
-          {saveState === "saving"
-            ? "Saving..."
-            : saveState === "conflict"
-              ? `Not saved · rev ${meta.revision} is stale`
-              : `Saved · rev ${meta.revision}`}
-        </span>
-        {saveState === "failed" && (
-          <span className="text-destructive">Save failed — will retry on next edit</span>
-        )}
-        <button
-          type="button"
-          onClick={() => setDocOpen((open) => !open)}
-          className="ml-auto rounded px-2 py-1 font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-        >
-          {docOpen ? "Hide notes" : "Show notes"}
-        </button>
-      </div>
+      <TopBar
+        title={meta.title}
+        saveLabel={saveLabel}
+        saveState={saveState}
+        docOpen={docOpen}
+        onToggleDoc={() => setDocOpen((open) => !open)}
+        paletteOpen={paletteOpen}
+        onTogglePalette={() => setPaletteOpen((open) => !open)}
+      />
 
       <div className="flex min-h-0 flex-1">
+        <ToolRail
+          editor={mountedEditor}
+          paletteOpen={paletteOpen}
+          paletteTab={paletteTab}
+          onOpenPalette={(tab) => {
+            setPaletteTab(tab);
+            setPaletteOpen(true);
+          }}
+        />
+        <IconPalette
+          open={paletteOpen}
+          editor={mountedEditor}
+          tab={paletteTab}
+          onTabChange={setPaletteTab}
+          onClose={() => setPaletteOpen(false)}
+        />
         <div className="relative min-h-0 min-w-0 flex-1">
-          <Tldraw overrides={drawUiOverrides} shapeUtils={AWS_SHAPE_UTILS} onMount={onMount} />
-          <QuickMenu open={menuOpen} onOpenChange={setMenuOpen} editor={mountedEditor} />
+          <Tldraw
+            overrides={drawUiOverrides}
+            shapeUtils={ICON_SHAPE_UTILS}
+            components={TLDRAW_COMPONENTS}
+            onMount={onMount}
+          />
 
         {conflict !== null && (
           <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
