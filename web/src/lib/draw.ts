@@ -1,14 +1,15 @@
-import type { TLStoreSnapshot } from "tldraw";
 import type { Board, BoardSummary } from "@/types/draw";
 import { apiBaseUrl } from "@/lib/api";
 
-// The tldraw snapshot schema version this client writes. It rides in every
-// save so the server row records which client produced the snapshot, and it
-// must roll together with the pinned tldraw dependency.
+// The snapshot schema version this client writes. It rides in every save so
+// the server row records which client produced the snapshot, and it rolls
+// together with the canvas engine.
 export const snapshotVersion = 1;
 
 export interface SaveBoardInput {
-  snapshot: TLStoreSnapshot;
+  // Opaque to the client layer: the board API stores and returns it verbatim,
+  // so the drawing engine can change without touching this contract.
+  snapshot: unknown;
   snapshotVersion: number;
   doc: string;
   revision: number;
