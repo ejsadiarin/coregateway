@@ -33,6 +33,20 @@ export const sectionLabels: Record<NavSection, string> = {
   admin: "ADMIN",
 };
 
+// Which nav item should light up for a given pathname: the longest item path
+// that is either an exact match or a path-segment prefix of the location.
+// So /dashboard/draw/:boardId highlights "Draw" without also lighting up
+// "Dashboard". Returns null when nothing owns the route.
+export function matchNavPath(pathname: string, paths: string[]): string | null {
+  let best: string | null = null;
+  for (const path of paths) {
+    if (pathname === path || pathname.startsWith(`${path}/`)) {
+      if (best === null || path.length > best.length) best = path;
+    }
+  }
+  return best;
+}
+
 export const navItems: NavItem[] = [
   {
     label: "Dashboard",

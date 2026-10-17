@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
 import { useAuth } from "@/contexts/auth-context";
-import { navItems, sectionLabels, type NavItem, type NavSection } from "./sidebar-nav-items";
+import { navItems, sectionLabels, matchNavPath, type NavItem, type NavSection } from "./sidebar-nav-items";
 import {
   Tooltip,
   TooltipContent,
@@ -90,6 +90,8 @@ export function SidebarNav() {
     (item) => !item.adminOnly || isAdmin
   );
 
+  const activePath = matchNavPath(pathname, filteredItems.map((item) => item.path));
+
   // group items by section preserving order
   const sections: { key: NavSection; items: NavItem[] }[] = [];
   let currentSection: NavSection | null = null;
@@ -130,7 +132,7 @@ export function SidebarNav() {
               <NavItemButton
                 key={item.path}
                 item={item}
-                isActive={pathname === item.path}
+                isActive={item.path === activePath}
                 isCollapsed={isCollapsed}
                 onNavigate={handleNavigate}
               />

@@ -19,6 +19,7 @@ type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
+import { matchNavPath } from "./sidebar-nav-items";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface BottomNavItem {
@@ -87,14 +88,14 @@ function OverflowMenu({
   isOpen,
   onClose,
   items,
-  pathname,
+  activePath,
   onNavigate,
   onLogout,
 }: {
   isOpen: boolean;
   onClose: () => void;
   items: BottomNavItem[];
-  pathname: string;
+  activePath: string | null;
   onNavigate: (path: string) => void;
   onLogout: () => void;
 }) {
@@ -140,7 +141,7 @@ function OverflowMenu({
             {/* overflow nav items */}
             <div className="space-y-0.5">
               {items.map((item) => {
-                const isActive = pathname === item.path;
+                const isActive = item.path === activePath;
                 return (
                   <button
                     key={item.path}
@@ -206,6 +207,11 @@ export function MobileBottomNav() {
     (item) => !item.adminOnly || isAdmin,
   );
 
+  const activePath = matchNavPath(
+    pathname,
+    [...primaryItems, ...filteredOverflow].map((item) => item.path),
+  );
+
   const handleNavigate = (path: string) => {
     navigate(path);
     setOverflowOpen(false);
@@ -219,7 +225,7 @@ export function MobileBottomNav() {
 
   // check if any overflow item is active (to highlight the "More" button)
   const isOverflowActive = filteredOverflow.some(
-    (item) => pathname === item.path,
+    (item) => item.path === activePath,
   );
 
   return (
@@ -228,7 +234,7 @@ export function MobileBottomNav() {
         isOpen={isOverflowOpen}
         onClose={() => setOverflowOpen(false)}
         items={filteredOverflow}
-        pathname={pathname}
+        activePath={activePath}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
       />
@@ -257,7 +263,7 @@ export function MobileBottomNav() {
             <NavButton
               key={item.path}
               item={item}
-              isActive={pathname === item.path}
+              isActive={item.path === activePath}
               onPress={() => handleNavigate(item.path)}
             />
           ))}
