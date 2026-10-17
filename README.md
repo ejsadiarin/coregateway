@@ -62,7 +62,7 @@ coregateway/
 │   ├── auth/                 # Authentication (register, login, sessions)
 │   ├── user/                 # User management (CRUD)
 │   ├── monitor/              # Service monitoring (CRUD, health checks, stats)
-│   ├── services/             # Downstream clients + streaming proxy (corefinance)
+│   ├── services/             # Downstream clients + streaming proxy (corefinance, coredraw)
 │   ├── token/                # Internal JWT minting (Ed25519) + JWKS
 │   ├── server/               # HTTP server, routes, middleware wiring
 │   ├── middleware/           # Request ID, slog logging, edge identity, forward headers
@@ -76,7 +76,8 @@ coregateway/
 │       ├── queries/          # sqlc SQL query files
 │       └── sqlc/             # sqlc-generated Go code (DO NOT EDIT)
 ├── services/
-│   └── corefinance/          # Corefinance microservice (separate repo/deployment)
+│   ├── corefinance/          # Corefinance microservice (separate repo/deployment)
+│   └── coredraw/             # Coredraw whiteboard microservice (in-repo Go module)
 ├── proto/                    # Protobuf definitions (buf-managed)
 ├── compose.yml               # Docker Compose for local development
 ├── coregateway-api.http      # HTTP client file (VS Code REST Client)
@@ -141,7 +142,7 @@ Request → chi router
 Budget API flow:
   → EdgeIdentity (mints internal JWT; strips X-User-ID/Cookie)
   → ForwardHeaders (sets Authorization, X-Request-ID on request)
-  → httputil.ReverseProxy (streams body to corefinance-api, no buffering)
+  → httputil.ReverseProxy (streams the body to the downstream api, no buffering)
 ```
 
 ### Key patterns
@@ -162,11 +163,12 @@ Budget API flow:
 | `FRONTEND_URL` | - | Frontend URL for CORS |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `COREFINANCE_URL` | `http://localhost:6969` | Corefinance-api base URL (internal service) |
+| `COREDRAW_URL` | `http://localhost:6971` | Coredraw-api base URL (internal service) |
 | `JWT_PRIVATE_KEY_PEM` | - | Gateway Ed25519 signing key, PEM (required) |
 | `JWT_KID` | - | Signing key ID published in JWKS (required) |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | - | Previous key pair, rotation overlap only |
 | `JWT_ISSUER` | `https://gateway.internal` | Internal JWT issuer |
-| `JWT_AUDIENCE` | `corefinance` | Internal JWT audience |
+| `JWT_AUDIENCE` | `corefinance,coredraw` | Internal JWT audience (must cover every downstream) |
 | `JWT_TTL_SECONDS` | `300` | Internal JWT lifetime in seconds |
 
 See `docs/auth-flow.md` and `.env.example` for the full auth picture.
@@ -201,7 +203,10 @@ make check-refs       # verify README/Makefile references
 Integration tests spin ephemeral Postgres via testcontainers
 (`internal/auth/keys_integration_test.go`). Each repo's Makefile covers its
 own Go module — corefinance has its own (`services/corefinance/Makefile`)
-with the same `test` / `test-unit` / `test-integration` targets.
+with the same `test` / `test-unit` / `test-integration` targets. Coredraw is
+also its own Go module (`services/coredraw/`); run its suites from that
+directory (`go test ./...`), since the root module never crosses the nested
+module boundary.
 
 ## Downstream Microservices
 
@@ -211,7 +216,8 @@ Coregateway acts as a **Backend-for-Frontend (BFF)** gateway. All traffic flows 
 Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
   ├── /api/auth/*    → coregateway handlers (auth, users, services)
   ├── /api/services/* → coregateway handlers (monitoring)
-  └── /api/budget/*  → ForwardHeaders → httputil.ReverseProxy → corefinance-api:6969
+  ├── /api/budget/*  → ForwardHeaders → httputil.ReverseProxy → corefinance-api:6969
+  └── /api/coredraw/* → ForwardHeaders + key-scope gate (coredraw:read|write) → httputil.ReverseProxy → coredraw-api:6971
 ```
 
 ### Current services
@@ -219,6 +225,7 @@ Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
 | Service | URL | Routes | Description |
 |---------|-----|--------|-------------|
 | corefinance-api | `http://corefinance-api:6969` | `/api/budget/*` | Budget/finance tracking |
+| coredraw-api | `http://coredraw-api:6971` | `/api/coredraw/*` | Whiteboard boards (snapshots + docs) |
 
 ### Adding a new microservice (Runbook)
 

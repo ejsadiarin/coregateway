@@ -153,6 +153,12 @@ the downstream checks. Run the matrix live with
 `scripts/x-test-key-scopes.sh` (fill in `ADMIN_EMAIL`/`ADMIN_PASSWORD`
 at the top, or point `ADMIN_JAR` at a live admin cookie jar).
 
+**Coredraw routes enforce the same cover** (`RequireServiceKeyScope("coredraw")`,
+`internal/server/routes.go`): key-authed `GET`/`HEAD` needs
+`coredraw:read` cover, other methods need `coredraw:write` cover;
+uncovered keys get 403 and are never proxied. Sessions pass through to
+the downstream checks.
+
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`
 (role-derived vs key scopes) both arrive in the verified claims. What it
@@ -301,7 +307,7 @@ JWT_KID=2026-09-a           # key ID published in JWT header + JWKS (required)
 JWT_PREV_PRIVATE_KEY_PEM=   # previous private key during rotation (optional)
 JWT_PREV_KID=               # previous key ID (optional)
 JWT_ISSUER=https://gateway.internal
-JWT_AUDIENCE=corefinance
+JWT_AUDIENCE=corefinance,coredraw
 JWT_TTL_SECONDS=300
 ```
 
@@ -311,14 +317,14 @@ JWT_TTL_SECONDS=300
 | `JWT_KID` | yes (non-empty) | Names *which* key signed a token, so verifiers can pick the right public key and old/new keys coexist during rotation. Date-letter scheme (`2026-09-a`) is convention only — any non-empty value passes, no format check — but it keeps rotations ordered and greppable. |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | only during rotation — and asymmetric: `JWT_PREV_KID` is required when `JWT_PREV_PRIVATE_KEY_PEM` is set (startup error otherwise), but `JWT_PREV_KID` alone without the PEM is silently ignored | Overlap window: the old key stays verifiable while the new one signs. Cleared after rotation. |
 | `JWT_ISSUER` | no — defaults to `https://gateway.internal` when unset | `iss` claim: the single authorized signer. Rejects tokens minted by anyone else, even if correctly signed by some other key the verifier might know. Same value everywhere *by design* (decision: one issuer; environments are separated by network + secrets, not by issuer string). |
-| `JWT_AUDIENCE` | no — defaults to `corefinance` when unset | `aud` claim: *who the token is for*, minted as a list. Comma-separated (`corefinance,corereminder`); a downstream accepts a token when its own name is a member, and rejects tokens that don't list it — this is what stops cross-service token replay. Must cover every downstream you proxy to. |
+| `JWT_AUDIENCE` | no — defaults to `corefinance,coredraw` when unset | `aud` claim: *who the token is for*, minted as a list. Comma-separated (`corefinance,coredraw`); a downstream accepts a token when its own name is a member, and rejects tokens that don't list it — this is what stops cross-service token replay. Must cover every downstream you proxy to. |
 | `JWT_TTL_SECONDS` | no — defaults to `300` | Token lifetime. Short enough that a leaked token is nearly useless, long enough to cover any single proxied request with margin. Explicit `<=0` fails startup; a non-numeric value silently falls back to `300`. |
 
 Downstream services need their own side of the handshake (see
 `new-downstream-service.md`): `JWT_JWKS_URL` (where to fetch the
 gateway's public keys), plus the expected `JWT_ISSUER` /
 `JWT_AUDIENCE`. These also have working defaults
-(`https://gateway.internal`, `corefinance`,
+(`https://gateway.internal`, `corefinance,coredraw`,
 `https://gateway.internal/.well-known/jwks.json`), so the downstream
 refuses to start only when values are empty after fallback or — the
 usual case — when the initial JWKS fetch itself fails. Never serves
