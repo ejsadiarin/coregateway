@@ -4,7 +4,7 @@ import { apiBaseUrl } from "@/lib/api";
 // The snapshot schema version this client writes. It rides in every save so
 // the server row records which client produced the snapshot, and it rolls
 // together with the canvas engine.
-export const snapshotVersion = 1;
+export const snapshotVersion = 2;
 
 export interface SaveBoardInput {
   // Opaque to the client layer: the board API stores and returns it verbatim,

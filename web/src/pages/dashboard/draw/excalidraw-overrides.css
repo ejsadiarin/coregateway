@@ -1,0 +1,25 @@
+/* Our tool rail and TopBar replace Excalidraw's own tool palette and main
+   menu, so hide those two islands. The context menu (right-click) and the
+   bottom-left style panel are deliberately kept. */
+
+.coredraw-canvas .App-toolbar-container,
+.coredraw-canvas .App-menu__left {
+  display: none !important;
+}
+
+/* Excalidraw fills its parent only when that parent has a definite height.
+   Setting h-full was not enough through the flex chain (the canvas resolved to
+   a runaway height and the interactive layer landed off-screen), so anchor the
+   wrapper to the positioned parent instead. */
+.coredraw-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* Excalidraw's root resolves to a runaway height (2^25 px) unless it is pinned
+   to a definite box, which pushes its interactive canvas off-screen. Pin it. */
+.coredraw-canvas .excalidraw {
+  height: 100% !important;
+  max-height: 100%;
+  overflow: hidden;
+}

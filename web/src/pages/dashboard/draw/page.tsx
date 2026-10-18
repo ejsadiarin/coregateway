@@ -1,104 +1,73 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import {
-  Tldraw,
-  getSnapshot,
-  loadSnapshot,
-  type Editor,
-  type TLComponents,
-  type TLStoreSnapshot,
-} from "tldraw";
-import "tldraw/tldraw.css";
-import { installJsonPasteHandler, isTextEntryTarget } from "@/pages/dashboard/draw/jsonclipboard";
-import { ICON_SHAPE_UTILS } from "@/pages/dashboard/draw/icon-shape";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { ExcalidrawCanvas } from "@/pages/dashboard/draw/excalidraw-canvas";
+import { sceneToSnapshot, snapshotToScene, DEFAULT_APP_STATE, type LoadedScene } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
-import { drawUiOverrides } from "@/pages/dashboard/draw/shortcuts";
 import { IconPalette, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
-
-// Strip tldraw's default chrome so our own rail + palette own the layout.
-// StylePanel, NavigationPanel, context menu, dialogs and the main menu stay
-// (working export/theme/zoom beats a dead button).
-const TLDRAW_COMPONENTS: TLComponents = {
-  Toolbar: null,
-  PageMenu: null,
-  SharePanel: null,
-  HelperButtons: null,
-  Minimap: null,
-  QuickActions: null,
-  DebugPanel: null,
-  DebugMenu: null,
-};
-
-// Fresh boards carry the DB default ({}) rather than a real snapshot.
-// Only hand tldraw something with the store+schema shape it requires;
-// anything else means "blank canvas".
-function asStoreSnapshot(value: unknown): TLStoreSnapshot | null {
-  if (value && typeof value === "object" && "store" in value && "schema" in value) {
-    return value as TLStoreSnapshot;
-  }
-  return null;
-}
 
 export default function DrawPage() {
   const { boardId } = useParams<{ boardId?: string }>();
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
   const [docOpen, setDocOpen] = useState(true);
-  const [mountedEditor, setMountedEditor] = useState<Editor | null>(null);
+  const [scene, setScene] = useState<LoadedScene | null>(null);
+  // Bumped on every load so the canvas remounts (Excalidraw only reads
+  // initialData on mount).
+  const [loadEpoch, setLoadEpoch] = useState(0);
 
-  const editorRef = useRef<Editor | null>(null);
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  // Serialized form of the last scene we know matches the server. Excalidraw
+  // emits change events for view-only churn (scroll, selection, load
+  // normalization) that a user edit did not cause; comparing content keeps
+  // those from bumping the board revision on every open.
+  const lastSeenRef = useRef<string | null>(null);
+  // Excalidraw normalizes elements as it loads them, so the first change event
+  // after a mount reports the same logical scene with different bytes. Adopt
+  // that as the baseline rather than saving it, so merely opening a board does
+  // not bump its revision (and trip the conflict guard for anyone else).
+  const adoptBaselineRef = useRef(false);
 
   // The engine bridge the sync controller talks to. Stable identity so the
-  // controller can hold it; the methods read the live editor through
-  // editorRef, so a remount (board switch) needs no re-wiring.
+  // controller can hold it; `capture` reads the live canvas through apiRef,
+  // `apply` drops a loaded snapshot into state for the canvas to mount with.
   const engineRef = useRef<SyncEngine>({
     capture: () => {
-      const editor = editorRef.current;
-      return editor ? getSnapshot(editor.store).document : null;
+      const api = apiRef.current;
+      return api ? sceneToSnapshot(api.getSceneElements(), api.getAppState()) : null;
     },
     apply: (snapshot) => {
-      const editor = editorRef.current;
-      const store = asStoreSnapshot(snapshot);
-      if (editor && store) loadSnapshot(editor.store, { document: store });
+      const next = snapshotToScene(snapshot);
+      lastSeenRef.current = JSON.stringify(sceneToSnapshot(next.elements, next.appState));
+      adoptBaselineRef.current = true;
+      setScene(next);
+      setLoadEpoch((epoch) => epoch + 1);
     },
   });
 
   const sync = useBoardSync(boardId, engineRef.current);
-  const { meta, updateDoc, scheduleSave, applyCurrent, reloadLatest } = sync;
+  const { meta, updateDoc, scheduleSave, reloadLatest } = sync;
 
-  const onMount = useCallback(
-    (editor: Editor) => {
-      editorRef.current = editor;
-      setMountedEditor(editor);
-      applyCurrent();
-      const uninstallPaste = installJsonPasteHandler(editor);
-      const unsubscribe = editor.store.listen(scheduleSave, { source: "user", scope: "document" });
-      return () => {
-        unsubscribe();
-        uninstallPaste();
-        editorRef.current = null;
-        setMountedEditor(null);
-      };
-    },
-    [applyCurrent, scheduleSave],
-  );
+  // Only arm a save when the scene actually differs from the last known state.
+  const onCanvasChange = useCallback(() => {
+    const api = apiRef.current;
+    if (!api) return;
+    const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), api.getAppState()));
+    if (adoptBaselineRef.current) {
+      adoptBaselineRef.current = false;
+      lastSeenRef.current = json;
+      return;
+    }
+    if (json === lastSeenRef.current) return;
+    lastSeenRef.current = json;
+    scheduleSave();
+  }, [scheduleSave]);
 
-  // `/` opens the insert palette (icons tab) from anywhere except while
-  // typing: text inputs, content-editables, and an in-progress shape edit all
-  // keep it. Window-level so it also works when focus sits on body.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (isTextEntryTarget(e.target)) return;
-      const editor = editorRef.current;
-      if (!editor || editor.getEditingShapeId()) return;
-      e.preventDefault();
-      setPaletteTab("icons");
-      setPaletteOpen(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+  // The canvas may mount after the network load resolves; record its API so
+  // `capture` can read the live scene.
+  const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
+    apiRef.current = api;
   }, []);
 
   if (sync.phase === "loading") {
@@ -158,7 +127,7 @@ export default function DrawPage() {
 
       <div className="flex min-h-0 flex-1">
         <ToolRail
-          editor={mountedEditor}
+          editor={null}
           paletteOpen={paletteOpen}
           paletteTab={paletteTab}
           onOpenPalette={(tab) => {
@@ -168,45 +137,45 @@ export default function DrawPage() {
         />
         <IconPalette
           open={paletteOpen}
-          editor={mountedEditor}
+          editor={null}
           tab={paletteTab}
           onTabChange={setPaletteTab}
           onClose={() => setPaletteOpen(false)}
         />
         <div className="relative min-h-0 min-w-0 flex-1">
-          <Tldraw
-            overrides={drawUiOverrides}
-            shapeUtils={ICON_SHAPE_UTILS}
-            components={TLDRAW_COMPONENTS}
-            onMount={onMount}
+          <ExcalidrawCanvas
+            key={`${meta.id}:${loadEpoch}`}
+            initialScene={scene ?? { elements: [], appState: DEFAULT_APP_STATE, files: {} }}
+            onApiReady={onApiReady}
+            onChange={onCanvasChange}
           />
 
-        {conflict !== null && (
-          <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
-            <p className="text-sm font-medium">This board changed on another device</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {conflict.serverRevision !== "unavailable"
-                ? `Someone saved revision ${conflict.serverRevision} while you were editing (you have ${meta.revision}). Reloading replaces this canvas with the latest — anything you drew since will be lost.`
-                : "Someone saved while you were editing. Reloading replaces this canvas with the latest — anything you drew since will be lost."}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={reloadLatest}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Reload latest
-              </button>
-              <button
-                type="button"
-                onClick={() => sync.dismissConflict()}
-                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
-              >
-                Keep editing
-              </button>
+          {conflict !== null && (
+            <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
+              <p className="text-sm font-medium">This board changed on another device</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {conflict.serverRevision !== "unavailable"
+                  ? `Someone saved revision ${conflict.serverRevision} while you were editing (you have ${meta.revision}). Reloading replaces this canvas with the latest — anything you drew since will be lost.`
+                  : "Someone saved while you were editing. Reloading replaces this canvas with the latest — anything you drew since will be lost."}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={reloadLatest}
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Reload latest
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sync.dismissConflict()}
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                >
+                  Keep editing
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </div>
         {docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
       </div>
