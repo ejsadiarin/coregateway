@@ -399,6 +399,28 @@ export function toExcalidrawTool(id: string): ToolType {
   return (TOOL_MAP as Record<string, ToolType | undefined>)[id] ?? "selection";
 }
 
+// eraser.io-style single-key tool shortcuts. Most coincide with Excalidraw's
+// own bindings, but `d` deliberately does not (Excalidraw binds `d` to the
+// diamond): the page intercepts these at the window so our mapping always wins.
+// Rectangle and ellipse are here too even though they are palette tools, not
+// rail tools, because eraser.io binds them to bare keys.
+export const TOOL_SHORTCUTS: Record<string, ToolType> = {
+  v: "selection",
+  h: "hand",
+  d: "freedraw",
+  e: "eraser",
+  t: "text",
+  r: "rectangle",
+  o: "ellipse",
+  a: "arrow",
+  l: "line",
+  f: "frame",
+};
+
+export function toolForShortcut(key: string): ToolType | null {
+  return TOOL_SHORTCUTS[key.toLowerCase()] ?? null;
+}
+
 // Reverse of TOOL_MAP: the rail tool matching an Excalidraw active tool, so the
 // rail can highlight what the engine reports. Non-rail tools (rectangle,
 // ellipse, …) map to null; they are placed from the palette, not the rail.

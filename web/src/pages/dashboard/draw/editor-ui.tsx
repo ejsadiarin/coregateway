@@ -174,6 +174,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export function IconPalette({
   open,
   tab,
+  focusNonce,
   onTabChange,
   onClose,
   onPickIcon,
@@ -181,6 +182,9 @@ export function IconPalette({
 }: {
   open: boolean;
   tab: PaletteTab;
+  // Bumped by the page when `/` is pressed, so search refocuses even when the
+  // palette is already open.
+  focusNonce: number;
   onTabChange: (tab: PaletteTab) => void;
   onClose: () => void;
   onPickIcon: (iconId: string, title: string) => void;
@@ -192,10 +196,13 @@ export function IconPalette({
 
   useEffect(() => {
     if (open) {
-      const t = setTimeout(() => inputRef.current?.focus(), 30);
+      const t = setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 30);
       return () => clearTimeout(t);
     }
-  }, [open]);
+  }, [open, focusNonce]);
 
   const tokens = useMemo(
     () =>

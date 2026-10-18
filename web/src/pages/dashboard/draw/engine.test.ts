@@ -15,6 +15,7 @@ import {
   sceneToSnapshot,
   snapshotToScene,
   toExcalidrawTool,
+  toolForShortcut,
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
 
@@ -143,5 +144,29 @@ describe("toExcalidrawTool", () => {
 
   it("falls back to the selection tool for unknown ids", () => {
     expect(toExcalidrawTool("lasso")).toBe("selection");
+  });
+});
+
+describe("toolForShortcut", () => {
+  it("maps the eraser.io keys", () => {
+    expect(toolForShortcut("v")).toBe("selection");
+    expect(toolForShortcut("h")).toBe("hand");
+    expect(toolForShortcut("e")).toBe("eraser");
+    expect(toolForShortcut("t")).toBe("text");
+    expect(toolForShortcut("r")).toBe("rectangle");
+    expect(toolForShortcut("o")).toBe("ellipse");
+    expect(toolForShortcut("a")).toBe("arrow");
+    expect(toolForShortcut("l")).toBe("line");
+    expect(toolForShortcut("f")).toBe("frame");
+  });
+
+  it("maps d to freedraw, overriding Excalidraw's diamond binding", () => {
+    expect(toolForShortcut("d")).toBe("freedraw");
+  });
+
+  it("is case-insensitive and null for unmapped keys", () => {
+    expect(toolForShortcut("V")).toBe("selection");
+    expect(toolForShortcut("z")).toBeNull();
+    expect(toolForShortcut("1")).toBeNull();
   });
 });

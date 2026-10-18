@@ -23,7 +23,7 @@ import type { RailToolId, ShapeKind } from "@/pages/dashboard/draw/engine";
 export interface RailTool {
   id: RailToolId;
   title: string;
-  // Excalidraw's own single-key shortcut, shown as a hint.
+  // eraser.io's single-key shortcut for this tool (see engine TOOL_SHORTCUTS).
   hint?: string;
   icon: LucideIcon;
 }
@@ -31,7 +31,7 @@ export interface RailTool {
 export const RAIL_TOOLS: RailTool[] = [
   { id: "select", title: "Select", hint: "v", icon: MousePointer2 },
   { id: "hand", title: "Pan", hint: "h", icon: Hand },
-  { id: "draw", title: "Draw", hint: "p", icon: Pen },
+  { id: "draw", title: "Draw", hint: "d", icon: Pen },
   { id: "eraser", title: "Eraser", hint: "e", icon: Eraser },
   { id: "text", title: "Text", hint: "t", icon: Type },
   { id: "arrow", title: "Arrow", hint: "a", icon: ArrowRight },

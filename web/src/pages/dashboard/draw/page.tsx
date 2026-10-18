@@ -7,11 +7,13 @@ import {
   insertIconOnCanvas,
   insertShapeOnCanvas,
   setCanvasTool,
+  setCanvasToolType,
 } from "@/pages/dashboard/draw/excalidraw-canvas";
 import {
   sceneToSnapshot,
   snapshotToScene,
   railToolForExcalidrawTool,
+  toolForShortcut,
   DEFAULT_APP_STATE,
   type LoadedScene,
   type RailToolId,
@@ -25,8 +27,11 @@ export default function DrawPage() {
   const { boardId } = useParams<{ boardId?: string }>();
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
+  // Bumped when `/` is pressed so the palette's search refocuses even when the
+  // panel is already open.
+  const [paletteFocusNonce, setPaletteFocusNonce] = useState(0);
   const [docOpen, setDocOpen] = useState(true);
-  const [activeTool, setActiveTool] = useState<RailToolId>("select");
+  const [activeTool, setActiveTool] = useState<RailToolId | null>("select");
   const [scene, setScene] = useState<LoadedScene | null>(null);
   // Bumped on every load so the canvas remounts (Excalidraw only reads
   // initialData on mount).
@@ -70,7 +75,7 @@ export default function DrawPage() {
     if (!api) return;
     const appState = api.getAppState();
     const rail = railToolForExcalidrawTool(appState.activeTool?.type ?? "");
-    if (rail) setActiveTool(rail);
+    setActiveTool(rail);
     const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), appState));
     if (adoptBaselineRef.current) {
       adoptBaselineRef.current = false;
@@ -110,19 +115,38 @@ export default function DrawPage() {
     if (api) void exportCanvas(api, format);
   }, []);
 
-  // `/` opens the icon palette, matching the eraser.io flow.
+  // eraser.io-style keyboard: `/` opens icon search, and bare tool keys
+  // (v/h/d/e/t/r/o/a/l/f) select the matching tool. Bound on the window in the
+  // capture phase so it preempts Excalidraw's own document-capture handler —
+  // Excalidraw binds `d` to the diamond, we want it to draw.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+
+      if (e.key === "/") {
+        e.preventDefault();
+        e.stopPropagation();
+        setPaletteTab("icons");
+        setPaletteOpen(true);
+        setPaletteFocusNonce((n) => n + 1);
+        return;
+      }
+
+      if (e.shiftKey) return;
+      const tool = toolForShortcut(e.key);
+      if (!tool) return;
       e.preventDefault();
-      setPaletteTab("icons");
-      setPaletteOpen(true);
+      e.stopPropagation();
+      const api = apiRef.current;
+      if (!api) return;
+      setCanvasToolType(api, tool);
+      setActiveTool(railToolForExcalidrawTool(tool));
     }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, []);
 
   if (sync.phase === "loading") {
@@ -195,6 +219,7 @@ export default function DrawPage() {
         <IconPalette
           open={paletteOpen}
           tab={paletteTab}
+          focusNonce={paletteFocusNonce}
           onTabChange={setPaletteTab}
           onClose={() => setPaletteOpen(false)}
           onPickIcon={handlePickIcon}

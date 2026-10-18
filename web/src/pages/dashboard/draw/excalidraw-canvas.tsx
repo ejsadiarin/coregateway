@@ -14,7 +14,7 @@ import {
   exportToSvg,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI, ToolType } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import {
@@ -92,6 +92,12 @@ function viewportCenter(api: ExcalidrawImperativeAPI): { x: number; y: number } 
 
 export function setCanvasTool(api: ExcalidrawImperativeAPI, toolId: string): void {
   api.setActiveTool({ type: toExcalidrawTool(toolId) });
+}
+
+// Activate an Excalidraw tool directly (used by the eraser.io-style keyboard
+// shortcuts, which include tools the rail does not carry, e.g. rectangle).
+export function setCanvasToolType(api: ExcalidrawImperativeAPI, tool: ToolType): void {
+  api.setActiveTool({ type: tool });
 }
 
 function appendElements(api: ExcalidrawImperativeAPI, elements: ExcalidrawElement[]): void {
