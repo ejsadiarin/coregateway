@@ -93,12 +93,22 @@ function randomInt(): number {
 // standalone SVG image; pin a dark ink so they read on the default light board.
 const MONO_INK = "#1e1e1e";
 
+// UTF-8 safe base64 (browser and node). Excalidraw decodes every image data URL
+// with `atob`, so the URL must be base64 — a `;utf8,` percent-encoded URL throws
+// InvalidCharacterError when the file is added to the scene.
+function toBase64(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
 export function spriteToDataUrl(iconId: string): string {
   const { viewBox, body } = iconSprite(iconId);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="100%" height="100%" ` +
     `style="color:${MONO_INK}">${body}</svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;base64,${toBase64(svg)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,8 +158,11 @@ function base(f: BaseFields) {
 
 // The file id used for every placement of one icon, so all Lambda glyphs share
 // a single uploaded file. Deterministic, so re-hydration can rebuild the file.
+// Must be CSS-selector safe: Excalidraw's SVG export does
+// `querySelector(`#image-${fileId}`)`, so a ':' (as in "logos:aws-lambda")
+// would throw an invalid-selector error.
 export function iconFileId(iconId: string): string {
-  return `icon:${iconId}`;
+  return `icon-${iconId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 export interface IconInsertion {
@@ -384,4 +397,15 @@ export const TOOL_MAP: Record<RailToolId, ToolType> = {
 
 export function toExcalidrawTool(id: string): ToolType {
   return (TOOL_MAP as Record<string, ToolType | undefined>)[id] ?? "selection";
+}
+
+// Reverse of TOOL_MAP: the rail tool matching an Excalidraw active tool, so the
+// rail can highlight what the engine reports. Non-rail tools (rectangle,
+// ellipse, …) map to null; they are placed from the palette, not the rail.
+const RAIL_TOOL_BY_EXCALIDRAW = new Map<ToolType, RailToolId>(
+  (Object.entries(TOOL_MAP) as [RailToolId, ToolType][]).map(([rail, tool]) => [tool, rail]),
+);
+
+export function railToolForExcalidrawTool(toolType: string): RailToolId | null {
+  return RAIL_TOOL_BY_EXCALIDRAW.get(toolType as ToolType) ?? null;
 }

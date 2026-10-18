@@ -3,6 +3,7 @@
    bottom-left style panel are deliberately kept. */
 
 .coredraw-canvas .App-toolbar-container,
+.coredraw-canvas .App-menu_top,
 .coredraw-canvas .App-menu__left {
   display: none !important;
 }

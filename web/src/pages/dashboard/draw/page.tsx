@@ -1,8 +1,22 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { ExcalidrawCanvas } from "@/pages/dashboard/draw/excalidraw-canvas";
-import { sceneToSnapshot, snapshotToScene, DEFAULT_APP_STATE, type LoadedScene } from "@/pages/dashboard/draw/engine";
+import {
+  ExcalidrawCanvas,
+  exportCanvas,
+  insertIconOnCanvas,
+  insertShapeOnCanvas,
+  setCanvasTool,
+} from "@/pages/dashboard/draw/excalidraw-canvas";
+import {
+  sceneToSnapshot,
+  snapshotToScene,
+  railToolForExcalidrawTool,
+  DEFAULT_APP_STATE,
+  type LoadedScene,
+  type RailToolId,
+  type ShapeKind,
+} from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { IconPalette, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
@@ -12,6 +26,7 @@ export default function DrawPage() {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
   const [docOpen, setDocOpen] = useState(true);
+  const [activeTool, setActiveTool] = useState<RailToolId>("select");
   const [scene, setScene] = useState<LoadedScene | null>(null);
   // Bumped on every load so the canvas remounts (Excalidraw only reads
   // initialData on mount).
@@ -53,7 +68,10 @@ export default function DrawPage() {
   const onCanvasChange = useCallback(() => {
     const api = apiRef.current;
     if (!api) return;
-    const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), api.getAppState()));
+    const appState = api.getAppState();
+    const rail = railToolForExcalidrawTool(appState.activeTool?.type ?? "");
+    if (rail) setActiveTool(rail);
+    const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), appState));
     if (adoptBaselineRef.current) {
       adoptBaselineRef.current = false;
       lastSeenRef.current = json;
@@ -68,6 +86,43 @@ export default function DrawPage() {
   // `capture` can read the live scene.
   const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
     apiRef.current = api;
+  }, []);
+
+  const handleSelectTool = useCallback((id: RailToolId) => {
+    const api = apiRef.current;
+    if (!api) return;
+    setCanvasTool(api, id);
+    setActiveTool(id);
+  }, []);
+
+  const handlePickIcon = useCallback((iconId: string, title: string) => {
+    const api = apiRef.current;
+    if (api) insertIconOnCanvas(api, iconId, title);
+  }, []);
+
+  const handlePickShape = useCallback((kind: ShapeKind) => {
+    const api = apiRef.current;
+    if (api) insertShapeOnCanvas(api, kind);
+  }, []);
+
+  const handleExport = useCallback((format: "png" | "svg") => {
+    const api = apiRef.current;
+    if (api) void exportCanvas(api, format);
+  }, []);
+
+  // `/` opens the icon palette, matching the eraser.io flow.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      e.preventDefault();
+      setPaletteTab("icons");
+      setPaletteOpen(true);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
   if (sync.phase === "loading") {
@@ -123,11 +178,13 @@ export default function DrawPage() {
         onToggleDoc={() => setDocOpen((open) => !open)}
         paletteOpen={paletteOpen}
         onTogglePalette={() => setPaletteOpen((open) => !open)}
+        onExport={handleExport}
       />
 
       <div className="flex min-h-0 flex-1">
         <ToolRail
-          editor={null}
+          activeTool={activeTool}
+          onSelectTool={handleSelectTool}
           paletteOpen={paletteOpen}
           paletteTab={paletteTab}
           onOpenPalette={(tab) => {
@@ -137,10 +194,11 @@ export default function DrawPage() {
         />
         <IconPalette
           open={paletteOpen}
-          editor={null}
           tab={paletteTab}
           onTabChange={setPaletteTab}
           onClose={() => setPaletteOpen(false)}
+          onPickIcon={handlePickIcon}
+          onPickShape={handlePickShape}
         />
         <div className="relative min-h-0 min-w-0 flex-1">
           <ExcalidrawCanvas

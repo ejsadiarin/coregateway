@@ -21,10 +21,10 @@ import {
 const LAMBDA = "logos:aws-lambda";
 
 describe("spriteToDataUrl", () => {
-  it("encodes the vendored sprite as an svg data URL", () => {
+  it("encodes the vendored sprite as a base64 svg data URL", () => {
     const url = spriteToDataUrl(LAMBDA);
-    expect(url.startsWith("data:image/svg+xml;utf8,")).toBe(true);
-    expect(decodeURIComponent(url)).toContain("<svg");
+    expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
+    expect(atob(url.slice(url.indexOf(",") + 1))).toContain("<svg");
   });
 });
 

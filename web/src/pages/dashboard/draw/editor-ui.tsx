@@ -1,20 +1,38 @@
 // Editor chrome for coredraw — an eraser.io-inspired left rail + searchable
-// left palette, with tldraw's default toolbar/menu chrome hidden (see
-// TLDRAW_COMPONENTS in page.tsx).
+// left palette over the Excalidraw canvas.
 //
-// The rail switches tools; the palette inserts shapes and icons. Icons render
-// from the vendored sprite and always carry a caption under them on canvas.
+// This module is engine-agnostic: it renders and reports intent through
+// callbacks, and never imports the drawing engine. The page wires those
+// callbacks to the canvas adapter.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useValue, type Editor } from "tldraw";
-import { Boxes, ChevronLeft, Layers, Search, Shapes, X } from "lucide-react";
+import { Boxes, ChevronLeft, Download, Layers, Search, Shapes, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ICON_FAMILIES, ICON_ENTRIES, type IconEntry } from "@/pages/dashboard/draw/icon-catalog";
-import { IconGlyph, insertIcon } from "@/pages/dashboard/draw/icon-shape";
+import { ICON_FAMILIES, ICON_ENTRIES, iconSprite, type IconEntry } from "@/pages/dashboard/draw/icon-catalog";
 import { RAIL_TOOLS, SHAPE_ITEMS, type ShapeItem } from "@/pages/dashboard/draw/palette-catalog";
+import type { RailToolId, ShapeKind } from "@/pages/dashboard/draw/engine";
 
 export type PaletteTab = "icons" | "shapes";
+
+// A vendored sprite glyph for the palette grid. Coloured families (logos) carry
+// their own fills; monochrome families (mdi) inherit currentColor so they read
+// in both light and dark chrome.
+function PaletteGlyph({ iconId }: { iconId: string }) {
+  const sprite = iconSprite(iconId);
+  return (
+    <svg
+      viewBox={sprite.viewBox}
+      width="100%"
+      height="100%"
+      fill="currentColor"
+      aria-hidden
+      // Sprite bodies are generated from Iconify and committed — trusted
+      // markup, never user input.
+      dangerouslySetInnerHTML={{ __html: sprite.body }}
+    />
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Tool rail
@@ -53,22 +71,18 @@ function RailButton({
 }
 
 export function ToolRail({
-  editor,
+  activeTool,
+  onSelectTool,
   paletteOpen,
   paletteTab,
   onOpenPalette,
 }: {
-  editor: Editor | null;
+  activeTool: RailToolId | null;
+  onSelectTool: (id: RailToolId) => void;
   paletteOpen: boolean;
   paletteTab: PaletteTab;
   onOpenPalette: (tab: PaletteTab) => void;
 }) {
-  const currentTool = useValue(
-    "current tool",
-    () => editor?.getCurrentToolId() ?? "select",
-    [editor],
-  );
-
   return (
     <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
       {RAIL_TOOLS.map((t) => (
@@ -76,8 +90,8 @@ export function ToolRail({
           key={t.id}
           title={t.title}
           hint={t.hint}
-          active={currentTool === t.tool}
-          onClick={() => editor?.setCurrentTool(t.tool)}
+          active={activeTool === t.id}
+          onClick={() => onSelectTool(t.id)}
         >
           <t.icon className="h-[18px] w-[18px]" />
         </RailButton>
@@ -122,7 +136,7 @@ function IconTile({ entry, onPick }: { entry: IconEntry; onPick: () => void }) {
       className="group flex flex-col items-center gap-1 rounded-md border border-transparent p-1.5 text-center transition-colors hover:border-border hover:bg-accent"
     >
       <span className="flex h-8 w-8 items-center justify-center text-foreground">
-        <IconGlyph iconId={entry.id} label={entry.title} />
+        <PaletteGlyph iconId={entry.id} />
       </span>
       <span className="w-full truncate text-[10px] leading-tight text-muted-foreground group-hover:text-foreground">
         {entry.title}
@@ -159,16 +173,18 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 
 export function IconPalette({
   open,
-  editor,
   tab,
   onTabChange,
   onClose,
+  onPickIcon,
+  onPickShape,
 }: {
   open: boolean;
-  editor: Editor | null;
   tab: PaletteTab;
   onTabChange: (tab: PaletteTab) => void;
   onClose: () => void;
+  onPickIcon: (iconId: string, title: string) => void;
+  onPickShape: (kind: ShapeKind) => void;
 }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<string>("all");
@@ -304,7 +320,7 @@ export function IconPalette({
                             <IconTile
                               key={entry.id}
                               entry={entry}
-                              onPick={() => editor && insertIcon(editor, entry.id, entry.title)}
+                              onPick={() => onPickIcon(entry.id, entry.title)}
                             />
                           ))}
                         </div>
@@ -320,7 +336,7 @@ export function IconPalette({
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           <div className="grid grid-cols-4 gap-0.5">
             {SHAPE_ITEMS.map((item) => (
-              <ShapeTile key={item.id} item={item} onPick={() => editor && item.run(editor)} />
+              <ShapeTile key={item.id} item={item} onPick={() => onPickShape(item.kind)} />
             ))}
           </div>
         </div>
@@ -341,6 +357,7 @@ export function TopBar({
   onToggleDoc,
   paletteOpen,
   onTogglePalette,
+  onExport,
 }: {
   title: string;
   saveLabel: string;
@@ -349,6 +366,7 @@ export function TopBar({
   onToggleDoc: () => void;
   paletteOpen: boolean;
   onTogglePalette: () => void;
+  onExport: (format: "png" | "svg") => void;
 }) {
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-2 py-1.5 text-xs">
@@ -382,17 +400,35 @@ export function TopBar({
       >
         {saveLabel}
       </span>
-      <button
-        type="button"
-        onClick={onToggleDoc}
-        aria-pressed={docOpen}
-        className={cn(
-          "ml-auto rounded px-2 py-1 font-medium transition-colors",
-          docOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
-      >
-        {docOpen ? "Hide notes" : "Notes"}
-      </button>
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onExport("png")}
+          title="Export PNG"
+          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Download className="h-3.5 w-3.5" /> PNG
+        </button>
+        <button
+          type="button"
+          onClick={() => onExport("svg")}
+          title="Export SVG"
+          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Download className="h-3.5 w-3.5" /> SVG
+        </button>
+        <button
+          type="button"
+          onClick={onToggleDoc}
+          aria-pressed={docOpen}
+          className={cn(
+            "rounded px-2 py-1 font-medium transition-colors",
+            docOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {docOpen ? "Hide notes" : "Notes"}
+        </button>
+      </div>
     </header>
   );
 }
