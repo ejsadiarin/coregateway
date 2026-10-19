@@ -16,8 +16,10 @@ import {
   snapshotToScene,
   toExcalidrawTool,
   toolForShortcut,
+  railToolForCanvasTool,
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
+import { iconLabel } from "@/pages/dashboard/draw/icon-catalog";
 
 const LAMBDA = "logos:aws-lambda";
 
@@ -154,7 +156,7 @@ describe("toExcalidrawTool", () => {
 
 describe("toolForShortcut", () => {
   it("maps the eraser.io keys", () => {
-    expect(toolForShortcut("v")).toBe("selection");
+    expect(toolForShortcut("v")).toBe("select");
     expect(toolForShortcut("h")).toBe("hand");
     expect(toolForShortcut("e")).toBe("eraser");
     expect(toolForShortcut("t")).toBe("text");
@@ -165,13 +167,35 @@ describe("toolForShortcut", () => {
     expect(toolForShortcut("f")).toBe("frame");
   });
 
-  it("maps d to freedraw, overriding Excalidraw's diamond binding", () => {
-    expect(toolForShortcut("d")).toBe("freedraw");
+  it("maps d to draw, overriding Excalidraw's diamond binding", () => {
+    expect(toolForShortcut("d")).toBe("draw");
   });
 
   it("is case-insensitive and null for unmapped keys", () => {
-    expect(toolForShortcut("V")).toBe("selection");
+    expect(toolForShortcut("V")).toBe("select");
     expect(toolForShortcut("z")).toBeNull();
     expect(toolForShortcut("1")).toBeNull();
+  });
+});
+
+describe("railToolForCanvasTool", () => {
+  it("returns the rail tool for rail tools", () => {
+    expect(railToolForCanvasTool("select")).toBe("select");
+    expect(railToolForCanvasTool("draw")).toBe("draw");
+  });
+
+  it("returns null for palette-only tools", () => {
+    expect(railToolForCanvasTool("rectangle")).toBeNull();
+    expect(railToolForCanvasTool("ellipse")).toBeNull();
+  });
+});
+
+describe("iconLabel", () => {
+  it("prefixes the family for a bare name", () => {
+    expect(iconLabel("logos:aws-lambda")).toBe("AWS Lambda");
+  });
+
+  it("does not repeat a family already in the name", () => {
+    expect(iconLabel("logos:aws")).toBe("AWS Cloud");
   });
 });

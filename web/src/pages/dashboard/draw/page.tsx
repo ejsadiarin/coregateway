@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { ExcalidrawCanvas } from "@/pages/dashboard/draw/excalidraw-canvas";
 import {
-  ExcalidrawCanvas,
-  exportCanvas,
-  insertIconOnCanvas,
-  insertShapeOnCanvas,
-  setCanvasTool,
-  setCanvasToolType,
-} from "@/pages/dashboard/draw/excalidraw-canvas";
-import {
-  sceneToSnapshot,
   snapshotToScene,
-  railToolForExcalidrawTool,
   toolForShortcut,
+  railToolForCanvasTool,
   DEFAULT_APP_STATE,
+  type CanvasAdapter,
   type LoadedScene,
   type RailToolId,
   type ShapeKind,
@@ -37,31 +29,16 @@ export default function DrawPage() {
   // initialData on mount).
   const [loadEpoch, setLoadEpoch] = useState(0);
 
-  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  // Serialized form of the last scene we know matches the server. Excalidraw
-  // emits change events for view-only churn (scroll, selection, load
-  // normalization) that a user edit did not cause; comparing content keeps
-  // those from bumping the board revision on every open.
-  const lastSeenRef = useRef<string | null>(null);
-  // Excalidraw normalizes elements as it loads them, so the first change event
-  // after a mount reports the same logical scene with different bytes. Adopt
-  // that as the baseline rather than saving it, so merely opening a board does
-  // not bump its revision (and trip the conflict guard for anyone else).
-  const adoptBaselineRef = useRef(false);
+  const adapterRef = useRef<CanvasAdapter | null>(null);
 
   // The engine bridge the sync controller talks to. Stable identity so the
-  // controller can hold it; `capture` reads the live canvas through apiRef,
-  // `apply` drops a loaded snapshot into state for the canvas to mount with.
+  // controller can hold it; `capture` reads the live canvas through the
+  // adapter, `apply` drops a loaded snapshot into state for the canvas to mount
+  // with.
   const engineRef = useRef<SyncEngine>({
-    capture: () => {
-      const api = apiRef.current;
-      return api ? sceneToSnapshot(api.getSceneElements(), api.getAppState()) : null;
-    },
+    capture: () => adapterRef.current?.toSnapshot() ?? null,
     apply: (snapshot, version) => {
-      const next = snapshotToScene(snapshot, version);
-      lastSeenRef.current = JSON.stringify(sceneToSnapshot(next.elements, next.appState));
-      adoptBaselineRef.current = true;
-      setScene(next);
+      setScene(snapshotToScene(snapshot, version));
       setLoadEpoch((epoch) => epoch + 1);
     },
   });
@@ -69,50 +46,36 @@ export default function DrawPage() {
   const sync = useBoardSync(boardId, engineRef.current);
   const { meta, updateDoc, scheduleSave, reloadLatest } = sync;
 
-  // Only arm a save when the scene actually differs from the last known state.
+  // Only arm a save when the scene actually differs from the last known state
+  // (the adapter owns that judgement; it also refreshes the rail highlight).
   const onCanvasChange = useCallback(() => {
-    const api = apiRef.current;
-    if (!api) return;
-    const appState = api.getAppState();
-    const rail = railToolForExcalidrawTool(appState.activeTool?.type ?? "");
-    setActiveTool(rail);
-    const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), appState));
-    if (adoptBaselineRef.current) {
-      adoptBaselineRef.current = false;
-      lastSeenRef.current = json;
-      return;
-    }
-    if (json === lastSeenRef.current) return;
-    lastSeenRef.current = json;
-    scheduleSave();
+    const adapter = adapterRef.current;
+    if (!adapter) return;
+    setActiveTool(adapter.activeRailTool());
+    if (adapter.noteSceneChange()) scheduleSave();
   }, [scheduleSave]);
 
-  // The canvas may mount after the network load resolves; record its API so
-  // `capture` can read the live scene.
-  const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
-    apiRef.current = api;
+  // The canvas may mount after the network load resolves; keep its adapter so
+  // the page can drive the canvas through it.
+  const onAdapterReady = useCallback((adapter: CanvasAdapter) => {
+    adapterRef.current = adapter;
   }, []);
 
   const handleSelectTool = useCallback((id: RailToolId) => {
-    const api = apiRef.current;
-    if (!api) return;
-    setCanvasTool(api, id);
+    adapterRef.current?.setTool(id);
     setActiveTool(id);
   }, []);
 
   const handlePickIcon = useCallback((iconId: string) => {
-    const api = apiRef.current;
-    if (api) insertIconOnCanvas(api, iconId);
+    adapterRef.current?.insertIcon(iconId);
   }, []);
 
   const handlePickShape = useCallback((kind: ShapeKind) => {
-    const api = apiRef.current;
-    if (api) insertShapeOnCanvas(api, kind);
+    adapterRef.current?.insertShape(kind);
   }, []);
 
   const handleExport = useCallback((format: "png" | "svg") => {
-    const api = apiRef.current;
-    if (api) void exportCanvas(api, format);
+    void adapterRef.current?.exportImage(format);
   }, []);
 
   // eraser.io-style keyboard: `/` opens icon search, and bare tool keys
@@ -140,10 +103,8 @@ export default function DrawPage() {
       if (!tool) return;
       e.preventDefault();
       e.stopPropagation();
-      const api = apiRef.current;
-      if (!api) return;
-      setCanvasToolType(api, tool);
-      setActiveTool(railToolForExcalidrawTool(tool));
+      adapterRef.current?.setTool(tool);
+      setActiveTool(railToolForCanvasTool(tool));
     }
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
@@ -229,7 +190,7 @@ export default function DrawPage() {
           <ExcalidrawCanvas
             key={`${meta.id}:${loadEpoch}`}
             initialScene={scene ?? { elements: [], appState: DEFAULT_APP_STATE, files: {} }}
-            onApiReady={onApiReady}
+            onAdapterReady={onAdapterReady}
             onChange={onCanvasChange}
           />
 

@@ -14,14 +14,18 @@ import {
   exportToSvg,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI, ToolType } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import {
   buildIconInsertion,
   buildShapeElement,
-  toExcalidrawTool,
+  sceneToSnapshot,
+  railToolForExcalidrawTool,
+  TOOL_MAP,
   ICON_SIZE,
+  type CanvasAdapter,
+  type CanvasTool,
   type LoadedScene,
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
@@ -41,11 +45,11 @@ declare global {
 
 export interface ExcalidrawCanvasProps {
   initialScene: LoadedScene;
-  onApiReady: (api: ExcalidrawImperativeAPI) => void;
+  onAdapterReady: (adapter: CanvasAdapter) => void;
   onChange: () => void;
 }
 
-export function ExcalidrawCanvas({ initialScene, onApiReady, onChange }: ExcalidrawCanvasProps) {
+export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: ExcalidrawCanvasProps) {
   // Excalidraw only reads `initialData` on mount, so freeze it. The page keys
   // this component per load, so opening a different board (or reloading)
   // remounts with fresh data. This replaces imperative `updateScene`, which was
@@ -55,11 +59,11 @@ export function ExcalidrawCanvas({ initialScene, onApiReady, onChange }: Excalid
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const onApiReadyRef = useRef(onApiReady);
-  onApiReadyRef.current = onApiReady;
+  const onAdapterReadyRef = useRef(onAdapterReady);
+  onAdapterReadyRef.current = onAdapterReady;
 
   const handleApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
-    onApiReadyRef.current(api);
+    onAdapterReadyRef.current(createCanvasAdapter(api));
   }, []);
 
   const handleChange = useCallback(() => {
@@ -78,7 +82,8 @@ export function ExcalidrawCanvas({ initialScene, onApiReady, onChange }: Excalid
 }
 
 // ---------------------------------------------------------------------------
-// Imperative adapter operations (live).
+// The live adapter: binds the imperative Excalidraw API into the page-facing
+// CanvasAdapter interface. This is the only module that touches the runtime.
 // ---------------------------------------------------------------------------
 
 function viewportCenter(api: ExcalidrawImperativeAPI): { x: number; y: number } {
@@ -90,34 +95,12 @@ function viewportCenter(api: ExcalidrawImperativeAPI): { x: number; y: number } 
   return { x: center.x, y: center.y };
 }
 
-export function setCanvasTool(api: ExcalidrawImperativeAPI, toolId: string): void {
-  api.setActiveTool({ type: toExcalidrawTool(toolId) });
-}
-
-// Activate an Excalidraw tool directly (used by the eraser.io-style keyboard
-// shortcuts, which include tools the rail does not carry, e.g. rectangle).
-export function setCanvasToolType(api: ExcalidrawImperativeAPI, tool: ToolType): void {
-  api.setActiveTool({ type: tool });
-}
-
 function appendElements(api: ExcalidrawImperativeAPI, elements: ExcalidrawElement[]): void {
   const existing = api.getSceneElements();
   api.updateScene({ elements: [...existing, ...elements] });
   const selectedElementIds: Record<string, true> = {};
   for (const el of elements) selectedElementIds[el.id] = true;
   api.updateScene({ appState: { selectedElementIds } });
-}
-
-export function insertIconOnCanvas(api: ExcalidrawImperativeAPI, iconId: string): void {
-  const { x, y } = viewportCenter(api);
-  const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2);
-  api.addFiles([file]);
-  appendElements(api, elements);
-}
-
-export function insertShapeOnCanvas(api: ExcalidrawImperativeAPI, kind: ShapeKind): void {
-  const { x, y } = viewportCenter(api);
-  appendElements(api, [buildShapeElement(kind, x, y)]);
 }
 
 function download(blob: Blob, filename: string): void {
@@ -129,15 +112,54 @@ function download(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-export async function exportCanvas(api: ExcalidrawImperativeAPI, format: "png" | "svg"): Promise<void> {
-  const elements = api.getSceneElements();
-  const appState = api.getAppState();
-  const files = api.getFiles();
-  if (format === "png") {
-    const blob = await exportToBlob({ elements, appState, files, mimeType: "image/png" });
-    download(blob, "board.png");
-  } else {
-    const svg = await exportToSvg({ elements, appState, files });
-    download(new Blob([svg.outerHTML], { type: "image/svg+xml" }), "board.svg");
-  }
+export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter {
+  // Serialized form of the last scene we know matches the server, and whether
+  // we have adopted the first post-mount snapshot. Excalidraw emits change
+  // events for view-only churn (scroll, selection, load normalization) that a
+  // user edit did not cause; comparing content keeps those from bumping the
+  // board revision. Adopting the first change absorbs Excalidraw's rewrite of
+  // freshly-loaded elements, so merely opening a board does not save.
+  let lastSeen: string | null = null;
+  let adoptBaseline = true;
+
+  return {
+    toSnapshot: () => sceneToSnapshot(api.getSceneElements(), api.getAppState()),
+    noteSceneChange: () => {
+      const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), api.getAppState()));
+      if (adoptBaseline) {
+        adoptBaseline = false;
+        lastSeen = json;
+        return false;
+      }
+      if (json === lastSeen) return false;
+      lastSeen = json;
+      return true;
+    },
+    activeRailTool: () => railToolForExcalidrawTool(api.getAppState().activeTool?.type ?? ""),
+    setTool: (tool: CanvasTool) => {
+      api.setActiveTool({ type: TOOL_MAP[tool] });
+    },
+    insertIcon: (iconId: string) => {
+      const { x, y } = viewportCenter(api);
+      const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2);
+      api.addFiles([file]);
+      appendElements(api, elements);
+    },
+    insertShape: (kind: ShapeKind) => {
+      const { x, y } = viewportCenter(api);
+      appendElements(api, [buildShapeElement(kind, x, y)]);
+    },
+    exportImage: async (format: "png" | "svg") => {
+      const elements = api.getSceneElements();
+      const appState = api.getAppState();
+      const files = api.getFiles();
+      if (format === "png") {
+        const blob = await exportToBlob({ elements, appState, files, mimeType: "image/png" });
+        download(blob, "board.png");
+      } else {
+        const svg = await exportToSvg({ elements, appState, files });
+        download(new Blob([svg.outerHTML], { type: "image/svg+xml" }), "board.svg");
+      }
+    },
+  };
 }

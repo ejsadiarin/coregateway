@@ -385,7 +385,25 @@ export type RailToolId =
   | "line"
   | "frame";
 
-export const TOOL_MAP: Record<RailToolId, ToolType> = {
+const RAIL_TOOL_IDS: RailToolId[] = [
+  "select",
+  "hand",
+  "draw",
+  "eraser",
+  "text",
+  "arrow",
+  "line",
+  "frame",
+];
+
+// Tools placed from the palette rather than the rail; eraser.io also binds them
+// to bare keys, so they ride the same shortcut map.
+export type PaletteToolId = "rectangle" | "ellipse";
+
+// Every tool a shortcut or the rail can select.
+export type CanvasTool = RailToolId | PaletteToolId;
+
+export const TOOL_MAP: Record<CanvasTool, ToolType> = {
   select: "selection",
   hand: "hand",
   draw: "freedraw",
@@ -394,6 +412,8 @@ export const TOOL_MAP: Record<RailToolId, ToolType> = {
   arrow: "arrow",
   line: "line",
   frame: "frame",
+  rectangle: "rectangle",
+  ellipse: "ellipse",
 };
 
 export function toExcalidrawTool(id: string): ToolType {
@@ -403,12 +423,10 @@ export function toExcalidrawTool(id: string): ToolType {
 // eraser.io-style single-key tool shortcuts. Most coincide with Excalidraw's
 // own bindings, but `d` deliberately does not (Excalidraw binds `d` to the
 // diamond): the page intercepts these at the window so our mapping always wins.
-// Rectangle and ellipse are here too even though they are palette tools, not
-// rail tools, because eraser.io binds them to bare keys.
-export const TOOL_SHORTCUTS: Record<string, ToolType> = {
-  v: "selection",
+export const TOOL_SHORTCUTS: Record<string, CanvasTool> = {
+  v: "select",
   h: "hand",
-  d: "freedraw",
+  d: "draw",
   e: "eraser",
   t: "text",
   r: "rectangle",
@@ -418,17 +436,43 @@ export const TOOL_SHORTCUTS: Record<string, ToolType> = {
   f: "frame",
 };
 
-export function toolForShortcut(key: string): ToolType | null {
+export function toolForShortcut(key: string): CanvasTool | null {
   return TOOL_SHORTCUTS[key.toLowerCase()] ?? null;
 }
 
+// The rail tool a canvas tool corresponds to, or null for palette-only tools
+// (rectangle, ellipse) — the rail highlights nothing for those.
+export function railToolForCanvasTool(tool: CanvasTool): RailToolId | null {
+  return (RAIL_TOOL_IDS as string[]).includes(tool) ? (tool as RailToolId) : null;
+}
+
 // Reverse of TOOL_MAP: the rail tool matching an Excalidraw active tool, so the
-// rail can highlight what the engine reports. Non-rail tools (rectangle,
-// ellipse, …) map to null; they are placed from the palette, not the rail.
+// rail can highlight what the engine reports.
 const RAIL_TOOL_BY_EXCALIDRAW = new Map<ToolType, RailToolId>(
-  (Object.entries(TOOL_MAP) as [RailToolId, ToolType][]).map(([rail, tool]) => [tool, rail]),
+  RAIL_TOOL_IDS.map((id) => [TOOL_MAP[id], id]),
 );
 
 export function railToolForExcalidrawTool(toolType: string): RailToolId | null {
   return RAIL_TOOL_BY_EXCALIDRAW.get(toolType as ToolType) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// The live canvas adapter. The page drives the canvas only through this
+// interface, so Excalidraw stays behind the seam; the implementation lives in
+// excalidraw-canvas.tsx, which owns the imperative API.
+// ---------------------------------------------------------------------------
+
+export interface CanvasAdapter {
+  // Current scene as a persistable snapshot, or null when nothing is mounted.
+  toSnapshot(): SceneSnapshot | null;
+  // Report the engine's change event. Returns true only when the content
+  // actually changed (view-only churn and the first post-mount normalization
+  // are ignored), signalling the page to arm a save.
+  noteSceneChange(): boolean;
+  // The rail tool the canvas currently has active, for highlighting, or null.
+  activeRailTool(): RailToolId | null;
+  setTool(tool: CanvasTool): void;
+  insertIcon(iconId: string): void;
+  insertShape(kind: ShapeKind): void;
+  exportImage(format: "png" | "svg"): Promise<void>;
 }
