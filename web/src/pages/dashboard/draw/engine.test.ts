@@ -42,7 +42,7 @@ describe("buildIconInsertion", () => {
 
     expect(label.type).toBe("text");
     const text = label as ExcalidrawTextElement;
-    expect(text.text).toBe("Lambda");
+    expect(text.text).toBe("AWS Lambda");
     expect(text.fontSize).toBe(20);
     expect(text.textAlign).toBe("center");
 
@@ -93,7 +93,7 @@ describe("hydrateIconFiles", () => {
 });
 
 describe("sceneToSnapshot / snapshotToScene", () => {
-  it("stamps the current version and keeps only durable appState", () => {
+  it("keeps only durable appState and no in-blob version", () => {
     const elements = buildIconInsertion(LAMBDA, 0, 0).elements;
     const snap = sceneToSnapshot(elements, {
       viewBackgroundColor: "#fafafa",
@@ -104,12 +104,13 @@ describe("sceneToSnapshot / snapshotToScene", () => {
       scrollY: 888,
     });
 
-    expect(snap.version).toBe(SNAPSHOT_VERSION);
     expect(snap.appState).toEqual({
       viewBackgroundColor: "#fafafa",
       gridSize: 20,
       gridModeEnabled: true,
     });
+    // Version rides on the board row, never inside the blob.
+    expect("version" in snap).toBe(false);
   });
 
   it("drops deleted elements", () => {
@@ -122,16 +123,20 @@ describe("sceneToSnapshot / snapshotToScene", () => {
   it("round-trips elements and re-hydrates icon files", () => {
     const elements = buildIconInsertion(LAMBDA, 0, 0).elements;
     const snap = sceneToSnapshot(elements, { viewBackgroundColor: "#ffffff" });
-    const scene = snapshotToScene(snap);
+    const scene = snapshotToScene(snap, SNAPSHOT_VERSION);
     expect(scene.elements.map((e) => e.type)).toEqual(["image", "text"]);
     expect(scene.files[iconFileId(LAMBDA)]).toBeDefined();
   });
 
-  it("loads an unknown/old version as a blank canvas", () => {
-    expect(snapshotToScene({ version: 1, elements: [{ type: "image" }] }).elements).toHaveLength(0);
-    expect(snapshotToScene({ store: {}, schema: {} }).elements).toHaveLength(0);
-    expect(snapshotToScene({}).elements).toHaveLength(0);
-    expect(snapshotToScene(null).appState).toEqual(DEFAULT_APP_STATE);
+  it("loads a board whose snapshot_version is not this build's as blank", () => {
+    expect(snapshotToScene({ elements: [{ type: "image" }] }, 1).elements).toHaveLength(0);
+    expect(snapshotToScene({ elements: [{ type: "image" }] }, 99).elements).toHaveLength(0);
+  });
+
+  it("loads a malformed or empty blob as a blank canvas", () => {
+    expect(snapshotToScene({ store: {}, schema: {} }, SNAPSHOT_VERSION).elements).toHaveLength(0);
+    expect(snapshotToScene({}, SNAPSHOT_VERSION).elements).toHaveLength(0);
+    expect(snapshotToScene(null, SNAPSHOT_VERSION).appState).toEqual(DEFAULT_APP_STATE);
   });
 });
 

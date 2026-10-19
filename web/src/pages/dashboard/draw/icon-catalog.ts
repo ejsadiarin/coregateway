@@ -105,8 +105,11 @@ export function iconEntry(id: string): IconEntry | undefined {
   return resolve(id);
 }
 
-export function iconTitle(id: string): string {
-  return resolve(id)?.title ?? id;
+// The full human label for an icon: family plus name, e.g. "AWS Lambda". Used
+// as the default text for a placed icon's label so it reads unambiguously.
+export function iconLabel(id: string): string {
+  const entry = resolve(id);
+  return entry ? `${entry.familyLabel} ${entry.title}` : id;
 }
 
 export function iconSprite(id: string): SpriteIcon {

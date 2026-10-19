@@ -10,8 +10,9 @@
 // - Excalidraw keeps image bytes in a separate `files` map, not in the
 //   elements. The snapshot stores elements only; icon data-URLs are rebuilt
 //   from the vendored sprite on load, so a board row never carries image bytes.
-// - `snapshot_version` gates the format: anything but `SNAPSHOT_VERSION` loads
-//   as a blank canvas (existing tldraw boards are discarded, not converted).
+// - The board's `snapshot_version` column gates the format: anything but
+//   `SNAPSHOT_VERSION` loads as a blank canvas (existing tldraw boards are
+//   discarded, not converted).
 
 import type {
   AppState,
@@ -25,11 +26,12 @@ import type {
   ExcalidrawLinearElement,
   ExcalidrawTextElement,
 } from "@excalidraw/excalidraw/element/types";
-import { iconSprite, iconTitle } from "@/pages/dashboard/draw/icon-catalog";
+import { iconLabel, iconSprite } from "@/pages/dashboard/draw/icon-catalog";
+import { SNAPSHOT_VERSION } from "@/lib/snapshot-version";
 
-// The scene schema this adapter writes. Bumping it invalidates every stored
-// board (they load blank) — that is the migration's reset, by design.
-export const SNAPSHOT_VERSION = 2;
+// The scene schema this adapter writes. Defined once in lib/snapshot-version so
+// the board API client and this adapter can never disagree on the version.
+export { SNAPSHOT_VERSION };
 
 // Icon glyph + label geometry. Glyph is square; the label sits under it with a
 // small gap, the pair acting as one unit.
@@ -55,8 +57,9 @@ export const DEFAULT_APP_STATE: DurableAppState = {
   gridModeEnabled: false,
 };
 
+// The scene the adapter persists. Version lives on the board row
+// (`snapshot_version`), not in the blob, so the two can never disagree.
 export interface SceneSnapshot {
-  version: number;
   elements: ExcalidrawElement[];
   appState: DurableAppState;
 }
@@ -171,6 +174,17 @@ export interface IconInsertion {
   file: BinaryFileData;
 }
 
+// The `files`-map entry for an icon glyph, rebuilt from the vendored sprite.
+// Shared by placement and load so the two never drift.
+function iconFile(fileId: string, iconId: string): BinaryFileData {
+  return {
+    id: fileId,
+    mimeType: "image/svg+xml",
+    dataURL: spriteToDataUrl(iconId),
+    created: 0,
+  } as unknown as BinaryFileData;
+}
+
 // Build the image + editable-label pair for an icon, sharing a group so they
 // select/move/delete as one (and can be ungrouped to edit independently).
 export function buildIconInsertion(
@@ -179,7 +193,7 @@ export function buildIconInsertion(
   y: number,
   opts: { title?: string; fileId?: string } = {},
 ): IconInsertion {
-  const title = opts.title ?? iconTitle(iconId);
+  const title = opts.title ?? iconLabel(iconId);
   const groupId = randomId();
   const fileId = opts.fileId ?? iconFileId(iconId);
 
@@ -199,6 +213,8 @@ export function buildIconInsertion(
     crop: null,
   } as unknown as ExcalidrawImageElement;
 
+  // The label box matches the glyph width and does not auto-resize to its text,
+  // so `textAlign: "center"` keeps a short label centred beneath the glyph.
   const label = {
     ...base({
       x,
@@ -215,18 +231,11 @@ export function buildIconInsertion(
     textAlign: "center" as const,
     verticalAlign: "top" as const,
     containerId: null,
-    autoResize: true,
+    autoResize: false,
     lineHeight: 1.25,
   } as unknown as ExcalidrawTextElement;
 
-  const file = {
-    id: fileId,
-    mimeType: "image/svg+xml" as const,
-    dataURL: spriteToDataUrl(iconId),
-    created: 0,
-  } as unknown as BinaryFileData;
-
-  return { elements: [image, label], file };
+  return { elements: [image, label], file: iconFile(fileId, iconId) };
 }
 
 export type ShapeKind =
@@ -302,7 +311,7 @@ function pickDurableAppState(appState: Partial<AppState>): DurableAppState {
   return {
     viewBackgroundColor: appState.viewBackgroundColor ?? DEFAULT_APP_STATE.viewBackgroundColor,
     gridSize: appState.gridSize ?? DEFAULT_APP_STATE.gridSize,
-    gridModeEnabled: appState.gridModeEnabled ?? false,
+    gridModeEnabled: appState.gridModeEnabled ?? DEFAULT_APP_STATE.gridModeEnabled,
   };
 }
 
@@ -311,7 +320,6 @@ export function sceneToSnapshot(
   appState: Partial<AppState>,
 ): SceneSnapshot {
   return {
-    version: SNAPSHOT_VERSION,
     elements: elements.filter((el) => !el.isDeleted),
     appState: pickDurableAppState(appState),
   };
@@ -327,37 +335,30 @@ export function hydrateIconFiles(elements: readonly ExcalidrawElement[]): Binary
     const iconId = (image.customData as { iconId?: string } | undefined)?.iconId;
     if (!iconId || !image.fileId) continue;
     if (files[image.fileId]) continue;
-    files[image.fileId] = {
-      id: image.fileId,
-      mimeType: "image/svg+xml",
-      dataURL: spriteToDataUrl(iconId),
-      created: 0,
-    } as unknown as BinaryFileData;
+    files[image.fileId] = iconFile(image.fileId, iconId);
   }
   return files;
 }
 
-function asSceneSnapshot(raw: unknown): SceneSnapshot | null {
+// Read the element list + durable appState out of a stored blob, provided the
+// board row's own `snapshot_version` matches this build. The blob's shape is
+// trusted only after that gate, so an old-format board is discarded, not parsed.
+function asSceneSnapshot(raw: unknown, boardVersion: number): SceneSnapshot | null {
+  if (boardVersion !== SNAPSHOT_VERSION) return null;
   if (!raw || typeof raw !== "object") return null;
-  const s = raw as { version?: unknown; elements?: unknown; appState?: unknown };
-  if (s.version !== SNAPSHOT_VERSION) return null;
+  const s = raw as { elements?: unknown; appState?: unknown };
   if (!Array.isArray(s.elements)) return null;
-  const appState = (s.appState ?? {}) as Partial<DurableAppState>;
   return {
-    version: SNAPSHOT_VERSION,
     elements: s.elements as ExcalidrawElement[],
-    appState: {
-      viewBackgroundColor: appState.viewBackgroundColor ?? DEFAULT_APP_STATE.viewBackgroundColor,
-      gridSize: appState.gridSize ?? DEFAULT_APP_STATE.gridSize,
-      gridModeEnabled: appState.gridModeEnabled ?? false,
-    },
+    appState: pickDurableAppState((s.appState ?? {}) as Partial<AppState>),
   };
 }
 
-// Load an opaque snapshot into a scene. An unknown/old version (or a fresh
-// board's `{}`) yields a blank canvas rather than an error.
-export function snapshotToScene(raw: unknown): LoadedScene {
-  const snap = asSceneSnapshot(raw);
+// Load an opaque snapshot into a scene. A board row whose `snapshot_version`
+// is not this build's (or a fresh board's `{}`) yields a blank canvas rather
+// than an error.
+export function snapshotToScene(raw: unknown, boardVersion: number): LoadedScene {
+  const snap = asSceneSnapshot(raw, boardVersion);
   if (!snap) {
     return { elements: [], appState: { ...DEFAULT_APP_STATE }, files: {} };
   }

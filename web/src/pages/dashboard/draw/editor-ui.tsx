@@ -187,7 +187,7 @@ export function IconPalette({
   focusNonce: number;
   onTabChange: (tab: PaletteTab) => void;
   onClose: () => void;
-  onPickIcon: (iconId: string, title: string) => void;
+  onPickIcon: (iconId: string) => void;
   onPickShape: (kind: ShapeKind) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -327,7 +327,7 @@ export function IconPalette({
                             <IconTile
                               key={entry.id}
                               entry={entry}
-                              onPick={() => onPickIcon(entry.id, entry.title)}
+                              onPick={() => onPickIcon(entry.id)}
                             />
                           ))}
                         </div>

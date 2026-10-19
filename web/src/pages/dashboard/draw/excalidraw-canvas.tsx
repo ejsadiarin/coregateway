@@ -108,9 +108,9 @@ function appendElements(api: ExcalidrawImperativeAPI, elements: ExcalidrawElemen
   api.updateScene({ appState: { selectedElementIds } });
 }
 
-export function insertIconOnCanvas(api: ExcalidrawImperativeAPI, iconId: string, title?: string): void {
+export function insertIconOnCanvas(api: ExcalidrawImperativeAPI, iconId: string): void {
   const { x, y } = viewportCenter(api);
-  const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2, { title });
+  const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2);
   api.addFiles([file]);
   appendElements(api, elements);
 }

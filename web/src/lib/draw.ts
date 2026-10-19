@@ -1,10 +1,12 @@
 import type { Board, BoardSummary } from "@/types/draw";
 import { apiBaseUrl } from "@/lib/api";
+import { SNAPSHOT_VERSION } from "@/lib/snapshot-version";
 
 // The snapshot schema version this client writes. It rides in every save so
 // the server row records which client produced the snapshot, and it rolls
-// together with the canvas engine.
-export const snapshotVersion = 2;
+// together with the canvas engine. Sourced from the shared constant so this
+// client and the canvas adapter cannot drift apart.
+export const snapshotVersion = SNAPSHOT_VERSION;
 
 export interface SaveBoardInput {
   // Opaque to the client layer: the board API stores and returns it verbatim,

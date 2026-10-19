@@ -57,8 +57,8 @@ export default function DrawPage() {
       const api = apiRef.current;
       return api ? sceneToSnapshot(api.getSceneElements(), api.getAppState()) : null;
     },
-    apply: (snapshot) => {
-      const next = snapshotToScene(snapshot);
+    apply: (snapshot, version) => {
+      const next = snapshotToScene(snapshot, version);
       lastSeenRef.current = JSON.stringify(sceneToSnapshot(next.elements, next.appState));
       adoptBaselineRef.current = true;
       setScene(next);
@@ -100,9 +100,9 @@ export default function DrawPage() {
     setActiveTool(id);
   }, []);
 
-  const handlePickIcon = useCallback((iconId: string, title: string) => {
+  const handlePickIcon = useCallback((iconId: string) => {
     const api = apiRef.current;
-    if (api) insertIconOnCanvas(api, iconId, title);
+    if (api) insertIconOnCanvas(api, iconId);
   }, []);
 
   const handlePickShape = useCallback((kind: ShapeKind) => {

@@ -37,8 +37,10 @@ export interface SyncEngine {
   // The opaque snapshot to persist, or null when the engine has nothing worth
   // saving yet (e.g. not mounted). null is treated as "skip this save".
   capture(): unknown | null;
-  // Replace the engine's document with a loaded snapshot.
-  apply(snapshot: unknown): void;
+  // Replace the engine's document with a loaded snapshot. `version` is the
+  // board row's `snapshot_version`, which the engine uses to accept or discard
+  // the blob.
+  apply(snapshot: unknown, version: number): void;
 }
 
 export interface BoardSync {
@@ -47,9 +49,6 @@ export interface BoardSync {
   meta: BoardMeta | null;
   saveState: SaveState;
   conflict: Conflict | null;
-  // Re-apply the loaded snapshot (used by the engine's own mount hook, which
-  // may fire after the network load resolves).
-  applyCurrent(): void;
   // Mark the document dirty and arm the debounced save.
   scheduleSave(): void;
   // Fold a doc edit into the board meta and arm the same debounced save.
@@ -72,7 +71,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState<Conflict | null>(null);
 
-  const snapshotRef = useRef<unknown | null>(null);
+  const loadedRef = useRef<{ snapshot: unknown; version: number } | null>(null);
   const metaRef = useRef<BoardMeta | null>(null);
   const engineRef = useRef(engine);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,7 +85,8 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
   engineRef.current = engine;
 
   const applyCurrent = useCallback(() => {
-    if (snapshotRef.current !== null) engineRef.current.apply(snapshotRef.current);
+    const loaded = loadedRef.current;
+    if (loaded) engineRef.current.apply(loaded.snapshot, loaded.version);
   }, []);
 
   const load = useCallback(
@@ -98,7 +98,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
       try {
         const board = await fetchBoard(id);
         if (!alive.current) return;
-        snapshotRef.current = board.snapshot;
+        loadedRef.current = { snapshot: board.snapshot, version: board.snapshot_version };
         setMeta({ id: board.id, title: board.title, doc: board.doc, revision: board.revision });
         setSaveState("saved");
         pendingRef.current = null;
@@ -203,7 +203,6 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
     meta,
     saveState,
     conflict,
-    applyCurrent,
     scheduleSave,
     updateDoc,
     reloadLatest,
