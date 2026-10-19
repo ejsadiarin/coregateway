@@ -30,11 +30,12 @@ import {
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
 import "@/pages/dashboard/draw/excalidraw-overrides.css";
+import { EXCALIDRAW_ASSETS_MOUNT } from "@/lib/excalidraw-assets";
 
 // Serve Excalidraw's fonts/locales from our own origin (Vite plugin) so the
 // app never reaches for the CDN.
 if (typeof window !== "undefined") {
-  window.EXCALIDRAW_ASSET_PATH = "/excalidraw-assets/";
+  window.EXCALIDRAW_ASSET_PATH = EXCALIDRAW_ASSETS_MOUNT;
 }
 
 declare global {

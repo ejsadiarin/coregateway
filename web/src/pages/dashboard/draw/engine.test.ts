@@ -14,7 +14,7 @@ import {
   hydrateIconFiles,
   sceneToSnapshot,
   snapshotToScene,
-  toExcalidrawTool,
+  TOOL_MAP,
   toolForShortcut,
   railToolForCanvasTool,
   type ShapeKind,
@@ -142,15 +142,18 @@ describe("sceneToSnapshot / snapshotToScene", () => {
   });
 });
 
-describe("toExcalidrawTool", () => {
-  it("maps the rail's tools", () => {
-    expect(toExcalidrawTool("select")).toBe("selection");
-    expect(toExcalidrawTool("draw")).toBe("freedraw");
-    expect(toExcalidrawTool("frame")).toBe("frame");
+describe("TOOL_MAP", () => {
+  it("maps every canvas tool to a non-empty Excalidraw tool", () => {
+    for (const tool of Object.values(TOOL_MAP)) {
+      expect(tool.length).toBeGreaterThan(0);
+    }
   });
 
-  it("falls back to the selection tool for unknown ids", () => {
-    expect(toExcalidrawTool("lasso")).toBe("selection");
+  it("maps the rail's tools", () => {
+    expect(TOOL_MAP.select).toBe("selection");
+    expect(TOOL_MAP.draw).toBe("freedraw");
+    expect(TOOL_MAP.frame).toBe("frame");
+    expect(TOOL_MAP.rectangle).toBe("rectangle");
   });
 });
 

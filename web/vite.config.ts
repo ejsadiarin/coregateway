@@ -4,12 +4,13 @@ import tailwindcss from "@tailwindcss/postcss";
 import fs from "node:fs";
 import path from "node:path";
 
+import { EXCALIDRAW_ASSETS_MOUNT } from "./src/lib/excalidraw-assets";
+
 // Excalidraw loads its fonts/locales at runtime from `EXCALIDRAW_ASSET_PATH`,
 // falling back to the esm.sh CDN when a path is missing. To keep the app
 // offline-capable we serve those assets from our own origin: the dev server
 // proxies them straight out of the package, and the build copies them into
 // `dist/excalidraw-assets/`. The canvas sets the matching asset path.
-const EXCALIDRAW_ASSETS_MOUNT = "/excalidraw-assets/";
 const EXCALIDRAW_DIST = path.resolve(__dirname, "node_modules/@excalidraw/excalidraw/dist/prod");
 const EXCALIDRAW_ASSET_SUBDIRS = ["fonts", "locales", "data"];
 

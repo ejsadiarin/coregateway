@@ -128,7 +128,7 @@ interface BaseFields {
   customData?: Record<string, unknown>;
 }
 
-function base(f: BaseFields) {
+function baseElement(f: BaseFields) {
   return {
     id: f.id ?? randomId(),
     x: f.x,
@@ -198,7 +198,7 @@ export function buildIconInsertion(
   const fileId = opts.fileId ?? iconFileId(iconId);
 
   const image = {
-    ...base({
+    ...baseElement({
       x,
       y,
       width: ICON_SIZE,
@@ -216,7 +216,7 @@ export function buildIconInsertion(
   // The label box matches the glyph width and does not auto-resize to its text,
   // so `textAlign: "center"` keeps a short label centred beneath the glyph.
   const label = {
-    ...base({
+    ...baseElement({
       x,
       y: y + ICON_SIZE + LABEL_GAP,
       width: ICON_SIZE,
@@ -258,14 +258,14 @@ export function buildShapeElement(kind: ShapeKind, x: number, y: number): Excali
   if (kind === "rectangle" || kind === "ellipse" || kind === "diamond") {
     const { w, h } = SHAPE_BOX[kind];
     return {
-      ...base({ x, y, width: w, height: h }),
+      ...baseElement({ x, y, width: w, height: h }),
       type: kind,
       roundness: kind === "rectangle" ? { type: 3 } : null,
     } as unknown as ExcalidrawElement;
   }
   if (kind === "text") {
     return {
-      ...base({ x, y, width: 120, height: 25 }),
+      ...baseElement({ x, y, width: 120, height: 25 }),
       type: "text",
       fontSize: MEDIUM_FONT_SIZE,
       fontFamily: NORMAL_FONT_FAMILY,
@@ -284,7 +284,7 @@ export function buildShapeElement(kind: ShapeKind, x: number, y: number): Excali
       [200, 0],
     ];
     return {
-      ...base({ x, y, width: 200, height: 0 }),
+      ...baseElement({ x, y, width: 200, height: 0 }),
       type: kind,
       points,
       lastCommittedPoint: null,
@@ -297,7 +297,7 @@ export function buildShapeElement(kind: ShapeKind, x: number, y: number): Excali
   }
   // frame
   return {
-    ...base({ x, y, width: 320, height: 220 }),
+    ...baseElement({ x, y, width: 320, height: 220 }),
     type: "frame",
     name: null,
   } as unknown as ExcalidrawElement;
@@ -374,7 +374,7 @@ export function snapshotToScene(raw: unknown, boardVersion: number): LoadedScene
 // ---------------------------------------------------------------------------
 
 // The rail's tool ids. Excalidraw 0.18 has no lasso tool, so the rail offers
-// exactly these; `toExcalidrawTool` falls back to selection for anything else.
+// exactly these.
 export type RailToolId =
   | "select"
   | "hand"
@@ -415,10 +415,6 @@ export const TOOL_MAP: Record<CanvasTool, ToolType> = {
   rectangle: "rectangle",
   ellipse: "ellipse",
 };
-
-export function toExcalidrawTool(id: string): ToolType {
-  return (TOOL_MAP as Record<string, ToolType | undefined>)[id] ?? "selection";
-}
 
 // eraser.io-style single-key tool shortcuts. Most coincide with Excalidraw's
 // own bindings, but `d` deliberately does not (Excalidraw binds `d` to the
