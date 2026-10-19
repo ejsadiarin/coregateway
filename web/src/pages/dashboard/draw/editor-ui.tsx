@@ -127,13 +127,30 @@ function matches(entry: IconEntry, tokens: string[]): boolean {
   return tokens.every((tk) => hay.includes(tk));
 }
 
-function IconTile({ entry, onPick }: { entry: IconEntry; onPick: () => void }) {
+function IconTile({
+  entry,
+  index,
+  active,
+  onHover,
+  onPick,
+}: {
+  entry: IconEntry;
+  index: number;
+  active: boolean;
+  onHover: () => void;
+  onPick: () => void;
+}) {
   return (
     <button
       type="button"
       title={`${entry.title} (${entry.familyLabel} · ${entry.category})`}
+      data-palette-index={index}
       onClick={onPick}
-      className="group flex flex-col items-center gap-1 rounded-md border border-transparent p-1.5 text-center transition-colors hover:border-border hover:bg-accent"
+      onMouseEnter={onHover}
+      className={cn(
+        "group flex flex-col items-center gap-1 rounded-md border border-transparent p-1.5 text-center transition-colors hover:border-border hover:bg-accent",
+        active && "border-primary/60 bg-accent",
+      )}
     >
       <span className="flex h-8 w-8 items-center justify-center text-foreground">
         <PaletteGlyph iconId={entry.id} />
@@ -192,7 +209,11 @@ export function IconPalette({
 }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<string>("all");
+  // Index into `results` for the keyboard highlight; -1 means nothing is
+  // highlighted (empty query), so Enter cannot insert an arbitrary first icon.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -203,6 +224,11 @@ export function IconPalette({
       return () => clearTimeout(t);
     }
   }, [open, focusNonce]);
+
+  // Typing highlights the top hit, so `/` → "s3" → Enter needs no arrow keys.
+  useEffect(() => {
+    setActiveIndex(query.trim() ? 0 : -1);
+  }, [query, tab]);
 
   const tokens = useMemo(
     () =>
@@ -236,6 +262,52 @@ export function IconPalette({
     }
     return byFamily;
   }, [results]);
+
+  const indexById = useMemo(
+    () => new Map(results.map((entry, index) => [entry.id, index])),
+    [results],
+  );
+  const activeResult = activeIndex < 0 ? -1 : Math.min(activeIndex, results.length - 1);
+
+  // Keep the keyboard highlight visible while arrowing through a long list.
+  useEffect(() => {
+    if (!open || activeResult < 0) return;
+    listRef.current
+      ?.querySelector(`[data-palette-index="${activeResult}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeResult, open]);
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!results.length) return;
+      setActiveIndex(activeResult < 0 ? 0 : (activeResult + 1) % results.length);
+      return;
+    }
+    if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!results.length) return;
+      setActiveIndex(activeResult < 0 ? results.length - 1 : (activeResult - 1 + results.length) % results.length);
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const entry = activeResult < 0 ? undefined : results[activeResult];
+    if (!entry) return;
+    onPickIcon(entry.id);
+    // Hand focus back to the canvas so the new element can be nudged with the
+    // arrow keys, or a tool shortcut can follow immediately.
+    inputRef.current?.blur();
+  }
 
   if (!open) return null;
 
@@ -281,6 +353,7 @@ export function IconPalette({
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onSearchKeyDown}
                 placeholder="Search icons…"
                 className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
               />
@@ -308,7 +381,7 @@ export function IconPalette({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
             {results.length === 0 ? (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">No icons match “{query}”.</p>
             ) : (
@@ -323,13 +396,19 @@ export function IconPalette({
                       <div key={category}>
                         <SectionHeading>{category}</SectionHeading>
                         <div className="grid grid-cols-4 gap-0.5">
-                          {entries.map((entry) => (
-                            <IconTile
-                              key={entry.id}
-                              entry={entry}
-                              onPick={() => onPickIcon(entry.id)}
-                            />
-                          ))}
+                          {entries.map((entry) => {
+                            const index = indexById.get(entry.id) ?? -1;
+                            return (
+                              <IconTile
+                                key={entry.id}
+                                entry={entry}
+                                index={index}
+                                active={index === activeResult}
+                                onHover={() => setActiveIndex(index)}
+                                onPick={() => onPickIcon(entry.id)}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     ))}

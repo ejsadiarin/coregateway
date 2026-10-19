@@ -6,6 +6,7 @@ import type {
 import {
   SNAPSHOT_VERSION,
   DEFAULT_APP_STATE,
+  FORMAL_DRAW_DEFAULTS,
   ICON_SIZE,
   iconFileId,
   spriteToDataUrl,
@@ -46,6 +47,7 @@ describe("buildIconInsertion", () => {
     const text = label as ExcalidrawTextElement;
     expect(text.text).toBe("AWS Lambda");
     expect(text.fontSize).toBe(20);
+    expect(text.fontFamily).toBe(3);
     expect(text.textAlign).toBe("center");
 
     // Grouped so they move/select/delete as one, but only as a single group
@@ -75,6 +77,21 @@ describe("buildShapeElement", () => {
 
   it.each(kinds)("builds a %s element", (kind) => {
     expect(buildShapeElement(kind, 10, 20).type).toBe(kind);
+  });
+
+  it("defaults to crisp strokes and mono text", () => {
+    expect(buildShapeElement("rectangle", 0, 0).roughness).toBe(0);
+    const text = buildShapeElement("text", 0, 0) as ExcalidrawTextElement;
+    expect(text.roughness).toBe(0);
+    expect(text.fontFamily).toBe(3);
+  });
+});
+
+describe("FORMAL_DRAW_DEFAULTS", () => {
+  it("pins the interactive tools to architect strokes and mono text", () => {
+    expect(FORMAL_DRAW_DEFAULTS.currentItemRoughness).toBe(0);
+    expect(FORMAL_DRAW_DEFAULTS.currentItemFontFamily).toBe(3);
+    expect(FORMAL_DRAW_DEFAULTS.currentItemStrokeStyle).toBe("solid");
   });
 });
 

@@ -39,9 +39,19 @@ export const ICON_SIZE = 96;
 export const LABEL_GAP = 6;
 export const LABEL_HEIGHT = 24;
 
-// Excalidraw's "Normal" text style: Helvetica family, medium size.
-const NORMAL_FONT_FAMILY = 2;
+// Excalidraw's "Code" text style: Cascadia Mono. A whiteboard reads as a tool,
+// not a sketchbook, so mono is the default for every new label.
+const MONO_FONT_FAMILY = 3;
 const MEDIUM_FONT_SIZE = 20;
+
+// Defaults for anything the user draws with Excalidraw's own tools. Roughness 0
+// is Excalidraw's "architect" style: crisp, straight strokes instead of the
+// hand-drawn wobble that is its default.
+export const FORMAL_DRAW_DEFAULTS = {
+  currentItemRoughness: 0,
+  currentItemFontFamily: MONO_FONT_FAMILY,
+  currentItemStrokeStyle: "solid" as const,
+};
 
 // Only durable view config is persisted; scroll/zoom/selection/zen are
 // reconstructed per session.
@@ -141,7 +151,7 @@ function baseElement(f: BaseFields) {
     fillStyle: "solid" as const,
     strokeWidth: 2,
     strokeStyle: "solid" as const,
-    roughness: 1,
+    roughness: 0,
     opacity: 100,
     roundness: null,
     seed: randomInt(),
@@ -225,7 +235,7 @@ export function buildIconInsertion(
     }),
     type: "text" as const,
     fontSize: MEDIUM_FONT_SIZE,
-    fontFamily: NORMAL_FONT_FAMILY,
+    fontFamily: MONO_FONT_FAMILY,
     text: title,
     originalText: title,
     textAlign: "center" as const,
@@ -268,7 +278,7 @@ export function buildShapeElement(kind: ShapeKind, x: number, y: number): Excali
       ...baseElement({ x, y, width: 120, height: 25 }),
       type: "text",
       fontSize: MEDIUM_FONT_SIZE,
-      fontFamily: NORMAL_FONT_FAMILY,
+      fontFamily: MONO_FONT_FAMILY,
       text: "Text",
       originalText: "Text",
       textAlign: "left",

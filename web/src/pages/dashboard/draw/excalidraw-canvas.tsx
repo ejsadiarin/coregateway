@@ -22,6 +22,7 @@ import {
   buildShapeElement,
   sceneToSnapshot,
   railToolForExcalidrawTool,
+  FORMAL_DRAW_DEFAULTS,
   TOOL_MAP,
   ICON_SIZE,
   type CanvasAdapter,
@@ -56,7 +57,10 @@ export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: Exc
   // remounts with fresh data. This replaces imperative `updateScene`, which was
   // racy: under StrictMode the API callback and the async board fetch resolve in
   // an order that let the canvas commit an empty scene over the loaded one.
-  const initialData = useRef<ComponentProps<typeof Excalidraw>["initialData"]>(initialScene).current;
+  const initialData = useRef<ComponentProps<typeof Excalidraw>["initialData"]>({
+    ...initialScene,
+    appState: { ...initialScene.appState, ...FORMAL_DRAW_DEFAULTS },
+  }).current;
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -64,6 +68,11 @@ export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: Exc
   onAdapterReadyRef.current = onAdapterReady;
 
   const handleApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
+    // Excalidraw restores `currentItem*` from this browser's localStorage, so a
+    // profile that has seen the sketchy defaults would ignore `initialData`.
+    // Re-assert the formal defaults once per mount; the values are not part of
+    // the persisted snapshot, so this does not dirty the board.
+    api.updateScene({ appState: FORMAL_DRAW_DEFAULTS });
     onAdapterReadyRef.current(createCanvasAdapter(api));
   }, []);
 
