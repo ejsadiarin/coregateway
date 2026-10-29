@@ -18,18 +18,25 @@ import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import {
+  applyStyleToElements,
   buildIconInsertion,
   buildShapeElement,
   sceneToSnapshot,
   railToolForExcalidrawTool,
+  flattenFreehandPressure,
+  applyFormalStyle,
+  DEFAULT_DRAW_STYLE,
   FORMAL_DRAW_DEFAULTS,
+  FREEDRAW_STROKE_WIDTH,
   TOOL_MAP,
   ICON_SIZE,
   type CanvasAdapter,
   type CanvasTool,
+  type DrawStyle,
   type LoadedScene,
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
+import { buildDiagramTemplate } from "@/pages/dashboard/draw/templates";
 import "@/pages/dashboard/draw/excalidraw-overrides.css";
 import { EXCALIDRAW_ASSETS_MOUNT } from "@/lib/excalidraw-assets";
 
@@ -131,11 +138,32 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
   // freshly-loaded elements, so merely opening a board does not save.
   let lastSeen: string | null = null;
   let adoptBaseline = true;
+  // `updateScene` can emit a synchronous change; this guard keeps the
+  // pressure-flattening rewrite from re-entering itself.
+  let flattening = false;
 
   return {
-    toSnapshot: () => sceneToSnapshot(api.getSceneElements(), api.getAppState()),
+    toSnapshot: () => {
+      // Never rewrite an element that is still being drawn: replacing the
+      // in-progress element detaches it from Excalidraw's pointer state and the
+      // stroke collapses to a dot. The change emitted on pointer-up flattens it.
+      const inProgress = api.getAppState().newElement !== null;
+      const elements = inProgress
+        ? api.getSceneElements()
+        : flattenFreehandPressure(api.getSceneElements()).elements;
+      return sceneToSnapshot(elements, api.getAppState());
+    },
     noteSceneChange: () => {
-      const json = JSON.stringify(sceneToSnapshot(api.getSceneElements(), api.getAppState()));
+      const inProgress = api.getAppState().newElement !== null;
+      const { elements, changed } = inProgress
+        ? { elements: api.getSceneElements(), changed: false }
+        : flattenFreehandPressure(api.getSceneElements());
+      if (changed && !flattening) {
+        flattening = true;
+        api.updateScene({ elements });
+        flattening = false;
+      }
+      const json = JSON.stringify(sceneToSnapshot(elements, api.getAppState()));
       if (adoptBaseline) {
         adoptBaseline = false;
         lastSeen = json;
@@ -148,6 +176,45 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
     activeRailTool: () => railToolForExcalidrawTool(api.getAppState().activeTool?.type ?? ""),
     setTool: (tool: CanvasTool) => {
       api.setActiveTool({ type: TOOL_MAP[tool] });
+      // Draw mode defaults to the thin pen; other tools keep whatever width the
+      // style bar last set.
+      if (tool === "draw") {
+        api.updateScene({ appState: { currentItemStrokeWidth: FREEDRAW_STROKE_WIDTH } });
+      }
+    },
+    insertTemplate: (templateId: string) => {
+      const { x, y } = viewportCenter(api);
+      const built = buildDiagramTemplate(templateId, x, y);
+      if (!built) return;
+      api.addFiles(Object.values(built.files));
+      appendElements(api, built.elements);
+    },
+    applyStyle: (style: DrawStyle) => {
+      const appState = api.getAppState();
+      api.updateScene({
+        elements: applyStyleToElements(api.getSceneElements(), appState.selectedElementIds ?? {}, style),
+        appState: {
+          currentItemStrokeColor: style.strokeColor,
+          currentItemBackgroundColor: style.backgroundColor,
+          currentItemStrokeWidth: style.strokeWidth,
+          currentItemStrokeStyle: style.strokeStyle,
+          currentItemFillStyle: style.fillStyle,
+          currentItemOpacity: style.opacity,
+        },
+      });
+    },
+    currentStyle: (): DrawStyle => {
+      const appState = api.getAppState();
+      return {
+        strokeColor: appState.currentItemStrokeColor ?? DEFAULT_DRAW_STYLE.strokeColor,
+        backgroundColor: appState.currentItemBackgroundColor ?? DEFAULT_DRAW_STYLE.backgroundColor,
+        strokeWidth: appState.currentItemStrokeWidth ?? DEFAULT_DRAW_STYLE.strokeWidth,
+        strokeStyle: (appState.currentItemStrokeStyle ??
+          DEFAULT_DRAW_STYLE.strokeStyle) as DrawStyle["strokeStyle"],
+        fillStyle: (appState.currentItemFillStyle ??
+          DEFAULT_DRAW_STYLE.fillStyle) as DrawStyle["fillStyle"],
+        opacity: appState.currentItemOpacity ?? DEFAULT_DRAW_STYLE.opacity,
+      };
     },
     insertIcon: (iconId: string) => {
       const { x, y } = viewportCenter(api);
@@ -158,6 +225,9 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
     insertShape: (kind: ShapeKind) => {
       const { x, y } = viewportCenter(api);
       appendElements(api, [buildShapeElement(kind, x, y)]);
+    },
+    normalizeBoard: () => {
+      api.updateScene({ elements: applyFormalStyle(api.getSceneElements()) });
     },
     exportImage: async (format: "png" | "svg") => {
       const elements = api.getSceneElements();

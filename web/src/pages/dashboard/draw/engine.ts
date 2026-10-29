@@ -22,6 +22,7 @@ import type {
 } from "@excalidraw/excalidraw/types";
 import type {
   ExcalidrawElement,
+  ExcalidrawFreeDrawElement,
   ExcalidrawImageElement,
   ExcalidrawLinearElement,
   ExcalidrawTextElement,
@@ -44,13 +45,59 @@ export const LABEL_HEIGHT = 24;
 const MONO_FONT_FAMILY = 3;
 const MEDIUM_FONT_SIZE = 20;
 
+// Monochrome families (mdi) rely on `currentColor`, which has no meaning in a
+// standalone SVG image; pin a dark ink so they read on the default light board.
+const MONO_INK = "#1e1e1e";
+
+// Uniform freedraw width. Excalidraw tapers a mouse stroke because it
+// synthesises pressure; pinning every sample to one value renders a plain,
+// constant-weight vector pen instead of a paint brush.
+const FREEDRAW_PRESSURE = 0.5;
+
+// Excalidraw expands freedraw `strokeWidth` by ~4.25x when it builds the pen
+// outline, so the same value reads much heavier in draw mode than on a shape.
+// Keep shapes at 2px and give the pen its own thin default.
+const SHAPE_STROKE_WIDTH = 2;
+export const FREEDRAW_STROKE_WIDTH = 1;
+
 // Defaults for anything the user draws with Excalidraw's own tools. Roughness 0
 // is Excalidraw's "architect" style: crisp, straight strokes instead of the
-// hand-drawn wobble that is its default.
+// hand-drawn wobble that is its default. Every `currentItem*` field is pinned
+// so a browser profile that has previously used Excalidraw cannot leak its
+// last-used colour, fill or width into a coredraw board.
 export const FORMAL_DRAW_DEFAULTS = {
   currentItemRoughness: 0,
   currentItemFontFamily: MONO_FONT_FAMILY,
+  currentItemFontSize: MEDIUM_FONT_SIZE,
+  currentItemTextAlign: "left" as const,
   currentItemStrokeStyle: "solid" as const,
+  currentItemStrokeColor: MONO_INK,
+  currentItemStrokeWidth: SHAPE_STROKE_WIDTH,
+  currentItemBackgroundColor: "transparent",
+  currentItemFillStyle: "solid" as const,
+  currentItemOpacity: 100,
+  currentItemRoundness: "round" as const,
+};
+
+// The style controls in the editor bar. `strokeWidth` means Excalidraw's
+// element width; freedraw is rendered heavier by the engine, so the draw tool
+// overrides this with FREEDRAW_STROKE_WIDTH when it is selected.
+export interface DrawStyle {
+  strokeColor: string;
+  backgroundColor: string;
+  strokeWidth: number;
+  strokeStyle: "solid" | "dashed" | "dotted";
+  fillStyle: "solid" | "hachure" | "cross-hatch";
+  opacity: number;
+}
+
+export const DEFAULT_DRAW_STYLE: DrawStyle = {
+  strokeColor: MONO_INK,
+  backgroundColor: "transparent",
+  strokeWidth: SHAPE_STROKE_WIDTH,
+  strokeStyle: "solid",
+  fillStyle: "solid",
+  opacity: 100,
 };
 
 // Only durable view config is persisted; scroll/zoom/selection/zen are
@@ -101,10 +148,6 @@ function randomInt(): number {
 // ---------------------------------------------------------------------------
 // Icon glyph → SVG data-URL (from the vendored sprite).
 // ---------------------------------------------------------------------------
-
-// Monochrome families (mdi) rely on `currentColor`, which has no meaning in a
-// standalone SVG image; pin a dark ink so they read on the default light board.
-const MONO_INK = "#1e1e1e";
 
 // UTF-8 safe base64 (browser and node). Excalidraw decodes every image data URL
 // with `atob`, so the URL must be base64 — a `;utf8,` percent-encoded URL throws
@@ -169,6 +212,135 @@ function baseElement(f: BaseFields) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Style normalization.
+//
+// Two distinct jobs, deliberately kept apart:
+// - `flattenFreehandPressure` runs automatically on every change. It only
+//   removes the simulated-pressure taper from freedraw strokes, because
+//   Excalidraw exposes no UI setting for it and it is the main source of the
+//   "paint brush" look. It never touches colour, width or roughness.
+// - `applyFormalStyle` runs only when the user explicitly asks for a clean
+//   board. It forces every element back onto the formal preset (architect
+//   roughness, solid 2px strokes, ink colour) and is therefore destructive to
+//   deliberate styling, so it is never automatic.
+// ---------------------------------------------------------------------------
+
+function bumpVersion<T extends ExcalidrawElement>(el: T): T {
+  return { ...el, version: el.version + 1, versionNonce: randomInt(), updated: Date.now() };
+}
+
+function flattenFreehand(el: ExcalidrawFreeDrawElement): ExcalidrawFreeDrawElement {
+  const pressures = new Array<number>(el.points.length).fill(FREEDRAW_PRESSURE);
+  return bumpVersion({ ...el, simulatePressure: false, pressures });
+}
+
+export function flattenFreehandPressure(
+  elements: readonly ExcalidrawElement[],
+): { elements: ExcalidrawElement[]; changed: boolean } {
+  let changed = false;
+  const out = elements.map((el) => {
+    if (el.type !== "freedraw") return el;
+    const free = el as ExcalidrawFreeDrawElement;
+    const flat =
+      !free.simulatePressure && free.pressures.every((p) => p === FREEDRAW_PRESSURE);
+    if (flat) return el;
+    changed = true;
+    return flattenFreehand(free);
+  });
+  return { elements: out, changed };
+}
+
+export function applyFormalStyle(elements: readonly ExcalidrawElement[]): ExcalidrawElement[] {
+  return elements.map((el) => {
+    let styled = el;
+    if (el.type === "freedraw") {
+      const free = el as ExcalidrawFreeDrawElement;
+      if (free.simulatePressure || free.pressures.some((p) => p !== FREEDRAW_PRESSURE)) {
+        styled = flattenFreehand(free);
+      }
+    }
+    const width = styled.type === "freedraw" ? FREEDRAW_STROKE_WIDTH : SHAPE_STROKE_WIDTH;
+    const formal =
+      styled.roughness === 0 &&
+      styled.strokeStyle === "solid" &&
+      styled.strokeWidth === width &&
+      styled.strokeColor === MONO_INK &&
+      styled.opacity === 100 &&
+      (styled.type !== "text" ||
+        (styled as ExcalidrawTextElement).fontFamily === MONO_FONT_FAMILY);
+    if (formal) return styled;
+    return bumpVersion({
+      ...styled,
+      roughness: 0,
+      strokeStyle: "solid" as const,
+      strokeWidth: width,
+      strokeColor: MONO_INK,
+      opacity: 100,
+      ...(styled.type === "text" ? { fontFamily: MONO_FONT_FAMILY } : {}),
+    });
+  });
+}
+
+// Apply the style bar to the current selection. Elements that do not use a
+// property (the fill of a line, the stroke of an image) simply ignore it.
+export function applyStyleToElements(
+  elements: readonly ExcalidrawElement[],
+  selectedIds: Record<string, boolean | undefined>,
+  style: DrawStyle,
+): ExcalidrawElement[] {
+  return elements.map((el) => {
+    if (el.isDeleted || !selectedIds[el.id]) return el;
+    if (el.type === "image") {
+      if (el.opacity === style.opacity) return el;
+      return bumpVersion({ ...el, opacity: style.opacity });
+    }
+    if (el.type === "text") {
+      if (el.strokeColor === style.strokeColor && el.opacity === style.opacity) return el;
+      return bumpVersion({
+        ...el,
+        strokeColor: style.strokeColor,
+        opacity: style.opacity,
+      });
+    }
+    if (el.type === "freedraw") {
+      const free = el as ExcalidrawFreeDrawElement;
+      if (
+        free.strokeColor === style.strokeColor &&
+        free.strokeWidth === style.strokeWidth &&
+        free.opacity === style.opacity
+      ) {
+        return el;
+      }
+      return bumpVersion({
+        ...free,
+        strokeColor: style.strokeColor,
+        strokeWidth: style.strokeWidth,
+        opacity: style.opacity,
+      });
+    }
+    if (
+      el.strokeColor === style.strokeColor &&
+      el.backgroundColor === style.backgroundColor &&
+      el.fillStyle === style.fillStyle &&
+      el.strokeWidth === style.strokeWidth &&
+      el.strokeStyle === style.strokeStyle &&
+      el.opacity === style.opacity
+    ) {
+      return el;
+    }
+    return bumpVersion({
+      ...el,
+      strokeColor: style.strokeColor,
+      backgroundColor: style.backgroundColor,
+      fillStyle: style.fillStyle,
+      strokeWidth: style.strokeWidth,
+      strokeStyle: style.strokeStyle,
+      opacity: style.opacity,
+    });
+  });
+}
+
 // The file id used for every placement of one icon, so all Lambda glyphs share
 // a single uploaded file. Deterministic, so re-hydration can rebuild the file.
 // Must be CSS-selector safe: Excalidraw's SVG export does
@@ -195,6 +367,15 @@ function iconFile(fileId: string, iconId: string): BinaryFileData {
   } as unknown as BinaryFileData;
 }
 
+// Cascadia Mono advance width is a little over half an em. The label is a
+// fixed-width text element, so size it to the title instead of clipping longer
+// names like "AWS CloudFront" to the 96px glyph box.
+const MONO_CHAR_RATIO = 0.62;
+
+function iconLabelWidth(title: string, fontSize: number): number {
+  return Math.max(ICON_SIZE, Math.ceil(title.length * fontSize * MONO_CHAR_RATIO));
+}
+
 // Build the image + editable-label pair for an icon, sharing a group so they
 // select/move/delete as one (and can be ungrouped to edit independently).
 export function buildIconInsertion(
@@ -206,6 +387,7 @@ export function buildIconInsertion(
   const title = opts.title ?? iconLabel(iconId);
   const groupId = randomId();
   const fileId = opts.fileId ?? iconFileId(iconId);
+  const labelWidth = iconLabelWidth(title, MEDIUM_FONT_SIZE);
 
   const image = {
     ...baseElement({
@@ -223,13 +405,14 @@ export function buildIconInsertion(
     crop: null,
   } as unknown as ExcalidrawImageElement;
 
-  // The label box matches the glyph width and does not auto-resize to its text,
-  // so `textAlign: "center"` keeps a short label centred beneath the glyph.
+  // The label box is sized to the title (but never narrower than the glyph)
+  // and does not auto-resize, so `textAlign: "center"` keeps it centred
+  // beneath the glyph without clipping.
   const label = {
     ...baseElement({
-      x,
+      x: x + (ICON_SIZE - labelWidth) / 2,
       y: y + ICON_SIZE + LABEL_GAP,
-      width: ICON_SIZE,
+      width: labelWidth,
       height: LABEL_HEIGHT,
       groupIds: [groupId],
     }),
@@ -311,6 +494,29 @@ export function buildShapeElement(kind: ShapeKind, x: number, y: number): Excali
     type: "frame",
     name: null,
   } as unknown as ExcalidrawElement;
+}
+
+// A straight connector between two scene points, used by the diagram templates.
+export function buildArrow(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): ExcalidrawLinearElement {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  return {
+    ...baseElement({ x: from.x, y: from.y, width: Math.abs(dx), height: Math.abs(dy) }),
+    type: "arrow",
+    points: [
+      [0, 0],
+      [dx, dy],
+    ],
+    lastCommittedPoint: null,
+    startBinding: null,
+    endBinding: null,
+    startArrowhead: null,
+    endArrowhead: "arrow",
+    roundness: { type: 2 },
+  } as unknown as ExcalidrawLinearElement;
 }
 
 // ---------------------------------------------------------------------------
@@ -480,5 +686,15 @@ export interface CanvasAdapter {
   setTool(tool: CanvasTool): void;
   insertIcon(iconId: string): void;
   insertShape(kind: ShapeKind): void;
+  // Insert a ready-made diagram at the viewport centre.
+  insertTemplate(templateId: string): void;
+  // Apply a style to the selected elements (or just the active tool defaults
+  // when nothing is selected) and report the resulting style.
+  applyStyle(style: DrawStyle): void;
+  currentStyle(): DrawStyle;
+  // Re-style every element on the board to the formal preset (roughness 0,
+  // solid ink strokes; freedraw is thinner than shapes). User-initiated only —
+  // it overwrites deliberate styling.
+  normalizeBoard(): void;
   exportImage(format: "png" | "svg"): Promise<void>;
 }

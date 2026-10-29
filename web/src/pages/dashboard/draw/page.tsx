@@ -6,24 +6,41 @@ import {
   toolForShortcut,
   railToolForCanvasTool,
   DEFAULT_APP_STATE,
+  DEFAULT_DRAW_STYLE,
   type CanvasAdapter,
+  type CanvasTool,
+  type DrawStyle,
   type LoadedScene,
   type RailToolId,
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
-import { IconPalette, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
+import { IconPalette, StyleBar, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
+
+function sameStyle(a: DrawStyle, b: DrawStyle): boolean {
+  return (
+    a.strokeColor === b.strokeColor &&
+    a.backgroundColor === b.backgroundColor &&
+    a.strokeWidth === b.strokeWidth &&
+    a.strokeStyle === b.strokeStyle &&
+    a.fillStyle === b.fillStyle &&
+    a.opacity === b.opacity
+  );
+}
 
 export default function DrawPage() {
   const { boardId } = useParams<{ boardId?: string }>();
-  const [paletteOpen, setPaletteOpen] = useState(true);
+  // The insert palette starts closed; `/` is the fast path to icon search.
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
   // Bumped when `/` is pressed so the palette's search refocuses even when the
   // panel is already open.
   const [paletteFocusNonce, setPaletteFocusNonce] = useState(0);
   const [docOpen, setDocOpen] = useState(true);
   const [activeTool, setActiveTool] = useState<RailToolId | null>("select");
+  const [style, setStyle] = useState<DrawStyle>(DEFAULT_DRAW_STYLE);
+  const styleRef = useRef<DrawStyle>(DEFAULT_DRAW_STYLE);
   const [scene, setScene] = useState<LoadedScene | null>(null);
   // Bumped on every load so the canvas remounts (Excalidraw only reads
   // initialData on mount).
@@ -52,6 +69,11 @@ export default function DrawPage() {
     const adapter = adapterRef.current;
     if (!adapter) return;
     setActiveTool(adapter.activeRailTool());
+    const next = adapter.currentStyle();
+    if (!sameStyle(next, styleRef.current)) {
+      styleRef.current = next;
+      setStyle(next);
+    }
     if (adapter.noteSceneChange()) scheduleSave();
   }, [scheduleSave]);
 
@@ -61,9 +83,22 @@ export default function DrawPage() {
     adapterRef.current = adapter;
   }, []);
 
-  const handleSelectTool = useCallback((id: RailToolId) => {
-    adapterRef.current?.setTool(id);
-    setActiveTool(id);
+  const handleSelectTool = useCallback((id: CanvasTool) => {
+    const adapter = adapterRef.current;
+    adapter?.setTool(id);
+    setActiveTool(railToolForCanvasTool(id));
+    if (adapter) {
+      const next = adapter.currentStyle();
+      styleRef.current = next;
+      setStyle(next);
+    }
+  }, []);
+
+  const handleStyleChange = useCallback((patch: Partial<DrawStyle>) => {
+    const next = { ...styleRef.current, ...patch };
+    styleRef.current = next;
+    setStyle(next);
+    adapterRef.current?.applyStyle(next);
   }, []);
 
   const handlePickIcon = useCallback((iconId: string) => {
@@ -74,8 +109,16 @@ export default function DrawPage() {
     adapterRef.current?.insertShape(kind);
   }, []);
 
+  const handlePickTemplate = useCallback((templateId: string) => {
+    adapterRef.current?.insertTemplate(templateId);
+  }, []);
+
   const handleExport = useCallback((format: "png" | "svg") => {
     void adapterRef.current?.exportImage(format);
+  }, []);
+
+  const handleNormalize = useCallback(() => {
+    adapterRef.current?.normalizeBoard();
   }, []);
 
   // eraser.io-style keyboard: `/` opens icon search, and bare tool keys
@@ -103,12 +146,11 @@ export default function DrawPage() {
       if (!tool) return;
       e.preventDefault();
       e.stopPropagation();
-      adapterRef.current?.setTool(tool);
-      setActiveTool(railToolForCanvasTool(tool));
+      handleSelectTool(tool);
     }
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, []);
+  }, [handleSelectTool]);
 
   if (sync.phase === "loading") {
     return (
@@ -164,7 +206,9 @@ export default function DrawPage() {
         paletteOpen={paletteOpen}
         onTogglePalette={() => setPaletteOpen((open) => !open)}
         onExport={handleExport}
+        onNormalize={handleNormalize}
       />
+      <StyleBar style={style} onChange={handleStyleChange} />
 
       <div className="flex min-h-0 flex-1">
         <ToolRail
@@ -185,6 +229,7 @@ export default function DrawPage() {
           onClose={() => setPaletteOpen(false)}
           onPickIcon={handlePickIcon}
           onPickShape={handlePickShape}
+          onPickTemplate={handlePickTemplate}
         />
         <div className="relative min-h-0 min-w-0 flex-1">
           <ExcalidrawCanvas

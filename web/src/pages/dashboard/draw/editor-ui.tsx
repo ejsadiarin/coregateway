@@ -7,11 +7,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Boxes, ChevronLeft, Download, Layers, Search, Shapes, X } from "lucide-react";
+import { Boxes, ChevronLeft, Download, Layers, Search, Shapes, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ICON_FAMILIES, ICON_ENTRIES, iconSprite, type IconEntry } from "@/pages/dashboard/draw/icon-catalog";
 import { RAIL_TOOLS, SHAPE_ITEMS, type ShapeItem } from "@/pages/dashboard/draw/palette-catalog";
-import type { RailToolId, ShapeKind } from "@/pages/dashboard/draw/engine";
+import { DIAGRAM_TEMPLATES } from "@/pages/dashboard/draw/templates";
+import type { DrawStyle, RailToolId, ShapeKind } from "@/pages/dashboard/draw/engine";
 
 export type PaletteTab = "icons" | "shapes";
 
@@ -148,14 +149,19 @@ function IconTile({
       onClick={onPick}
       onMouseEnter={onHover}
       className={cn(
-        "group flex flex-col items-center gap-1 rounded-md border border-transparent p-1.5 text-center transition-colors hover:border-border hover:bg-accent",
-        active && "border-primary/60 bg-accent",
+        "group flex flex-col items-center gap-0.5 rounded-md border border-transparent p-1 text-center transition-colors hover:border-border hover:bg-muted/60",
+        active && "border-border bg-muted",
       )}
     >
-      <span className="flex h-8 w-8 items-center justify-center text-foreground">
+      <span className="flex h-7 w-7 items-center justify-center text-foreground">
         <PaletteGlyph iconId={entry.id} />
       </span>
-      <span className="w-full truncate text-[10px] leading-tight text-muted-foreground group-hover:text-foreground">
+      <span
+        className={cn(
+          "w-full truncate text-[9px] leading-tight text-muted-foreground group-hover:text-foreground",
+          active && "text-foreground",
+        )}
+      >
         {entry.title}
       </span>
     </button>
@@ -168,12 +174,12 @@ function ShapeTile({ item, onPick }: { item: ShapeItem; onPick: () => void }) {
       type="button"
       title={item.title}
       onClick={onPick}
-      className="group flex flex-col items-center gap-1 rounded-md border border-transparent p-1.5 text-center transition-colors hover:border-border hover:bg-accent"
+      className="group flex flex-col items-center gap-0.5 rounded-md border border-transparent p-1 text-center transition-colors hover:border-border hover:bg-muted/60"
     >
-      <span className="flex h-8 w-8 items-center justify-center">
-        <item.icon className="h-5 w-5 text-foreground/80 group-hover:text-foreground" />
+      <span className="flex h-7 w-7 items-center justify-center">
+        <item.icon className="h-4 w-4 text-foreground/80 group-hover:text-foreground" />
       </span>
-      <span className="w-full truncate text-[10px] leading-tight text-muted-foreground group-hover:text-foreground">
+      <span className="w-full truncate text-[9px] leading-tight text-muted-foreground group-hover:text-foreground">
         {item.title}
       </span>
     </button>
@@ -196,6 +202,7 @@ export function IconPalette({
   onClose,
   onPickIcon,
   onPickShape,
+  onPickTemplate,
 }: {
   open: boolean;
   tab: PaletteTab;
@@ -206,6 +213,7 @@ export function IconPalette({
   onClose: () => void;
   onPickIcon: (iconId: string) => void;
   onPickShape: (kind: ShapeKind) => void;
+  onPickTemplate: (templateId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<string>("all");
@@ -304,35 +312,36 @@ export function IconPalette({
     const entry = activeResult < 0 ? undefined : results[activeResult];
     if (!entry) return;
     onPickIcon(entry.id);
-    // Hand focus back to the canvas so the new element can be nudged with the
-    // arrow keys, or a tool shortcut can follow immediately.
-    inputRef.current?.blur();
+    // `/` is the fast path: insert and get out of the way so the next
+    // keystroke reaches the canvas. Clear the query for the next invocation.
+    setQuery("");
+    onClose();
   }
 
   if (!open) return null;
 
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-background">
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-2">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-background">
+      <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1.5">
         <button
           type="button"
           onClick={() => onTabChange("icons")}
           className={cn(
-            "flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium",
-            tab === "icons" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/50",
+            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium",
+            tab === "icons" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
           )}
         >
-          <Layers className="h-3.5 w-3.5" /> Icons
+          <Layers className="h-3 w-3" /> Icons
         </button>
         <button
           type="button"
           onClick={() => onTabChange("shapes")}
           className={cn(
-            "flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium",
-            tab === "shapes" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/50",
+            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium",
+            tab === "shapes" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
           )}
         >
-          <Shapes className="h-3.5 w-3.5" /> Shapes
+          <Shapes className="h-3 w-3" /> Shapes
         </button>
         <button
           type="button"
@@ -346,20 +355,20 @@ export function IconPalette({
 
       {tab === "icons" ? (
         <>
-          <div className="shrink-0 border-b border-border p-2">
-            <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="shrink-0 border-b border-border p-1.5">
+            <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-1.5 py-1">
+              <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
               <input
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onSearchKeyDown}
                 placeholder="Search icons…"
-                className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
+                className="w-full bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/60"
               />
             </div>
             {tokens.length === 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {[{ id: "all", label: "All" }, ...ICON_FAMILIES.map((f) => ({ id: f.id, label: f.label }))].map(
                   (f) => (
                     <button
@@ -367,10 +376,10 @@ export function IconPalette({
                       type="button"
                       onClick={() => setFamily(f.id)}
                       className={cn(
-                        "rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                        "rounded-full border px-1.5 py-0.5 text-[9px] font-medium transition-colors",
                         family === f.id
-                          ? "border-primary/40 bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent",
+                          ? "border-border bg-muted text-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted/60",
                       )}
                     >
                       {f.label}
@@ -381,7 +390,7 @@ export function IconPalette({
             )}
           </div>
 
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1.5">
             {results.length === 0 ? (
               <p className="px-1 py-6 text-center text-xs text-muted-foreground">No icons match “{query}”.</p>
             ) : (
@@ -419,7 +428,42 @@ export function IconPalette({
           </div>
         </>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+          <h3 className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
+            Templates
+          </h3>
+          <div className="flex flex-col gap-1">
+            {DIAGRAM_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                title={`Insert ${template.title}`}
+                onClick={() => onPickTemplate(template.id)}
+                className="flex items-center gap-1.5 rounded-md border border-border/60 p-1 text-left transition-colors hover:border-border hover:bg-muted/60"
+              >
+                <span className="flex shrink-0 -space-x-1">
+                  {template.icons.map((iconId) => (
+                    <span
+                      key={iconId}
+                      className="flex h-5 w-5 items-center justify-center rounded bg-muted p-0.5 text-foreground"
+                    >
+                      <PaletteGlyph iconId={iconId} />
+                    </span>
+                  ))}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[10px] font-medium leading-tight">{template.title}</span>
+                  <span className="block truncate text-[9px] leading-tight text-muted-foreground">
+                    {template.description}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <h3 className="px-1 pb-1 pt-3 text-[9px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/70">
+            Shapes
+          </h3>
           <div className="grid grid-cols-4 gap-0.5">
             {SHAPE_ITEMS.map((item) => (
               <ShapeTile key={item.id} item={item} onPick={() => onPickShape(item.kind)} />
@@ -428,6 +472,193 @@ export function IconPalette({
         </div>
       )}
     </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Style bar
+// ---------------------------------------------------------------------------
+
+const STROKE_COLORS = [
+  { name: "Ink", value: "#1e1e1e" },
+  { name: "Slate", value: "#64748b" },
+  { name: "Blue", value: "#2563eb" },
+  { name: "Green", value: "#16a34a" },
+  { name: "Red", value: "#dc2626" },
+  { name: "Amber", value: "#d97706" },
+];
+
+const FILL_COLORS = [
+  { name: "No fill", value: "transparent" },
+  { name: "White", value: "#ffffff" },
+  { name: "Slate", value: "#e2e8f0" },
+  { name: "Blue", value: "#dbeafe" },
+  { name: "Green", value: "#dcfce7" },
+  { name: "Red", value: "#fee2e2" },
+  { name: "Amber", value: "#fef3c7" },
+];
+
+const STROKE_WIDTHS = [1, 2, 4];
+const STROKE_STYLES: { value: DrawStyle["strokeStyle"]; label: string }[] = [
+  { value: "solid", label: "Solid" },
+  { value: "dashed", label: "Dashed" },
+  { value: "dotted", label: "Dotted" },
+];
+const OPACITIES = [100, 60, 30];
+
+function StyleGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[9px] uppercase tracking-wide text-muted-foreground/60">{label}</span>
+      <div className="flex items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+function Swatch({
+  name,
+  value,
+  active,
+  onClick,
+}: {
+  name: string;
+  value: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const transparent = value === "transparent";
+  return (
+    <button
+      type="button"
+      title={name}
+      aria-label={name}
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "h-4 w-4 rounded-full border transition-transform",
+        active ? "border-foreground ring-2 ring-foreground/40" : "border-border hover:scale-110",
+      )}
+      style={{
+        background: transparent
+          ? "repeating-linear-gradient(45deg, transparent 0 3px, #a8a29e 3px 4px)"
+          : value,
+      }}
+    />
+  );
+}
+
+export function StyleBar({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-background px-2 py-1">
+      <StyleGroup label="Stroke">
+        {STROKE_COLORS.map((color) => (
+          <Swatch
+            key={color.value}
+            name={color.name}
+            value={color.value}
+            active={style.strokeColor === color.value}
+            onClick={() => onChange({ strokeColor: color.value })}
+          />
+        ))}
+      </StyleGroup>
+
+      <div className="h-4 w-px shrink-0 bg-border" />
+
+      <StyleGroup label="Fill">
+        {FILL_COLORS.map((color) => (
+          <Swatch
+            key={color.value}
+            name={color.name}
+            value={color.value}
+            active={style.backgroundColor === color.value}
+            onClick={() =>
+              onChange({
+                backgroundColor: color.value,
+                fillStyle: color.value === "transparent" ? "solid" : style.fillStyle,
+              })
+            }
+          />
+        ))}
+      </StyleGroup>
+
+      <div className="h-4 w-px shrink-0 bg-border" />
+
+      <StyleGroup label="Width">
+        {STROKE_WIDTHS.map((width) => (
+          <button
+            key={width}
+            type="button"
+            title={`${width}px stroke`}
+            aria-label={`${width}px stroke`}
+            aria-pressed={style.strokeWidth === width}
+            onClick={() => onChange({ strokeWidth: width })}
+            className={cn(
+              "flex h-6 w-6 items-center justify-center rounded border transition-colors",
+              style.strokeWidth === width
+                ? "border-foreground/40 bg-muted text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-muted/60",
+            )}
+          >
+            <span className="block w-3.5 rounded-full bg-current" style={{ height: width }} />
+          </button>
+        ))}
+      </StyleGroup>
+
+      <div className="h-4 w-px shrink-0 bg-border" />
+
+      <StyleGroup label="Dash">
+        {STROKE_STYLES.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            title={item.label}
+            aria-label={item.label}
+            aria-pressed={style.strokeStyle === item.value}
+            onClick={() => onChange({ strokeStyle: item.value })}
+            className={cn(
+              "flex h-6 w-7 items-center justify-center rounded border transition-colors",
+              style.strokeStyle === item.value
+                ? "border-foreground/40 bg-muted text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-muted/60",
+            )}
+          >
+            <span
+              className="block w-3.5 border-t-2 border-current"
+              style={{ borderTopStyle: item.value }}
+            />
+          </button>
+        ))}
+      </StyleGroup>
+
+      <div className="h-4 w-px shrink-0 bg-border" />
+
+      <StyleGroup label="Opacity">
+        {OPACITIES.map((opacity) => (
+          <button
+            key={opacity}
+            type="button"
+            title={`${opacity}% opacity`}
+            aria-label={`${opacity}% opacity`}
+            aria-pressed={style.opacity === opacity}
+            onClick={() => onChange({ opacity })}
+            className={cn(
+              "flex h-6 items-center justify-center rounded border px-1.5 text-[10px] transition-colors",
+              style.opacity === opacity
+                ? "border-foreground/40 bg-muted text-foreground"
+                : "border-transparent text-muted-foreground hover:bg-muted/60",
+            )}
+          >
+            {opacity}%
+          </button>
+        ))}
+      </StyleGroup>
+    </div>
   );
 }
 
@@ -444,6 +675,7 @@ export function TopBar({
   paletteOpen,
   onTogglePalette,
   onExport,
+  onNormalize,
 }: {
   title: string;
   saveLabel: string;
@@ -453,6 +685,7 @@ export function TopBar({
   paletteOpen: boolean;
   onTogglePalette: () => void;
   onExport: (format: "png" | "svg") => void;
+  onNormalize: () => void;
 }) {
   return (
     <header className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-2 py-1.5 text-xs">
@@ -487,6 +720,14 @@ export function TopBar({
         {saveLabel}
       </span>
       <div className="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          onClick={onNormalize}
+          title="Apply the clean architect style to every element on this board"
+          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Sparkles className="h-3.5 w-3.5" /> Clean
+        </button>
         <button
           type="button"
           onClick={() => onExport("png")}
