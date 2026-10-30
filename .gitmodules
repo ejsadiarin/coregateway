@@ -12,3 +12,4 @@
 	path = services/coredraw
     url = git@github.com:ejsadiarin/coredraw.git
     ; url = ssh://git@codeberg.org/ejsadiarin/coredraw.git ; for codeberg
+	branch = main
