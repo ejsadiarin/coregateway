@@ -7,3 +7,8 @@
 	path = services/corefinance
     url = git@github.com:ejsadiarin/corefinance.git
     ; url = ssh://git@codeberg.org/ejsadiarin/corefinance.git ; for codeberg
+
+[submodule "coredraw"]
+	path = services/coredraw
+    url = git@github.com:ejsadiarin/coredraw.git
+    ; url = ssh://git@codeberg.org/ejsadiarin/coredraw.git ; for codeberg
