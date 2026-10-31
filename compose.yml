@@ -36,6 +36,11 @@ services:
       - JWT_PRIVATE_KEY_PEM=${JWT_PRIVATE_KEY_PEM:-}
       - JWT_PREV_PRIVATE_KEY_PEM=${JWT_PREV_PRIVATE_KEY_PEM:-}
       - JWT_PREV_KID=${JWT_PREV_KID:-}
+      # Native (no-compose) runs offset the ports so they can coexist with this
+      # stack: gateway :18080, coredraw-api :16971, web :3001. Downstreams must
+      # then verify against http://localhost:18080/.well-known/jwks.json instead
+      # of http://coregateway-api:8080/.well-known/jwks.json (that override lives
+      # in the coredraw-api service below and in services/coredraw/.env).
       - GODEBUG=netdns=go
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
