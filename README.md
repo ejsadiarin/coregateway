@@ -77,7 +77,7 @@ coregateway/
 │       └── sqlc/             # sqlc-generated Go code (DO NOT EDIT)
 ├── services/
 │   ├── corefinance/          # Corefinance microservice (separate repo/deployment)
-│   └── coredraw/             # Coredraw whiteboard microservice (in-repo Go module)
+│   └── coredraw/             # Coredraw whiteboard microservice (git submodule, own Go module)
 ├── proto/                    # Protobuf definitions (buf-managed)
 ├── compose.yml               # Docker Compose for local development
 ├── coregateway-api.http      # HTTP client file (VS Code REST Client)
@@ -229,98 +229,17 @@ Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
 
 ### Adding a new microservice (Runbook)
 
-To integrate a new downstream service (e.g. `coreinventory-api`):
+Full procedure, with the code to copy: **[docs/adding-a-service.md](docs/adding-a-service.md)**.
 
-**1. Create the client package**
+Every new downstream needs:
 
-```bash
-mkdir -p internal/coreinventory
-```
-
-Create `client.go` inside it:
-```go
-package coreinventory
-
-import (
-	"log/slog"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
-	"time"
-)
-
-type Client struct {
-	target     *url.URL
-	httpClient *http.Client
-}
-
-func New(baseURL string) *Client {
-	target, err := url.Parse(baseURL)
-	if err != nil {
-		slog.Error("coreinventory: invalid base URL", "url", baseURL, "error", err)
-		panic("coreinventory: invalid COREINVENTORY_URL")
-	}
-	return &Client{
-		target:     target,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-	}
-}
-
-func (c *Client) Proxy() http.Handler {
-	proxy := httputil.NewSingleHostReverseProxy(c.target)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = c.target.Host
-	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		slog.Error("coreinventory: proxy error", "method", r.Method, "path", r.URL.Path, "error", err)
-		http.Error(w, "downstream service unavailable", http.StatusBadGateway)
-	}
-	return proxy
-}
-```
-
-**2. Add config field**
-
-In `internal/config/config.go`, add `CoreinventoryURL string` to `Config` struct and read from `COREINVENTORY_URL` env var.
-
-**3. Wire into server**
-
-In `internal/server/server.go`, add `CoreinventoryClient *coreinventory.Client` to `Server` struct and initialize in `New()`.
-
-**4. Mount the route**
-
-In `internal/server/routes.go`:
-```go
-// inventory — streamed to coreinventory-api
-r.Route("/api/inventory", func(r chi.Router) {
-    r.Use(middleware.ForwardHeaders)
-    r.Handle("/*", s.CoreinventoryClient.Proxy())
-})
-```
-
-**5. Add to compose.yml**
-
-```yaml
-coreinventory-api:
-  build:
-    context: ./services/coreinventory
-    dockerfile: Dockerfile
-  ports:
-    - "7070:7070"
-  environment:
-    - PORT=7070
-    - ENV=development
-    - DATABASE_URL=...
-```
-
-Add `COREINVENTORY_URL=http://coreinventory-api:7070` to coregateway-api environment.
-Add `coreinventory-api` to web service's `depends_on`.
-
-**6. Update README.md**
-
-Add the service to the "Current services" table.
+1. Submodule at `services/<name>` plus `use ./services/<name>` in `go.work`.
+2. A `CORE*_URL` env var (e.g. `COREBAN_URL`) in `internal/config/config.go`, `.env.example`, and `compose.yml`.
+3. A proxy client in `internal/services/<name>/` wired into `internal/server/server.go`.
+4. A route in `internal/server/routes.go` gated by `EdgeIdentity` + `RequireServiceKeyScope("<name>")`.
+5. `<name>` appended to `JWT_AUDIENCE` — the downstream accepts only its own name, not the comma list.
+6. A `*_scope_test.go` copy of `coredraw_scope_test.go`.
+7. README service/env tables, `docs/auth-flow.md`, `coregateway-api.http`, and the `compose.yml` service block.
 
 ### Adding aggregation endpoints
 
