@@ -1,4 +1,11 @@
 ---
+secrets:
+  # Signing key mounted as a file: process environment is readable via
+  # `docker inspect` and /proc, so the PEM never travels as an env var.
+  # Generate with: openssl genpkey -algorithm ed25519 -out jwt_ed25519.pem
+  jwt_private_key:
+    file: ./jwt_ed25519.pem
+
 services:
   web:
     build:
@@ -33,7 +40,9 @@ services:
       - JWT_ISSUER=${JWT_ISSUER:-https://gateway.internal}
       - JWT_AUDIENCE=${JWT_AUDIENCE:-corefinance,coredraw}
       - JWT_TTL_SECONDS=${JWT_TTL_SECONDS:-300}
-      - JWT_PRIVATE_KEY_PEM=${JWT_PRIVATE_KEY_PEM:-}
+      - JWT_PRIVATE_KEY_FILE=/run/secrets/jwt_private_key
+      # Rotation-only: the previous key still travels inline. Prefer a second
+      # secret file + JWT_PREV_PRIVATE_KEY_FILE if you rotate under compose.
       - JWT_PREV_PRIVATE_KEY_PEM=${JWT_PREV_PRIVATE_KEY_PEM:-}
       - JWT_PREV_KID=${JWT_PREV_KID:-}
       # Native (no-compose) runs offset the ports so they can coexist with this
@@ -42,6 +51,8 @@ services:
       # of http://coregateway-api:8080/.well-known/jwks.json (that override lives
       # in the coredraw-api service below and in services/coredraw/.env).
       - GODEBUG=netdns=go
+    secrets:
+      - jwt_private_key
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1

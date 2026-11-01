@@ -20,37 +20,74 @@ type Config struct {
 	CorefinanceURL      string
 	CoredrawURL         string
 	// Internal JWT identity (gateway is the sole signer).
+	//
+	// JWTPrivateKeyPEM holds the resolved key material: either the contents
+	// of JWT_PRIVATE_KEY_FILE or, as a fallback, the inline
+	// JWT_PRIVATE_KEY_PEM env var. JWTKeySource names which one was used so
+	// boot logs can show it without ever logging the material.
 	JWTPrivateKeyPEM     string
 	JWTPrevPrivateKeyPEM string
+	JWTKeySource         string
 	JWTKID               string
 	JWTPrevKID           string
 	JWTIssuer            string
-	// JWTAudience lists every downstream the minted tokens are valid for.
-	// Comma-separated in JWT_AUDIENCE (e.g. "corefinance,coredraw").
+	// JWTAudience is the allow-list of downstreams the gateway may mint
+	// tokens for. Comma-separated in JWT_AUDIENCE (e.g.
+	// "corefinance,coredraw"); each token carries exactly one of them.
 	JWTAudience   []string
 	JWTTTLSeconds int
+
+	// jwtKeyErr records a key file that was configured but unreadable, so
+	// Validate reports it at boot instead of silently falling back.
+	jwtKeyErr error
 }
 
 // Load loads configuration from environment variables
 func Load() *Config {
-	return &Config{
-		DatabaseURL:          getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
-		Port:                 getEnvInt("PORT", 8080),
-		Env:                  getEnv("ENV", "development"),
-		HealthCheckInterval:  60 * time.Second,
-		AdminEmail:           os.Getenv("ADMIN_EMAIL"),
-		AdminPass:            os.Getenv("ADMIN_PASSWORD"),
-		AllowedOrigins:       getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
-		CorefinanceURL:       getEnv("COREFINANCE_URL", "http://localhost:6969"),
-		CoredrawURL:          getEnv("COREDRAW_URL", "http://localhost:6971"),
-		JWTPrivateKeyPEM:     os.Getenv("JWT_PRIVATE_KEY_PEM"),
-		JWTPrevPrivateKeyPEM: os.Getenv("JWT_PREV_PRIVATE_KEY_PEM"),
-		JWTKID:               os.Getenv("JWT_KID"),
-		JWTPrevKID:           os.Getenv("JWT_PREV_KID"),
-		JWTIssuer:            getEnv("JWT_ISSUER", "https://gateway.internal"),
-		JWTAudience:          getEnvList("JWT_AUDIENCE", "corefinance,coredraw"),
-		JWTTTLSeconds:        getEnvInt("JWT_TTL_SECONDS", 300),
+	cfg := &Config{
+		DatabaseURL:         getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
+		Port:                getEnvInt("PORT", 8080),
+		Env:                 getEnv("ENV", "development"),
+		HealthCheckInterval: 60 * time.Second,
+		AdminEmail:          os.Getenv("ADMIN_EMAIL"),
+		AdminPass:           os.Getenv("ADMIN_PASSWORD"),
+		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		CorefinanceURL:      getEnv("COREFINANCE_URL", "http://localhost:6969"),
+		CoredrawURL:         getEnv("COREDRAW_URL", "http://localhost:6971"),
+		JWTKID:              os.Getenv("JWT_KID"),
+		JWTPrevKID:          os.Getenv("JWT_PREV_KID"),
+		JWTIssuer:           getEnv("JWT_ISSUER", "https://gateway.internal"),
+		JWTAudience:         getEnvList("JWT_AUDIENCE", "corefinance,coredraw"),
+		JWTTTLSeconds:       getEnvInt("JWT_TTL_SECONDS", 300),
 	}
+
+	cfg.JWTPrivateKeyPEM, cfg.JWTKeySource, cfg.jwtKeyErr = resolveKeyMaterial(
+		"JWT_PRIVATE_KEY_FILE", "JWT_PRIVATE_KEY_PEM")
+	prevPEM, _, prevErr := resolveKeyMaterial(
+		"JWT_PREV_PRIVATE_KEY_FILE", "JWT_PREV_PRIVATE_KEY_PEM")
+	cfg.JWTPrevPrivateKeyPEM = prevPEM
+	if cfg.jwtKeyErr == nil {
+		cfg.jwtKeyErr = prevErr
+	}
+	return cfg
+}
+
+// resolveKeyMaterial returns PEM key material and a loggable source label.
+// A file wins over inline PEM: material in the process environment is
+// readable via docker inspect and /proc/<pid>/environ, so the file form is
+// preferred wherever a file can be mounted.
+func resolveKeyMaterial(fileEnv, pemEnv string) (pem, source string, err error) {
+	if path := os.Getenv(fileEnv); path != "" {
+		b, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return "", fileEnv + "=" + path, fmt.Errorf("%s: %w", fileEnv, readErr)
+		}
+		return string(b), fileEnv + "=" + path, nil
+	}
+	if v := os.Getenv(pemEnv); v != "" {
+		return v, pemEnv, nil
+	}
+	return "", "", nil
 }
 
 // IsProduction returns true if running in production mode
@@ -59,6 +96,9 @@ func (c *Config) IsProduction() bool {
 }
 
 func (c *Config) Validate() error {
+	if c.jwtKeyErr != nil {
+		return c.jwtKeyErr
+	}
 	if c.DatabaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}

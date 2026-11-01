@@ -164,11 +164,12 @@ Budget API flow:
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `COREFINANCE_URL` | `http://localhost:6969` | Corefinance-api base URL (internal service) |
 | `COREDRAW_URL` | `http://localhost:6971` | Coredraw-api base URL (internal service) |
-| `JWT_PRIVATE_KEY_PEM` | - | Gateway Ed25519 signing key, PEM (required) |
+| `JWT_PRIVATE_KEY_FILE` | - | Path to the Ed25519 signing key, PKCS8 PEM (preferred; required unless `JWT_PRIVATE_KEY_PEM` is set) |
+| `JWT_PRIVATE_KEY_PEM` | - | Inline signing key, PEM with literal `\n` (fallback; visible via `docker inspect`) |
 | `JWT_KID` | - | Signing key ID published in JWKS (required) |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | - | Previous key pair, rotation overlap only |
 | `JWT_ISSUER` | `https://gateway.internal` | Internal JWT issuer |
-| `JWT_AUDIENCE` | `corefinance,coredraw` | Internal JWT audience (must cover every downstream) |
+| `JWT_AUDIENCE` | `corefinance,coredraw` | Allow-list of downstreams the gateway may mint for; each token carries exactly one |
 | `JWT_TTL_SECONDS` | `300` | Internal JWT lifetime in seconds |
 
 See `docs/auth-flow.md` and `.env.example` for the full auth picture.

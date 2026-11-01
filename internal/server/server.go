@@ -50,7 +50,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 	if err != nil {
 		return nil, fmt.Errorf("internal JWT identity: %w", err)
 	}
-	slog.Info("internal JWT identity ready", "kid", cfg.JWTKID, "issuer", cfg.JWTIssuer)
+	slog.Info("internal JWT identity ready", "kid", cfg.JWTKID, "issuer", cfg.JWTIssuer, "key_source", cfg.JWTKeySource)
 
 	// SeedUsers is idempotent: existing demo/admin rows are left alone.
 	// Failure is fatal — a gateway that cannot read/write users cannot serve.
