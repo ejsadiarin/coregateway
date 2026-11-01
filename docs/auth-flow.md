@@ -1,3 +1,11 @@
+---
+date: 2026-9-26T14:24
+title: Authentication & Internal JWT Identity
+tags: 
+    - coregateway
+---
+<!-- 2026-09-26-1424 (September 26, 2026 02:24:27 PM) -->
+
 # Authentication & Internal JWT Identity
 
 How auth works end-to-end in coregateway: sessions and API keys at the

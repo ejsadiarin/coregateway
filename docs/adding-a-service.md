@@ -1,3 +1,11 @@
+---
+date: 2026-10-31T11:15
+title: Adding a downstream service to the gateway
+tags: 
+    - coregateway
+---
+<!-- 2026-10-31-1115 (October 31, 2026 11:15:09 AM) -->
+
 # Adding a downstream service to the gateway
 
 Runbook for integrating a new microservice (example: `coreban`) so that
