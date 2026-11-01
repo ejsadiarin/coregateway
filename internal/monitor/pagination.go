@@ -1,4 +1,4 @@
-package service
+package monitor
 
 // Pagination default values
 const (

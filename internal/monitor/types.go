@@ -1,4 +1,4 @@
-package service
+package monitor
 
 // CreateServiceRequest represents the request to create a new service
 type CreateServiceRequest struct {
