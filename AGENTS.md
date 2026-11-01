@@ -10,4 +10,4 @@ Default five triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `re
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. Directories under `services/` are separate repos with their own `CONTEXT.md` and issues — read that repo's context before changing its code. See `docs/agents/domain.md`.

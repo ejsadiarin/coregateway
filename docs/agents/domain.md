@@ -23,6 +23,14 @@ This repo is **single-context**:
 └── src/
 ```
 
+## Cross-repo work
+
+`services/<name>/` are git submodules: separate repos with their own `CONTEXT.md`, `docs/adr/`, and issue tracker. Before changing code under one, read that repo's `CONTEXT.md` and use its vocabulary — the gateway glossary deliberately stops at the gateway boundary, so it is not a source of terms for downstream concepts.
+
+If a downstream repo has no `CONTEXT.md`, don't borrow gateway terms to fill the gap; note it instead. Decisions that define a shared contract (JWT claims, proxy path conventions) are owned by the gateway and referenced by URL from downstream repos, not copied.
+
+Changes spanning repos get one issue in each tracker, cross-linked. The repo that owns the user-visible outcome holds the tracking issue.
+
 ## Use the glossary's vocabulary
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
