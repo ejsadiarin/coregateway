@@ -138,7 +138,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// chi prefers the static /admin segment over the /* catch-all, so
 	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
+		r.Use(middleware.EdgeIdentity("corefinance", s.TokenIssuer, s.KeysService, userExists))
 		// Key-authed callers need service cover (read for GET/HEAD, write
 		// otherwise); sessions pass through to downstream role checks.
 		r.Use(auth.RequireServiceKeyScope("corefinance"))
@@ -155,7 +155,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// key scopes at the edge (coredraw:read for GET/HEAD, coredraw:write
 	// otherwise), sessions pass through to downstream checks.
 	r.Route("/api/coredraw", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
+		r.Use(middleware.EdgeIdentity("coredraw", s.TokenIssuer, s.KeysService, userExists))
 		r.Use(auth.RequireServiceKeyScope("coredraw"))
 		r.Use(middleware.ForwardHeaders())
 		r.Handle("/*", s.CoredrawClient.Proxy())

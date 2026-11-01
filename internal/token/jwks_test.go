@@ -44,7 +44,7 @@ func TestRotationOverlap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
-	tokenString, err := before.CreateUserToken(uuid.New(), "session", nil)
+	tokenString, err := before.CreateUserToken(uuid.New(), "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRotationOverlap(t *testing.T) {
 	}
 
 	// A token created after rotation carries the new kid.
-	fresh, err := after.CreateUserToken(uuid.New(), "session", nil)
+	fresh, err := after.CreateUserToken(uuid.New(), "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}

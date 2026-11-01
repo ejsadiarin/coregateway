@@ -53,7 +53,7 @@ func TestCreateUserTokenClaims(t *testing.T) {
 	iss := testIssuer(t)
 	userID := uuid.New()
 
-	tokenString, err := iss.CreateUserToken(userID, "session", nil)
+	tokenString, err := iss.CreateUserToken(userID, "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestCreateTargetedTokenActAs(t *testing.T) {
 	userID := uuid.New()
 	target := uuid.New()
 
-	tokenString, err := iss.CreateTargetedToken(userID, "session", []string{"admin"}, target)
+	tokenString, err := iss.CreateTargetedToken(userID, "session", []string{"admin"}, target, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestCreateTargetedTokenActAs(t *testing.T) {
 		t.Errorf("act_as = %q, want %q", claims.ActAs, target.String())
 	}
 
-	plain, err := iss.CreateUserToken(userID, "session", nil)
+	plain, err := iss.CreateUserToken(userID, "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestCreateTargetedTokenActAs(t *testing.T) {
 
 func TestCreateUserTokenScopesJoined(t *testing.T) {
 	iss := testIssuer(t)
-	tokenString, err := iss.CreateUserToken(uuid.New(), "api-key:abc", []string{"corefinance:read", "corefinance:write"})
+	tokenString, err := iss.CreateUserToken(uuid.New(), "api-key:abc", []string{"corefinance:read", "corefinance:write"}, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestCreateUserTokenScopesJoined(t *testing.T) {
 
 func TestTamperedTokenRejected(t *testing.T) {
 	iss := testIssuer(t)
-	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil)
+	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestTamperedTokenRejected(t *testing.T) {
 func TestWrongKeyRejected(t *testing.T) {
 	iss := testIssuer(t)
 	other := testKey(t, "other")
-	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil)
+	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil, "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -228,34 +228,48 @@ func TestNewIssuerValidation(t *testing.T) {
 	}
 }
 
-func TestMultiAudienceMintedAsList(t *testing.T) {
+func TestAudienceScopedToOneDownstream(t *testing.T) {
 	iss, err := NewIssuer(testKey(t, "2026-09-a"), nil,
-		"https://gateway.internal", []string{"corefinance", "corereminder"}, 300*time.Second)
+		"https://gateway.internal", []string{"corefinance", "coredraw"}, 300*time.Second)
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
-	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil)
+	tokenString, err := iss.CreateUserToken(uuid.New(), "session", nil, "coredraw")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
 	claims := parseWith(t, tokenString, iss.current.Public)
-	if len(claims.Audience) != 2 || claims.Audience[0] != "corefinance" || claims.Audience[1] != "corereminder" {
-		t.Fatalf("aud = %v, want [corefinance corereminder]", claims.Audience)
+	if len(claims.Audience) != 1 || claims.Audience[0] != "coredraw" {
+		t.Fatalf("aud = %v, want [coredraw]", claims.Audience)
 	}
-	// Each downstream verifies with its own name: membership, not equality.
-	for _, aud := range []string{"corefinance", "corereminder"} {
-		var v Claims
-		parsed, err := jwt.ParseWithClaims(tokenString, &v, func(t *jwt.Token) (any, error) {
-			return iss.current.Public, nil
-		}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience(aud), jwt.WithExpirationRequired())
-		if err != nil || !parsed.Valid {
-			t.Errorf("aud %q rejected multi-audience token: %v", aud, err)
-		}
-	}
-	var other Claims
-	if parsed, _ := jwt.ParseWithClaims(tokenString, &other, func(t *jwt.Token) (any, error) {
+
+	// The token verifies at the downstream it was minted for...
+	var own Claims
+	if parsed, err := jwt.ParseWithClaims(tokenString, &own, func(t *jwt.Token) (any, error) {
 		return iss.current.Public, nil
-	}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience("third-service"), jwt.WithExpirationRequired()); parsed != nil && parsed.Valid {
-		t.Error("unrelated audience accepted multi-audience token")
+	}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience("coredraw"), jwt.WithExpirationRequired()); err != nil || !parsed.Valid {
+		t.Errorf("own audience rejected: %v", err)
+	}
+
+	// ...and nowhere else, even though both are in the allow-list.
+	var sibling Claims
+	if parsed, _ := jwt.ParseWithClaims(tokenString, &sibling, func(t *jwt.Token) (any, error) {
+		return iss.current.Public, nil
+	}, jwt.WithIssuer("https://gateway.internal"), jwt.WithAudience("corefinance"), jwt.WithExpirationRequired()); parsed != nil && parsed.Valid {
+		t.Error("sibling downstream accepted a token minted for coredraw")
+	}
+}
+
+func TestDownstreamOutsideAllowListRejected(t *testing.T) {
+	iss, err := NewIssuer(testKey(t, "2026-09-a"), nil,
+		"https://gateway.internal", []string{"corefinance"}, 300*time.Second)
+	if err != nil {
+		t.Fatalf("new issuer: %v", err)
+	}
+	if _, err := iss.CreateUserToken(uuid.New(), "session", nil, "coredraw"); err == nil {
+		t.Fatal("expected error for downstream outside JWT_AUDIENCE")
+	}
+	if _, err := iss.CreateTargetedToken(uuid.New(), "session", nil, uuid.New(), "coredraw"); err == nil {
+		t.Fatal("expected error for targeted token outside JWT_AUDIENCE")
 	}
 }

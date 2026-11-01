@@ -245,7 +245,7 @@ func TestInternalJWTFlowRotationPrevKidStillVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new issuer: %v", err)
 	}
-	preRotation, err := before.CreateUserToken(uuid.New(), "session", nil)
+	preRotation, err := before.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("create pre-rotation token: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestInternalJWTFlowRotationPrevKidStillVerifies(t *testing.T) {
 		t.Errorf("pre-rotation token must verify during overlap: %v", err)
 	}
 
-	fresh, err := after.CreateUserToken(uuid.New(), "session", nil)
+	fresh, err := after.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("create post-rotation token: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestInternalJWTFlowForgedKidRejected(t *testing.T) {
 		t.Error("forged-kid token verified, want rejection")
 	}
 
-	valid, err := iss.CreateUserToken(uuid.New(), "session", nil)
+	valid, err := iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}

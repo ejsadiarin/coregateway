@@ -78,7 +78,7 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 	userID := uuid.New()
 	otherID := uuid.New()
 	edge := func(iss *token.Issuer) func(http.Handler) http.Handler {
-		return EdgeIdentity(iss, nil, stubExists(otherID))
+		return EdgeIdentity("corefinance", iss, nil, stubExists(otherID))
 	}
 
 	t.Run("admin targeting other mints act_as and strips param", func(t *testing.T) {
@@ -137,7 +137,7 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 	t.Run("own ID needs no lookup and sets no claim", func(t *testing.T) {
 		iss := testIssuer(t)
 		// exists stub knows NOBODY here: own ID must pass regardless.
-		h := EdgeIdentity(iss, nil, stubExists())
+		h := EdgeIdentity("corefinance", iss, nil, stubExists())
 		req := requestAsUser(httptest.NewRequest(http.MethodGet, "/api/budget/remaining?user_id="+userID.String(), nil), userID)
 		claims, _, code := parseProxiedClaims(t, iss, h, req)
 		if code != http.StatusOK {
@@ -178,7 +178,7 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 		fail := UserExistsFunc(func(context.Context, uuid.UUID) (bool, error) {
 			return false, errors.New("db down")
 		})
-		h := EdgeIdentity(iss, nil, fail)
+		h := EdgeIdentity("corefinance", iss, nil, fail)
 		req := requestAsAdmin(httptest.NewRequest(http.MethodGet, "/api/budget/remaining?user_id="+otherID.String(), nil), adminID)
 		rec := httptest.NewRecorder()
 		h(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})).ServeHTTP(rec, req)

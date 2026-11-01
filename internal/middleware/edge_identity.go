@@ -30,11 +30,15 @@ type UserExistsFunc func(ctx context.Context, id uuid.UUID) (bool, error)
 // 401 and never proxied. The created token is the only identity that
 // travels downstream.
 //
+// downstream names the service this route proxies to; it becomes the
+// token's only audience, so a token minted here cannot be replayed at a
+// sibling downstream. It must be a member of JWT_AUDIENCE.
+//
 // On GET/HEAD requests carrying ?user_id=<uuid>, the edge validates the
 // target (malformed → 400, other-target without admin scope → 403,
 // unknown user → 404) and mints a signed act_as claim, stripping the raw
 // param. Non-GET/HEAD requests ignore the param entirely.
-func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator, userExists UserExistsFunc) func(http.Handler) http.Handler {
+func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator, userExists UserExistsFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var userID uuid.UUID
@@ -68,7 +72,7 @@ func EdgeIdentity(issuer *token.Issuer, keys APIKeyValidator, userExists UserExi
 			if !ok {
 				return // targeting already responded
 			}
-			issue(w, r, next, issuer, userID, azp, scopes, actAs)
+			issue(w, r, next, issuer, downstream, userID, azp, scopes, actAs)
 		})
 	}
 }
@@ -127,8 +131,8 @@ func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes 
 	return target, true
 }
 
-func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) {
-	signed, err := issuer.CreateTargetedToken(userID, azp, scopes, actAs)
+func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, downstream string, userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) {
+	signed, err := issuer.CreateTargetedToken(userID, azp, scopes, actAs, downstream)
 	if err != nil {
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to establish request identity")
 		return

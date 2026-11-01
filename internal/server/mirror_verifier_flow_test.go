@@ -131,7 +131,7 @@ func TestMirrorUserTokenEndToEnd(t *testing.T) {
 	}
 
 	userID := uuid.New()
-	minted, err := h.iss.CreateUserToken(userID, "session", nil)
+	minted, err := h.iss.CreateUserToken(userID, "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint user token: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestMirrorNegativeKidCachesForgedKid(t *testing.T) {
 		t.Errorf("fetches = %d, want 2 (initial + one refresh; second rejection from negative cache)", got)
 	}
 
-	valid, err := h.iss.CreateUserToken(uuid.New(), "session", nil)
+	valid, err := h.iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint valid token: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestMirrorSingleflightCoalesces(t *testing.T) {
 	h.delay = 200 * time.Millisecond
 	v := h.newVerifier(time.Nanosecond)
 
-	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil)
+	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint user token: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestMirrorRotationPropagates(t *testing.T) {
 	newKey := mirrorTestKey(t, "2026-09-b")
 	before := mirrorTestIssuer(t, oldKey, nil)
 
-	preRotation, err := before.CreateUserToken(uuid.New(), "session", nil)
+	preRotation, err := before.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint pre-rotation token: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestMirrorRotationPropagates(t *testing.T) {
 	v := h.newVerifier(0)
 
 	h.swapIssuer(mirrorTestIssuer(t, newKey, &oldKey))
-	postRotation, err := h.iss.CreateUserToken(uuid.New(), "session", nil)
+	postRotation, err := h.iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint post-rotation token: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestMirrorRotationPropagates(t *testing.T) {
 func TestMirrorFetchFailureRetries(t *testing.T) {
 	h := newMirrorHarness(t, mirrorTestIssuer(t, mirrorTestKey(t, "2026-09-a"), nil))
 
-	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil)
+	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint user token: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestMirrorFailClosedBoot(t *testing.T) {
 // than the token) must reject.
 func TestMirrorRejectsWrongIssuerAndAudience(t *testing.T) {
 	h := newMirrorHarness(t, mirrorTestIssuer(t, mirrorTestKey(t, "2026-09-a"), nil))
-	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil)
+	minted, err := h.iss.CreateUserToken(uuid.New(), "session", nil, flowAudience)
 	if err != nil {
 		t.Fatalf("mint user token: %v", err)
 	}

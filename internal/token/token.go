@@ -8,6 +8,7 @@ package token
 import (
 	"crypto/ed25519"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -57,9 +58,9 @@ func ParseKey(kid, pem string) (Key, error) {
 
 // Issuer creates signed internal JWTs. previous is nil outside rotation;
 // when set, both keys are published in JWKS but only current signs.
-// audiences lists every downstream the tokens are valid for (one entry per
-// service, e.g. ["corefinance", "corereminder"]); a downstream accepts a
-// token when its own name is a member.
+// audiences is the allow-list of downstreams the gateway may mint for
+// (one entry per service, e.g. ["corefinance", "corereminder"]); every
+// token carries exactly one audience — the downstream it is minted for.
 type Issuer struct {
 	current   Key
 	previous  *Key
@@ -136,12 +137,18 @@ func (i *Issuer) Keys() []Key {
 	return keys
 }
 
-func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUID) (string, error) {
+// sign mints a token scoped to exactly one downstream. audiences is an
+// allow-list, never the minted value: a downstream outside it is a
+// programming error (route misconfigured), not a recoverable condition.
+func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUID, downstream string) (string, error) {
+	if !slices.Contains(i.audiences, downstream) {
+		return "", fmt.Errorf("token: downstream %q is not in JWT_AUDIENCE", downstream)
+	}
 	now := time.Now()
 	claims := Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.issuer,
-			Audience:  jwt.ClaimStrings(i.audiences),
+			Audience:  jwt.ClaimStrings{downstream},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(i.ttl)),
 			Subject:   sub.String(),
@@ -160,26 +167,26 @@ func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUI
 }
 
 // CreateUserToken creates a token for a user identity established at the
-// edge (azp "session" or "api-key:<id>").
-func (i *Issuer) CreateUserToken(userID uuid.UUID, azp string, scopes []string) (string, error) {
+// edge (azp "session" or "api-key:<id>") scoped to one downstream service.
+func (i *Issuer) CreateUserToken(userID uuid.UUID, azp string, scopes []string, downstream string) (string, error) {
 	if userID == uuid.Nil {
 		return "", fmt.Errorf("token: user id is required")
 	}
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, azp, scopes, uuid.Nil)
+	return i.sign(userID, azp, scopes, uuid.Nil, downstream)
 }
 
 // CreateTargetedToken is CreateUserToken with a signed act_as claim: the
 // edge asserts the caller (sub) may act as actAs. An Nil actAs behaves
 // exactly like CreateUserToken.
-func (i *Issuer) CreateTargetedToken(userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) (string, error) {
+func (i *Issuer) CreateTargetedToken(userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID, downstream string) (string, error) {
 	if userID == uuid.Nil {
 		return "", fmt.Errorf("token: user id is required")
 	}
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, azp, scopes, actAs)
+	return i.sign(userID, azp, scopes, actAs, downstream)
 }
