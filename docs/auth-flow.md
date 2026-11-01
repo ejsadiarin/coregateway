@@ -310,7 +310,8 @@ no window where a valid token fails during rotation.
 Reference values (dev defaults from `.env.example`):
 
 ```env
-JWT_PRIVATE_KEY_PEM=        # PKCS#8 Ed25519 private key, PEM-encoded (required)
+JWT_PRIVATE_KEY_FILE=       # path to the PKCS#8 Ed25519 key (preferred)
+JWT_PRIVATE_KEY_PEM=        # inline PEM fallback (single line, literal \n)
 JWT_KID=2026-09-a           # key ID published in JWT header + JWKS (required)
 JWT_PREV_PRIVATE_KEY_PEM=   # previous private key during rotation (optional)
 JWT_PREV_KID=               # previous key ID (optional)
@@ -321,18 +322,18 @@ JWT_TTL_SECONDS=300
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `JWT_PRIVATE_KEY_PEM` | yes — gateway refuses to start without it | The signing key. Generates `kid`-stamped signatures; the public half is published via JWKS. Generate with `openssl genpkey -algorithm ed25519`, never commit it. |
+| `JWT_PRIVATE_KEY_FILE` / `JWT_PRIVATE_KEY_PEM` | one of the two — gateway refuses to start without key material | The signing key. Generates `kid`-stamped signatures; the public half is published via JWKS. A file wins over inline PEM and is the preferred source: material in the process environment is readable via `docker inspect` and `/proc/<pid>/environ`. Generate with `openssl genpkey -algorithm ed25519`, never commit it. |
 | `JWT_KID` | yes (non-empty) | Names *which* key signed a token, so verifiers can pick the right public key and old/new keys coexist during rotation. Date-letter scheme (`2026-09-a`) is convention only — any non-empty value passes, no format check — but it keeps rotations ordered and greppable. |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | only during rotation — and asymmetric: `JWT_PREV_KID` is required when `JWT_PREV_PRIVATE_KEY_PEM` is set (startup error otherwise), but `JWT_PREV_KID` alone without the PEM is silently ignored | Overlap window: the old key stays verifiable while the new one signs. Cleared after rotation. |
 | `JWT_ISSUER` | no — defaults to `https://gateway.internal` when unset | `iss` claim: the single authorized signer. Rejects tokens minted by anyone else, even if correctly signed by some other key the verifier might know. Same value everywhere *by design* (decision: one issuer; environments are separated by network + secrets, not by issuer string). |
-| `JWT_AUDIENCE` | no — defaults to `corefinance,coredraw` when unset | `aud` claim: *who the token is for*, minted as a list. Comma-separated (`corefinance,coredraw`); a downstream accepts a token when its own name is a member, and rejects tokens that don't list it — this is what stops cross-service token replay. Must cover every downstream you proxy to. |
+| `JWT_AUDIENCE` | no — defaults to `corefinance,coredraw` when unset | Allow-list of downstreams the gateway may mint for. Comma-separated (`corefinance,coredraw`). Every minted token carries exactly **one** audience — the downstream the request is proxied to — so a token captured at one service is rejected by its siblings. A route naming a downstream outside this list fails instead of minting. |
 | `JWT_TTL_SECONDS` | no — defaults to `300` | Token lifetime. Short enough that a leaked token is nearly useless, long enough to cover any single proxied request with margin. Explicit `<=0` fails startup; a non-numeric value silently falls back to `300`. |
 
 Downstream services need their own side of the handshake (see
 `new-downstream-service.md`): `JWT_JWKS_URL` (where to fetch the
 gateway's public keys), plus the expected `JWT_ISSUER` /
 `JWT_AUDIENCE`. These also have working defaults
-(`https://gateway.internal`, `corefinance,coredraw`,
+(`https://gateway.internal`, the service's own name,
 `https://gateway.internal/.well-known/jwks.json`), so the downstream
 refuses to start only when values are empty after fallback or — the
 usual case — when the initial JWKS fetch itself fails. Never serves

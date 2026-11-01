@@ -4,13 +4,22 @@ Copy-paste guide for adding a second downstream service behind the gateway's int
 
 **Convention**: service name = `<name>` (e.g. `corereminder`), module `github.com/ejsadiarin/<name>`, schema `<name>`, port e.g. `6970`, scope prefix e.g. `reminder:`.
 
-> **Gateway prerequisite - read before scaffolding.** The gateway mints internal JWTs with a configurable audience **list** (`token.Issuer` takes `audiences []string`, `internal/token/token.go`; `JWT_AUDIENCE` is comma-separated, `internal/config/config.go`; compose default `JWT_AUDIENCE=corefinance`, `compose.yml:32`). Before proxying to a new service you must extend that list to cover `<name>` - otherwise every proxied request 401s on `aud` mismatch. Likewise only `/api/budget` is proxied today (`internal/server/routes.go:98-106`).
+> **Gateway prerequisite — read before scaffolding.** Adding a downstream
+> needs gateway changes first; the step-by-step lives in
+> [`docs/adding-a-service.md`](../adding-a-service.md). In short:
 >
-> So a second service needs gateway changes first - at minimum:
->
-> - `compose.yml` / env: add `<name>` to `JWT_AUDIENCE` (e.g. `JWT_AUDIENCE=corefinance,corereminder`). No code change needed for the audience itself.
-> - `internal/server/server.go` + `routes.go`: a `/api/<domain>` group with `middleware.EdgeIdentity(issuer, s.KeysService)` + `middleware.ForwardHeaders()` and a proxy client (`internal/services/<name>/client.go`, mirroring `internal/services/corefinance/client.go`) fed by `COREFINANCE_URL`-style env (`COREREMINDER_URL=...` in compose).
-> - `compose.yml`: the `corereminder-api` block (§5) plus the new env on `coregateway-api`.
+> - `JWT_AUDIENCE` (comma-separated, `internal/config/config.go`) is an
+>   **allow-list**: add `<name>` or the route cannot mint a token for it.
+>   Each minted token carries exactly one audience — the downstream it is for —
+>   so a token captured at `corefinance` is rejected by `<name>`.
+> - `internal/server/routes.go`: a `/api/<domain>` group with
+>   `middleware.EdgeIdentity("<name>", issuer, s.KeysService, userExists)` +
+>   `auth.RequireServiceKeyScope("<name>")` + `middleware.ForwardHeaders()`.
+> - `internal/server/server.go` + `internal/services/<name>/client.go`: proxy
+>   client wiring, fed by a `CORE<NAME>_URL` env var
+>   (e.g. `COREREMINDER_URL`).
+> - `compose.yml`: the `<name>-api` block (§5) plus that URL env on
+>   `coregateway-api`.
 
 ## 0. Scaffold
 
@@ -208,7 +217,7 @@ r.Route("/api/<domain>", func(r chi.Router) {
       - GODEBUG=netdns=go
       - JWT_JWKS_URL=http://coregateway-api:8080/.well-known/jwks.json
   ```
-- [ ] **Gateway proxy config**: add `COREREMINDER_URL=http://corereminder-api:6970` to the `coregateway-api` block (mirrors `COREFINANCE_URL`), add the `/api/<domain>` edge-->proxy group plus proxy client in `internal/server/` (see the prerequisite box at the top - per-service gateway wiring **is** required), and extend the minted audience to cover `<name>` or every proxied call 401s on `aud` mismatch.
+- [ ] **Gateway proxy config**: add `COREREMINDER_URL=http://corereminder-api:6970` to the `coregateway-api` block (mirrors `COREFINANCE_URL`), add the `/api/<domain>` edge-->proxy group plus proxy client in `internal/server/` (see the prerequisite box at the top — per-service gateway wiring **is** required), and add `<name>` to the `JWT_AUDIENCE` allow-list or the route cannot mint a token for it.
 - [ ] **Boot order**: downstream fails closed (by design) if the gateway JWKS is not up when it starts. Compose orders this via the gateway `healthcheck` (`/.well-known/jwks.json`) + `depends_on: { condition: service_healthy }` — keep that stanza when adding your service block.
 - [ ] **`<domain>-api.http`**: `@jwt=` placeholder + happy path + the identity cases from `services/corefinance/budget-api.http` tail (copy, swap paths/audience):
   ```http
