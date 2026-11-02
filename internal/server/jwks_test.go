@@ -62,3 +62,61 @@ func TestServeJWKS(t *testing.T) {
 		t.Errorf("key = %+v", doc.Keys[0])
 	}
 }
+
+func TestServeJWKSConditionalGet(t *testing.T) {
+	s := &Server{TokenIssuer: testIssuer(t)}
+
+	fetch := func(ifNoneMatch string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
+		if ifNoneMatch != "" {
+			req.Header.Set("If-None-Match", ifNoneMatch)
+		}
+		rec := httptest.NewRecorder()
+		s.ServeJWKS(rec, req)
+		return rec
+	}
+
+	first := fetch("")
+	etag := first.Result().Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("expected ETag header")
+	}
+	if first.Code != http.StatusOK || first.Body.Len() == 0 {
+		t.Fatalf("status = %d, body = %d bytes", first.Code, first.Body.Len())
+	}
+
+	// Same key set: the polling verifier gets no body at all.
+	for _, validator := range []string{etag, "W/" + etag, `"stale", ` + etag, "*"} {
+		rec := fetch(validator)
+		if rec.Code != http.StatusNotModified {
+			t.Errorf("If-None-Match %q: status = %d, want 304", validator, rec.Code)
+		}
+		if rec.Body.Len() != 0 {
+			t.Errorf("If-None-Match %q: 304 carried %d bytes", validator, rec.Body.Len())
+		}
+	}
+
+	// A stale validator still gets the keys.
+	if rec := fetch(`"stale"`); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+		t.Errorf("stale validator: status = %d, body = %d bytes", rec.Code, rec.Body.Len())
+	}
+}
+
+func TestServeJWKSEtagChangesWithKeySet(t *testing.T) {
+	jwksEtag := func(s *Server) string {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		s.ServeJWKS(rec, httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil))
+		return rec.Result().Header.Get("ETag")
+	}
+
+	before := jwksEtag(&Server{TokenIssuer: testIssuer(t)})
+	after := jwksEtag(&Server{TokenIssuer: testIssuer(t)})
+	if before == "" || after == "" {
+		t.Fatal("expected ETag headers")
+	}
+	if before == after {
+		t.Errorf("ETag did not change with the published key set: %q", before)
+	}
+}

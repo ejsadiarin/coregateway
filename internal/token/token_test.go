@@ -72,6 +72,9 @@ func TestCreateUserTokenClaims(t *testing.T) {
 	if claims.Azp != "session" {
 		t.Errorf("azp = %q", claims.Azp)
 	}
+	if claims.ID == "" {
+		t.Error("jti is required")
+	}
 	if claims.Scope != "" {
 		t.Errorf("scope should be omitted, got %q", claims.Scope)
 	}
@@ -271,5 +274,28 @@ func TestDownstreamOutsideAllowListRejected(t *testing.T) {
 	}
 	if _, err := iss.CreateTargetedToken(uuid.New(), "session", nil, uuid.New(), "coredraw"); err == nil {
 		t.Fatal("expected error for targeted token outside JWT_AUDIENCE")
+	}
+}
+
+func TestTokenIDUniquePerMint(t *testing.T) {
+	iss := testIssuer(t)
+	userID := uuid.New()
+
+	first, err := iss.CreateUserToken(userID, "session", nil, "corefinance")
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	second, err := iss.CreateUserToken(userID, "session", nil, "corefinance")
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+
+	a := parseWith(t, first, iss.current.Public)
+	b := parseWith(t, second, iss.current.Public)
+	if a.ID == "" || b.ID == "" {
+		t.Fatalf("jti missing: %q, %q", a.ID, b.ID)
+	}
+	if a.ID == b.ID {
+		t.Errorf("jti repeated across mints: %q", a.ID)
 	}
 }

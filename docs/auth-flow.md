@@ -240,10 +240,15 @@ Claims (5 minutes lifetime):
   "sub": "<user-uuid>",   // always present — sub-less tokens are rejected
   "azp": "session",       // "session" | "api-key:<keyID>"
   "scope": "admin",       // space-separated; absent if none
+  "jti": "<uuid>",        // unique per mint; joins gateway and downstream logs
   "iat": 1758883200,
   "exp": 1758883500
 }
 ```
+
+`jti` is informational: verifiers do not read it, but it makes one proxied
+request greppable across the gateway log and every downstream log, where
+`sub` cannot (the same caller gets a fresh token per request).
 
 ### What the downstream service checks
 
@@ -285,6 +290,12 @@ not just once at boot:
    `kid` (e.g. right after gateway rotation) triggers an immediate
    refresh and a retry against the new key set, instead of a flat
    rejection. This is what lets rotation propagate on its own.
+
+**Conditional GET.** The endpoint stamps a strong `ETag` derived from the
+published key set and answers a matching `If-None-Match` with `304 Not
+Modified` and an empty body. A verifier that echoes the previous response's
+validator therefore transfers no key material while nothing rotates; a
+stale validator still gets the full document, and `*` matches anything.
 
 **Failure modes** (this is the part worth internalizing):
 

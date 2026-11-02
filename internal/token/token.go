@@ -149,6 +149,7 @@ func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUI
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    i.issuer,
 			Audience:  jwt.ClaimStrings{downstream},
+			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(i.ttl)),
 			Subject:   sub.String(),
