@@ -211,11 +211,13 @@ pair locally publishes both kids in JWKS — local rotation parity.
 ### k3s deployment
 
 Target state (templates in `deploy/`, applied by the operator; procedure
-in `docs/runbooks/vault-rotation.md`):
+in `docs/runbooks/jwt-key-rotation.md`, Vault specifics in
+`docs/runbooks/vault-rotation.md`):
 
 - PEM material lives in Vault KV v2 (`secret/coregateway/jwt`), synced
-  by external-secrets to the `gateway-jwt-keys` Secret and consumed as
-  env. Nothing secret is committed or hand-edited.
+  by external-secrets to the `gateway-jwt-keys` Secret and mounted as a
+  read-only file (`JWT_PRIVATE_KEY_FILE`), not injected as env. Nothing
+  secret is committed or hand-edited.
 - A monthly CronJob enforces the 90-day key-age policy and executes both
   rotation phases in one run (phase-1 overlap → poll JWKS → drain wait →
   phase-2 clear with KV version destroy), with gateway restarts via

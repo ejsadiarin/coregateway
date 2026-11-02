@@ -1,5 +1,9 @@
 # Runbook: Vault JWT rotation
 
+> Backend-neutral procedure (policy, manual run, sops+age alternative):
+> [`jwt-key-rotation.md`](jwt-key-rotation.md). This file is the Vault
+> implementation of it.
+
 Target state: Vault KV v2 at `secret/coregateway/jwt` holds the gateway
 signing keys; external-secrets syncs them to the `gateway-jwt-keys`
 Secret every minute; Reloader rolls the gateway on change; the monthly

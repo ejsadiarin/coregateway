@@ -91,5 +91,7 @@ Follow `deploy/vault-kv-layout.md`:
       survivable (losing Vault stops rotations, not traffic)
 - [ ] Calendar note (optional — automation owns it now): rotation is
       monthly-checked, 90-day policy; no human action expected
-- [ ] Full procedure reference: `docs/runbooks/vault-rotation.md`;
+- [ ] Full procedure reference: `docs/runbooks/vault-rotation.md` (Vault
+      specifics) and `docs/runbooks/jwt-key-rotation.md` (policy, manual
+      run, sops+age alternative);
       concept reference: `docs/auth-flow.md`

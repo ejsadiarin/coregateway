@@ -28,18 +28,16 @@ authorize locally:
 - JWKS: `https://gateway.internal/.well-known/jwks.json` (override per
   environment, e.g. compose dev uses
   `http://coregateway-api:8080/.well-known/jwks.json`)
-- TTL 300s. Signing key from env in every environment including dev —
-  the gateway refuses to start without it.
+- TTL 300s. Signing key from a file (`JWT_PRIVATE_KEY_FILE`) in every
+  environment including dev — inline PEM is the fallback. The gateway
+  refuses to start without key material.
 
 ## Key rotation
 
-1. Generate: `openssl genpkey -algorithm ed25519 -out jwt_ed25519.pem`
-2. Put the NEW key in `JWT_PRIVATE_KEY_PEM`/`JWT_KID`; move the OLD key to
-   `JWT_PREV_PRIVATE_KEY_PEM`/`JWT_PREV_KID`.
-3. Redeploy the gateway. JWKS publishes both keys; new tokens carry the
-   new `kid`; old tokens verify until expiry.
-4. After max TTL + JWKS cache window (≥15 min to be safe), remove the
-   `PREV` pair and redeploy.
+See [`jwt-key-rotation.md`](jwt-key-rotation.md) — policy, the two-phase
+invariant (publish both, drain 15 min, retire the old), manual run, and
+the Vault/sops automation backends. Summary: new key becomes current,
+old key moves to `JWT_PREV_*`, redeploy, wait, clear `PREV`, redeploy.
 
 ## Rollback
 
