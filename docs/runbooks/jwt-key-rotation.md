@@ -6,7 +6,7 @@ mechanics are identical in every environment; only delivery differs
 
 Related: `docs/auth-flow.md` (claims, JWKS, why a PEM key),
 `docs/runbooks/vault-rotation.md` (Vault implementation),
-`deploy/rotation-cronjob.yaml` (automated executor).
+`deploy/vault-rotation-cronjob.yaml` (automated executor).
 
 ## What rotates
 
@@ -23,7 +23,7 @@ Related: `docs/auth-flow.md` (claims, JWKS, why a PEM key),
 
 - **Scheduled:** every 90 days. 30 days if more than one person can read the
   key material. The automated executor enforces 90 days
-  (`deploy/rotation-cronjob.yaml`).
+  (`deploy/vault-rotation-cronjob.yaml`).
 - **Immediately, off-cycle:** suspected or proven exposure (backup, synced
   folder, shell history, committed `.pem`, `docker inspect`, crash dump),
   a machine that held the key is lost/sold, offboarding someone with access,
@@ -84,7 +84,7 @@ Do not delete the old key file until step 5 verifies — it is the rollback.
 
 ## Automated: Vault (current design)
 
-`deploy/rotation-cronjob.yaml` runs monthly, no-ops while the key is younger
+`deploy/vault-rotation-cronjob.yaml` runs monthly, no-ops while the key is younger
 than 90 days, and otherwise performs phase 1 → JWKS poll → drain wait →
 phase 2 (with KV version destroy) in a single Job. Delivery is
 external-secrets (`refreshInterval: 1m`) into the `gateway-jwt-keys`
@@ -107,6 +107,11 @@ decrypts it at reconcile time with the age key held in the cluster. sops
 does **not** generate or rotate anything — it only makes it safe to commit
 the material. Rotation therefore stays a Git change, automated up to (not
 including) the merge.
+
+Ready-to-copy manifests: `deploy/examples/sops-*.yaml` (`.sops.yaml` rule,
+Flux Kustomization stanza, age Secret shape, encrypted-Secret template,
+rotation image) and `deploy/sops-rotation-cronjob.yaml` (the automated jobs).
+`deploy/README.md` has the step-by-step apply order.
 
 ### Prerequisites
 
@@ -135,6 +140,8 @@ kind: Secret
 metadata:
   name: gateway-jwt-keys
   namespace: coregateway
+  annotations:
+    coregateway.io/rotated-at: "1770000000"   # unix seconds; plaintext, read by the retire job
 type: Opaque
 stringData:
   private_pem: |
@@ -145,6 +152,9 @@ stringData:
     ...
   prev_kid: "2026-09-a"
 ```
+
+Both `prev_*` keys must exist even when empty — the Deployment mounts them as
+fixed paths, and an empty file means "no rotation in progress".
 
 ### Rotation
 
@@ -166,9 +176,21 @@ curl -s http://gateway.coregateway.svc:8080/.well-known/jwks.json | jq -r '.keys
 #   delete prev_private_pem / prev_kid, sops re-encrypt, commit, reconcile, restart
 ```
 
-The last step can be a follow-up commit, or a small Job that sleeps 15
-minutes and re-applies a phase-2 manifest. Flux has no notion of "wait
-between reconciles", so the delay must live in a Job or a human.
+### Automated rotation with pull requests
+
+`deploy/sops-rotation-cronjob.yaml` runs the two phases as **PRs you merge**;
+it never writes to the cluster and needs no RBAC.
+
+| CronJob | Schedule | Does |
+|---|---|---|
+| `sops-jwt-rotation` | quarterly (`0 3 1 */3 *`) | generates a new key, moves the current one to `prev_*`, opens a phase-1 PR |
+| `sops-jwt-rotation-retire` | every 15 min | no-ops unless `prev_kid` is set, `rotated-at` is older than `DRAIN_SECONDS` (1200s), and JWKS serves both kids — then opens the phase-2 PR |
+| `sops-jwt-rotation-manual` | suspended | same as phase 1, for incident rotation: `kubectl create job --from=cronjob/sops-jwt-rotation-manual …` |
+
+The 15-minute phase boundary lives in the retire job because Flux has no
+notion of "wait between reconciles". Its guard rails: it refuses to retire a
+key that JWKS is not serving, and it never opens a second retire PR while one
+is open.
 
 ### What is automated, and what is not
 
@@ -176,9 +198,10 @@ between reconciles", so the delay must live in a Job or a human.
 |---|---|
 | Delivery + decryption at reconcile | yes (Flux) |
 | Restart on change | yes, with Reloader (`reloader.stakater.com/auto`) |
-| Key generation | no — sops is not a secrets manager |
-| Opening the PR / commit | no, unless you add a Job with repo write access |
-| The 15-minute phase boundary | no — Job or human |
+| Key generation | yes — the rotation job (`openssl` in-cluster) |
+| Opening the phase-1 / phase-2 PRs | yes — the CronJobs above |
+| The 15-minute phase boundary | yes — the retire sweeper |
+| Reviewing and merging both PRs | **no — human gate, by design** |
 
 If you want the generation step automated too, the defensible shape is a
 CronJob that runs the `openssl` + `sops set` + branch/PR sequence with a

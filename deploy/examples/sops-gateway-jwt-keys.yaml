@@ -1,0 +1,35 @@
+# TEMPLATE — never apply this file and never commit it unencrypted.
+#
+# In the GitOps repo, at the path matched by .sops.yaml:
+#   openssl genpkey -algorithm ed25519 -out /tmp/new.pem
+#   cp deploy/examples/sops-gateway-jwt-keys.yaml \
+#      clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml
+#   # paste the PEM (and a kid like 2026-09-a) into it, then:
+#   sops -e -i clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml
+#
+# Key names are a contract with deploy/gateway-deployment-patch.yaml: the
+# Deployment mounts every key of this Secret as a file at
+# /etc/coregateway/jwt and points JWT_PRIVATE_KEY_FILE /
+# JWT_PREV_PRIVATE_KEY_FILE at private_pem / prev_private_pem.
+#
+# prev_* must exist but be empty outside a rotation: the mounts are
+# unconditional, and the gateway treats an empty file as "no previous key".
+#
+# `rotated-at` sits in metadata on purpose (encrypted_regex covers only
+# data/stringData), so the rotation jobs can read it without decrypting.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gateway-jwt-keys
+  namespace: coregateway
+  annotations:
+    coregateway.io/rotated-at: "0" # unix seconds, set by the rotation job
+type: Opaque
+stringData:
+  private_pem: |
+    -----BEGIN PRIVATE KEY-----
+    REPLACE-WITH-THE-REAL-KEY-THEN-ENCRYPT
+    -----END PRIVATE KEY-----
+  kid: "2026-09-a"
+  prev_private_pem: ""
+  prev_kid: ""

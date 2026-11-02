@@ -1,0 +1,32 @@
+# Flux Kustomization that owns the coregateway app and decrypts
+# sops-encrypted Secrets at reconcile time. Merge these fields into the
+# Kustomization you already have; don't apply this file as-is.
+#
+# ArgoCD alternative: ArgoCD has no native sops support — use the
+# `argocd-vault-plugin`/kustomize-sops plugin, or move this app to Flux.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: coregateway
+  namespace: flux-system
+spec:
+  interval: 10m
+  prune: true
+  # TODO: path in the GitOps repo holding the app manifests + encrypted
+  # Secret. Flux's `directory`/kustomize sources are non-recursive, so a
+  # sibling examples/ directory is never applied.
+  path: ./clusters/homelab/coregateway
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  # Decrypt *.yaml (or *.enc.yaml) Secrets listed by .sops.yaml at the
+  # GitOps repo root, using the age identity in Secret `sops-age`.
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  # Reloader is not configured here: it is the Deployment annotation
+  #   reloader.stakater.com/auto: "true"
+  # Without it, a changed Secret still requires a manual
+  #   kubectl -n coregateway rollout restart deploy/gateway
+  # because the gateway reads the key file at boot.

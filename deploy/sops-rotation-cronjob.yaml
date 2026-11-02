@@ -1,0 +1,329 @@
+# Automated rotation of the gateway signing key with sops + age.
+#
+# The jobs never touch the cluster's Secret directly. They clone the GitOps
+# repo, re-encrypt a phase-1 (or phase-2) change, push a branch, and open a
+# pull request. Flux does the rest after you merge: decrypt, apply, and (with
+# the Reloader annotation) roll the gateway.
+#
+# Phase split (why two jobs):
+#   1. rotate  — current key -> prev, new key signs. Quarterly.
+#   2. retire  — drop prev after the drain window. Every 15 min, no-ops
+#                unless a rotation is in flight and drained.
+# Flux cannot delay between reconciles, so the 15-minute gap has to live
+# somewhere: it lives in this sweeper.
+#
+# Prereqs:
+#   - GitOps repo with .sops.yaml at its root and the encrypted Secret from
+#     deploy/examples/sops-gateway-jwt-keys.yaml
+#   - Secret `jwt-rotation-git` (key `token`) holding a fine-grained PAT with
+#     contents:write + pull-requests:write on that repo
+#   - Flux Kustomization with `decryption.provider: sops` (see
+#     deploy/examples/sops-flux-kustomization.yaml)
+#   - the image built from deploy/examples/sops-rotation-image.Dockerfile
+#
+# Apply this only if you chose sops; deploy/vault-rotation-cronjob.yaml is the
+# Vault equivalent and the two must not both run.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sops-jwt-rotation
+  namespace: coregateway
+# No RoleBinding: these jobs only reach the public JWKS over HTTP and the
+# GitOps repo over HTTPS. They never read the Secret from the API server.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sops-jwt-rotation-script
+  namespace: coregateway
+data:
+  rotate.sh: |
+    #!/bin/sh
+    # Phase 1: new key becomes current, old key becomes prev, PR opened.
+    set -eu
+    : "${GITOPS_REPO:?}" "${SECRET_FILE:?}" "${JWKS_URL:?}" "${GH_TOKEN:?}"
+
+    slug="$(printf '%s' "$GITOPS_REPO" | sed -E 's#^https://github.com/##; s#\.git$##')"
+    work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+    git clone --quiet --depth 1 --branch "$BASE_BRANCH" \
+      "https://x-access-token:${GH_TOKEN}@github.com/${slug}.git" "$work/repo"
+    cd "$work/repo"
+    git config user.name "$GIT_AUTHOR_NAME"
+    git config user.email "$GIT_AUTHOR_EMAIL"
+
+    branch="jwt-rotation/$(date -u +%Y%m%d)"
+    if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+      echo "branch ${branch} already exists (retry?) — nothing to do"
+      exit 0
+    fi
+
+    sops -d "$SECRET_FILE" > "$work/plain.yaml"
+    cur_kid="$(yq -r '.stringData.kid' "$work/plain.yaml")"
+
+    # Same-month reruns bump the trailing letter: 2026-11-a -> 2026-11-b.
+    base="$(date -u +%Y-%m)"
+    if [ "${cur_kid%-*}" = "$base" ]; then
+      next="$(printf '%s' "${cur_kid##*-}" | tr 'a-yz' 'b-za')"
+      new_kid="${base}-${next}"
+    else
+      new_kid="${base}-a"
+    fi
+    echo "rotating ${cur_kid} -> ${new_kid} (PR only; nothing changes until merge)"
+
+    openssl genpkey -algorithm ed25519 -out "$work/new.pem"
+    export NEW_KID="$new_kid" CUR_KID="$cur_kid" NOW="$(date -u +%s)" \
+           NEW_PEM_PATH="$work/new.pem" OLD_PEM="$(yq -r '.stringData.private_pem' "$work/plain.yaml")"
+    yq -i '
+      .stringData.private_pem = load_str(strenv(NEW_PEM_PATH)) |
+      .stringData.kid = strenv(NEW_KID) |
+      .stringData.prev_private_pem = strenv(OLD_PEM) |
+      .stringData.prev_kid = strenv(CUR_KID) |
+      .metadata.annotations."coregateway.io/rotated-at" = strenv(NOW)
+    ' "$work/plain.yaml"
+
+    # Re-encrypt using the age recipient from .sops.yaml at the repo root.
+    sops -e --input-type yaml "$work/plain.yaml" > "$SECRET_FILE.new"
+    mv "$SECRET_FILE.new" "$SECRET_FILE"
+
+    git checkout -q -b "$branch"
+    git add "$SECRET_FILE"
+    git commit -q -m "chore(secrets): rotate gateway signing key to ${new_kid}"
+    git push -q -u origin "$branch"
+    gh pr create --repo "$slug" --base "$BASE_BRANCH" --head "$branch" \
+      --title "Rotate gateway signing key: ${cur_kid} -> ${new_kid}" \
+      --body "Phase 1 of 2. Merging publishes both keys in JWKS; the retire job opens phase 2 after the drain window. Do not merge a retire PR before this one settles."
+
+    echo "opened ${branch} — merge it, then leave the rest to sops-jwt-rotation-retire"
+  retire.sh: |
+    #!/bin/sh
+    # Phase 2: drop prev once the old key can no longer be in a live token.
+    set -eu
+    : "${GITOPS_REPO:?}" "${SECRET_FILE:?}" "${JWKS_URL:?}" "${GH_TOKEN:?}"
+
+    slug="$(printf '%s' "$GITOPS_REPO" | sed -E 's#^https://github.com/##; s#\.git$##')"
+    work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
+    git clone --quiet --depth 1 --branch "$BASE_BRANCH" \
+      "https://x-access-token:${GH_TOKEN}@github.com/${slug}.git" "$work/repo"
+    cd "$work/repo"
+
+    sops -d "$SECRET_FILE" > "$work/plain.yaml"
+    prev_kid="$(yq -r '.stringData.prev_kid // ""' "$work/plain.yaml")"
+    [ -n "$prev_kid" ] || exit 0 # no rotation in flight
+
+    cur_kid="$(yq -r '.stringData.kid' "$work/plain.yaml")"
+    rotated_at="$(yq -r '.metadata.annotations["coregateway.io/rotated-at"] // "0"' "$work/plain.yaml")"
+    age=$(( $(date -u +%s) - rotated_at ))
+    if [ "$age" -lt "${DRAIN_SECONDS:-1200}" ]; then
+      echo "rotation is ${age}s old; draining (need ${DRAIN_SECONDS:-1200}s)"
+      exit 0
+    fi
+
+    kids="$(curl -fsS "$JWKS_URL" | jq -r '.keys[].kid')"
+    printf '%s\n' "$kids" | grep -qx "$cur_kid" \
+      || { echo "current kid ${cur_kid} not in JWKS — refusing to retire" >&2; exit 1; }
+    printf '%s\n' "$kids" | grep -qx "$prev_kid" \
+      || { echo "prev kid ${prev_kid} already absent — nothing to retire"; exit 0; }
+
+    if gh pr list --repo "$slug" --state open --json headRefName \
+        --jq '.[].headRefName' | grep -q '^jwt-rotation-retire/'; then
+      echo "a retire PR is already open"
+      exit 0
+    fi
+
+    yq -i '.stringData.prev_private_pem = "" | .stringData.prev_kid = ""' "$work/plain.yaml"
+    sops -e --input-type yaml "$work/plain.yaml" > "$SECRET_FILE.new"
+    mv "$SECRET_FILE.new" "$SECRET_FILE"
+
+    branch="jwt-rotation-retire/$(date -u +%Y%m%d%H%M)"
+    git config user.name "$GIT_AUTHOR_NAME"
+    git config user.email "$GIT_AUTHOR_EMAIL"
+    git checkout -q -b "$branch"
+    git add "$SECRET_FILE"
+    git commit -q -m "chore(secrets): retire previous gateway signing key ${prev_kid}"
+    git push -q -u origin "$branch"
+    gh pr create --repo "$slug" --base "$BASE_BRANCH" --head "$branch" \
+      --title "Retire previous gateway signing key: ${prev_kid}" \
+      --body "Phase 2 of 2. The overlap has drained (${age}s) and JWKS served both keys. Merging removes the old key from the Secret; new tokens are unaffected."
+
+    echo "opened ${branch}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sops-jwt-rotation
+  namespace: coregateway
+spec:
+  schedule: "0 3 1 */3 *" # quarterly, aligns with the 90-day policy
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: sops-jwt-rotation
+          restartPolicy: Never
+          containers:
+            - name: rotate
+              # TODO: pin by digest; built from deploy/examples/sops-rotation-image.Dockerfile
+              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0
+              command: ["/bin/sh", "/scripts/rotate.sh"]
+              env:
+                - name: GITOPS_REPO
+                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                - name: BASE_BRANCH
+                  value: "main"
+                - name: SECRET_FILE
+                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                - name: JWKS_URL
+                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                - name: GIT_AUTHOR_NAME
+                  value: "jwt-rotation"
+                - name: GIT_AUTHOR_EMAIL
+                  value: "jwt-rotation@localhost"
+                # Decrypting the Secret needs the age identity. Cross-namespace
+                # mounts are impossible, so keep a copy of the flux-system
+                # `sops-age` Secret in `coregateway` (see deploy/README.md).
+                - name: SOPS_AGE_KEY_FILE
+                  value: "/run/secrets/sops/age.agekey"
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: jwt-rotation-git
+                      key: token
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: age
+                  mountPath: /run/secrets/sops
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: sops-jwt-rotation-script
+                defaultMode: 0555
+            - name: age
+              secret:
+                secretName: sops-age
+                defaultMode: 0400
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sops-jwt-rotation-retire
+  namespace: coregateway
+spec:
+  # Not a rotation trigger: idles until a phase-1 PR has merged and the
+  # overlap is older than DRAIN_SECONDS (default 1200s > 660s worst case).
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: sops-jwt-rotation
+          restartPolicy: Never
+          containers:
+            - name: retire
+              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0 # TODO: same pinned image
+              command: ["/bin/sh", "/scripts/retire.sh"]
+              env:
+                - name: GITOPS_REPO
+                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                - name: BASE_BRANCH
+                  value: "main"
+                - name: SECRET_FILE
+                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                - name: JWKS_URL
+                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                - name: GIT_AUTHOR_NAME
+                  value: "jwt-rotation"
+                - name: GIT_AUTHOR_EMAIL
+                  value: "jwt-rotation@localhost"
+                # Decrypting the Secret needs the age identity. Cross-namespace
+                # mounts are impossible, so keep a copy of the flux-system
+                # `sops-age` Secret in `coregateway` (see deploy/README.md).
+                - name: SOPS_AGE_KEY_FILE
+                  value: "/run/secrets/sops/age.agekey"
+                - name: DRAIN_SECONDS
+                  value: "1200"
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: jwt-rotation-git
+                      key: token
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: age
+                  mountPath: /run/secrets/sops
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: sops-jwt-rotation-script
+                defaultMode: 0555
+            - name: age
+              secret:
+                secretName: sops-age
+                defaultMode: 0400
+---
+# Incident trigger: same phase-1 script, no schedule. It opens a PR; you still
+# approve the key change.
+#   kubectl create job --from=cronjob/sops-jwt-rotation-manual incident-<date> -n coregateway
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sops-jwt-rotation-manual
+  namespace: coregateway
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: sops-jwt-rotation
+          restartPolicy: Never
+          containers:
+            - name: rotate
+              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0 # TODO: same pinned image
+              command: ["/bin/sh", "/scripts/rotate.sh"]
+              env:
+                - name: GITOPS_REPO
+                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                - name: BASE_BRANCH
+                  value: "main"
+                - name: SECRET_FILE
+                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                - name: JWKS_URL
+                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                - name: GIT_AUTHOR_NAME
+                  value: "jwt-rotation"
+                - name: GIT_AUTHOR_EMAIL
+                  value: "jwt-rotation@localhost"
+                # Decrypting the Secret needs the age identity. Cross-namespace
+                # mounts are impossible, so keep a copy of the flux-system
+                # `sops-age` Secret in `coregateway` (see deploy/README.md).
+                - name: SOPS_AGE_KEY_FILE
+                  value: "/run/secrets/sops/age.agekey"
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: jwt-rotation-git
+                      key: token
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                - name: age
+                  mountPath: /run/secrets/sops
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: sops-jwt-rotation-script
+                defaultMode: 0555
+            - name: age
+              secret:
+                secretName: sops-age
+                defaultMode: 0400

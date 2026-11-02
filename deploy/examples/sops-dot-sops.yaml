@@ -1,0 +1,12 @@
+# Copy to the GitOps repo ROOT as `.sops.yaml` — sops only reads the
+# creation rules from the repository root, not from a subdirectory.
+# Not a Kubernetes manifest; never applied.
+#
+# Only data/stringData are encrypted. Metadata stays readable, so a PR diff
+# still shows the Secret name, the kid, and the rotation timestamp.
+creation_rules:
+  # TODO: match the path where the encrypted Secret lives in your repo.
+  - path_regex: .*secrets/.*\.ya?ml$
+    encrypted_regex: ^(data|stringData)$
+    # age public key: `age-keygen -y age.agekey`
+    age: age1REPLACE_WITH_YOUR_PUBLIC_KEY
