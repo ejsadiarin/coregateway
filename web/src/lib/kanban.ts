@@ -1,4 +1,4 @@
-import type { KanbanBoard } from "@/types/kanban";
+import type { KanbanBoard, KanbanCard, KanbanCardEdit } from "@/types/kanban";
 import { apiBaseUrl } from "@/lib/api";
 
 const boardsUrl = `${apiBaseUrl}/api/coreban/boards`;
@@ -13,10 +13,28 @@ export class KanbanBoardNotFoundError extends Error {
   }
 }
 
-async function throwIfError(res: Response, op: string): Promise<void> {
-  if (res.status === 404) throw new KanbanBoardNotFoundError();
+// Thrown when a card is missing from its board (or the board is gone).
+export class KanbanCardNotFoundError extends Error {
+  constructor() {
+    super("Card not found — it may have been changed on another device");
+    this.name = "KanbanCardNotFoundError";
+  }
+}
+
+async function throwIfError(
+  res: Response,
+  op: string,
+  notFound: () => Error = () => new KanbanBoardNotFoundError(),
+): Promise<void> {
+  if (res.status === 404) throw notFound();
+  if (res.status === 400) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ? `Error ${op}: ${body.error}` : `Error ${op}: ${res.status}`);
+  }
   if (!res.ok) throw new Error(`Error ${op}: ${res.status}`);
 }
+
+const cardNotFound = () => new KanbanCardNotFoundError();
 
 export async function fetchKanbanBoards(): Promise<KanbanBoard[]> {
   const res = await fetch(boardsUrl, { credentials: "include" });
@@ -52,4 +70,62 @@ export async function deleteKanbanBoard(id: string): Promise<void> {
     credentials: "include",
   });
   await throwIfError(res, "deleting board");
+}
+
+// fetchKanbanBoard returns one board with its columns in order, each
+// carrying its cards in priority order.
+export async function fetchKanbanBoard(id: string): Promise<KanbanBoard> {
+  const res = await fetch(`${boardsUrl}/${id}`, { credentials: "include" });
+  await throwIfError(res, "fetching board");
+  return res.json();
+}
+
+const cardsUrl = (boardId: string) => `${boardsUrl}/${boardId}/cards`;
+
+export async function createKanbanCard(
+  boardId: string,
+  columnId: string,
+  title: string,
+): Promise<KanbanCard> {
+  const res = await fetch(cardsUrl(boardId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ column_id: columnId, title }),
+  });
+  await throwIfError(res, "creating card");
+  return res.json();
+}
+
+export async function editKanbanCard(
+  boardId: string,
+  cardId: string,
+  edit: KanbanCardEdit,
+): Promise<KanbanCard> {
+  const res = await fetch(`${cardsUrl(boardId)}/${cardId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(edit),
+  });
+  await throwIfError(res, "saving card", cardNotFound);
+  return res.json();
+}
+
+// moveKanbanCard puts a card into a column at index, its slot among that
+// column's other cards (top is 0). The card's status follows the column.
+export async function moveKanbanCard(
+  boardId: string,
+  cardId: string,
+  columnId: string,
+  index: number,
+): Promise<KanbanCard> {
+  const res = await fetch(`${cardsUrl(boardId)}/${cardId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ column_id: columnId, index }),
+  });
+  await throwIfError(res, "moving card", cardNotFound);
+  return res.json();
 }

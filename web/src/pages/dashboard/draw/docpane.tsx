@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { markdownProseClass } from "@/lib/markdown";
 
 type Tab = "edit" | "preview";
 
@@ -41,7 +42,7 @@ export function DocPane({ doc, onChange }: { doc: string; onChange: (doc: string
           className="min-h-0 flex-1 resize-none bg-background p-3 font-mono text-xs leading-relaxed outline-none placeholder:text-muted-foreground/60"
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-2 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-xs [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-medium [&_li]:ml-4 [&_li]:list-disc [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-1.5">
+        <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${markdownProseClass}`}>
           {doc.trim() === "" ? (
             <p className="text-xs text-muted-foreground">Nothing to preview yet — write notes in the Edit tab.</p>
           ) : (

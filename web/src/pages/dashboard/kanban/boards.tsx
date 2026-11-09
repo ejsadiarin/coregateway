@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, SquareKanban, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -190,7 +191,12 @@ export default function KanbanBoardsPage() {
                 </span>
               ) : (
                 <>
-                  <span className="flex-1 truncate font-medium">{board.name}</span>
+                  <Link
+                    to={`/dashboard/kanban/${board.id}`}
+                    className="flex min-h-11 flex-1 items-center truncate font-medium hover:underline"
+                  >
+                    {board.name}
+                  </Link>
                   <span className="hidden font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground sm:inline">
                     {formatDistanceToNow(new Date(board.created_at), { addSuffix: true })}
                   </span>
