@@ -254,7 +254,7 @@ go work sync
 curl -i -H "Authorization: Bearer $ADMIN_KEY" http://localhost:8080/api/coreban/health
 
 # scope gate: read-only key must 403 on a write
-curl -i -X POST -H "Authorization: Bearer $CORE_BAN_READ_KEY" \
+curl -i -X POST -H "Authorization: Bearer $COREBAN_READ_KEY" \
   http://localhost:8080/api/coreban/anything
 
 # audience wiring: a token minted without "coreban" must 401 downstream

@@ -161,7 +161,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Handle("/*", s.CoredrawClient.Proxy())
 	})
 
-	// coreban — same proxy contract as coredraw: internal JWT downstream
+	// coreban — same proxy contract as coredraw: internal token downstream
 	// (audience coreban), coreban:read for GET/HEAD and coreban:write
 	// otherwise for key callers; sessions pass through to downstream checks.
 	r.Route("/api/coreban", func(r chi.Router) {

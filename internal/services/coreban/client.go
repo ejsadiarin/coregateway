@@ -7,7 +7,7 @@ import (
 	"net/url"
 )
 
-// Client is an HTTP client for the coreban-api microservice.
+// Client is an HTTP client for the coreban-api downstream service.
 // It provides a streaming reverse proxy that avoids buffering request/response bodies.
 type Client struct {
 	target *url.URL
@@ -26,7 +26,7 @@ func New(baseURL string) *Client {
 
 // Proxy returns an http.Handler that streams requests to coreban-api.
 // The request path is passed through as-is (both services use /api/coreban/...).
-// Identity travels exclusively as the internal JWT minted at the edge
+// Identity travels exclusively as the internal token minted by the gateway
 // (Authorization: Bearer, set by EdgeIdentity); X-Request-ID is propagated
 // by ForwardHeaders for correlation. X-User-ID is never set, forwarded,
 // or trusted on this path.

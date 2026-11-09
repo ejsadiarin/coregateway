@@ -78,7 +78,7 @@ coregateway/
 ├── services/
 │   ├── corefinance/          # Corefinance microservice (separate repo/deployment)
 │   ├── coredraw/             # Coredraw whiteboard microservice (git submodule, own Go module)
-│   └── coreban/              # Coreban kanban + reminders microservice (git submodule, own Go module)
+│   └── coreban/              # Coreban kanban + reminders downstream service (git submodule, own Go module)
 ├── proto/                    # Protobuf definitions (buf-managed)
 ├── compose.yml               # Docker Compose for local development
 ├── coregateway-api.http      # HTTP client file (VS Code REST Client)

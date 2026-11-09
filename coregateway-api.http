@@ -425,7 +425,7 @@ GET {{host}}/api/coredraw/boards
 
 # ─── Kanban (reverse-proxied to coreban) ───────────────────────────────────
 # Any method/subpath under /api/coreban/** is proxied to COREBAN_URL with a
-# coreban-audience internal JWT. Same edge contract as coredraw: key callers
+# coreban-audience internal token. Same gateway contract as coredraw: key callers
 # need `coreban:read` cover for GET/HEAD and `coreban:write` for writes.
 # Full endpoint list: services/coreban/coreban-api.http
 

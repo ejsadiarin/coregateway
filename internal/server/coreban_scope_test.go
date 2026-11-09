@@ -19,12 +19,7 @@ import (
 // and the shared stub querier (admin/coreban-read/coreban-write keys).
 // Queries stays nil: these tests never send ?user_id=, so the userExists
 // closure never fires.
-func corebanScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstream) {
-	s, q, fake, _ := corebanScopeSetupWithIssuer(t)
-	return s, q, fake
-}
-
-func corebanScopeSetupWithIssuer(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstream, *token.Issuer) {
+func corebanScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstream, *token.Issuer) {
 	t.Helper()
 	_, q, _, _ := keyAuthTestSetup(t)
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -51,7 +46,7 @@ func corebanScopeSetupWithIssuer(t *testing.T) (*Server, *keyAuthStubQuerier, *f
 
 func TestCorebanKeyScopeGate(t *testing.T) {
 	t.Run("write-only key GET is 403 and unproxied", func(t *testing.T) {
-		s, _, fake := corebanScopeSetup(t)
+		s, _, fake, _ := corebanScopeSetup(t)
 		rec := doKeyRequest(t, proxyRouter(s, "", uuid.Nil), testCorebanWriteKeyPlaintext, http.MethodGet, "/api/coreban/tasks", "")
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
@@ -62,7 +57,7 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("read key GET proxies with a coreban-audience token, path unchanged", func(t *testing.T) {
-		s, _, fake, iss := corebanScopeSetupWithIssuer(t)
+		s, _, fake, iss := corebanScopeSetup(t)
 		rec := doKeyRequest(t, proxyRouter(s, "", uuid.Nil), testCorebanReadKeyPlaintext, http.MethodGet, "/api/coreban/tasks", "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200", rec.Code)
@@ -81,7 +76,7 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("read-only key PUT is 403 and unproxied", func(t *testing.T) {
-		s, _, fake := corebanScopeSetup(t)
+		s, _, fake, _ := corebanScopeSetup(t)
 		rec := doKeyRequest(t, proxyRouter(s, "", uuid.Nil), testCorebanReadKeyPlaintext, http.MethodPut, "/api/coreban/tasks/"+uuid.New().String(), `{"revision":1}`)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
@@ -92,7 +87,7 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("user session GET unaffected", func(t *testing.T) {
-		s, _, fake := corebanScopeSetup(t)
+		s, _, fake, _ := corebanScopeSetup(t)
 		_, _, _, userID := keyAuthTestSetup(t)
 		rec := httptest.NewRecorder()
 		proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/coreban/tasks", nil))
@@ -105,7 +100,7 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("admin key passes both methods", func(t *testing.T) {
-		s, _, _ := corebanScopeSetup(t)
+		s, _, _, _ := corebanScopeSetup(t)
 		h := proxyRouter(s, "", uuid.Nil)
 		if rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/coreban/tasks", ""); rec.Code != http.StatusOK {
 			t.Errorf("GET status = %d, want 200", rec.Code)
@@ -116,7 +111,7 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("anonymous still 401", func(t *testing.T) {
-		s, _, fake := corebanScopeSetup(t)
+		s, _, fake, _ := corebanScopeSetup(t)
 		rec := doKeyRequest(t, proxyRouter(s, "", uuid.Nil), "", http.MethodGet, "/api/coreban/tasks", "")
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("status = %d, want 401", rec.Code)
