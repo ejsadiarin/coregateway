@@ -39,3 +39,11 @@ export interface KanbanBoard {
   updated_at: string;
   columns?: KanbanColumn[];
 }
+
+// KanbanSettings mirrors coreban's settings: the owner's notification
+// target (an ntfy topic name under coreban-, or null for none) and the IANA
+// timezone their schedules are read in.
+export interface KanbanSettings {
+  ntfy_topic: string | null;
+  timezone: string;
+}

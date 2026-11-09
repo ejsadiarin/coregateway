@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, SquareKanban, Trash2 } from "lucide-react";
+import { Pencil, Plus, Settings, SquareKanban, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import {
   fetchKanbanBoards,
@@ -126,9 +126,15 @@ export default function KanbanBoardsPage() {
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
         Kanban / Boards
       </p>
-      <h1 className="mt-1 text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
-        Boards
-      </h1>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Boards</h1>
+        <Button asChild variant="ghost" className="min-h-11">
+          <Link to="/dashboard/kanban/settings">
+            <Settings className="h-4 w-4" aria-hidden />
+            Settings
+          </Link>
+        </Button>
+      </div>
       <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
         Move cards from Todo through In progress to Done. Boards are private to you.
       </p>

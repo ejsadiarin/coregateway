@@ -1,4 +1,4 @@
-import type { KanbanBoard, KanbanCard, KanbanCardEdit } from "@/types/kanban";
+import type { KanbanBoard, KanbanCard, KanbanCardEdit, KanbanSettings } from "@/types/kanban";
 import { apiBaseUrl } from "@/lib/api";
 
 const boardsUrl = `${apiBaseUrl}/api/coreban/boards`;
@@ -21,15 +21,29 @@ export class KanbanCardNotFoundError extends Error {
   }
 }
 
+// Thrown when coreban refuses a request the owner can fix (400, 409).
+// detail is coreban's own explanation, e.g. "ntfy_topic must start with
+// coreban-", for showing beside the field it names.
+export class KanbanRequestError extends Error {
+  constructor(
+    op: string,
+    readonly status: number,
+    readonly detail: string,
+  ) {
+    super(detail ? `Error ${op}: ${detail}` : `Error ${op}: ${status}`);
+    this.name = "KanbanRequestError";
+  }
+}
+
 async function throwIfError(
   res: Response,
   op: string,
   notFound: () => Error = () => new KanbanBoardNotFoundError(),
 ): Promise<void> {
   if (res.status === 404) throw notFound();
-  if (res.status === 400) {
+  if (res.status === 400 || res.status === 409) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error ? `Error ${op}: ${body.error}` : `Error ${op}: ${res.status}`);
+    throw new KanbanRequestError(op, res.status, typeof body?.error === "string" ? body.error : "");
   }
   if (!res.ok) throw new Error(`Error ${op}: ${res.status}`);
 }
@@ -127,5 +141,24 @@ export async function moveKanbanCard(
     body: JSON.stringify({ column_id: columnId, index }),
   });
   await throwIfError(res, "moving card", cardNotFound);
+  return res.json();
+}
+
+const settingsUrl = `${apiBaseUrl}/api/coreban/settings`;
+
+export async function fetchKanbanSettings(): Promise<KanbanSettings> {
+  const res = await fetch(settingsUrl, { credentials: "include" });
+  await throwIfError(res, "fetching settings");
+  return res.json();
+}
+
+export async function saveKanbanSettings(settings: KanbanSettings): Promise<KanbanSettings> {
+  const res = await fetch(settingsUrl, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(settings),
+  });
+  await throwIfError(res, "saving settings");
   return res.json();
 }
