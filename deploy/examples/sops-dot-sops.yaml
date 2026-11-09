@@ -1,3 +1,5 @@
+---
+# .sops.yaml
 # Copy to the GitOps repo ROOT as `.sops.yaml` — sops only reads the
 # creation rules from the repository root, not from a subdirectory.
 # Not a Kubernetes manifest; never applied.
