@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   PenTool,
+  SquareKanban,
   Wallet,
   Receipt,
   TrendingUp,
@@ -58,6 +59,12 @@ export const navItems: NavItem[] = [
     label: "Draw",
     icon: PenTool,
     path: "/dashboard/draw",
+    section: "overview",
+  },
+  {
+    label: "Kanban",
+    icon: SquareKanban,
+    path: "/dashboard/kanban",
     section: "overview",
   },
   {

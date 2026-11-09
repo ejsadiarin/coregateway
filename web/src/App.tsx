@@ -16,6 +16,7 @@ import Budget2Page from "@/pages/dashboard/budget2";
 import Budget3Page from "@/pages/dashboard/budget3";
 import Budget4Page from "@/pages/dashboard/budget4";
 import UsersPage from "@/pages/dashboard/admin/users";
+import KanbanBoardsPage from "@/pages/dashboard/kanban/boards";
 
 // tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw/:boardId.
 const DrawPage = lazy(() => import("@/pages/dashboard/draw/page"));
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
+        <Route path="kanban" element={<KanbanBoardsPage />} />
         <Route
           path="draw"
           element={
