@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
 LayoutDashboard,
 PenTool,
-  SquareKanban,
+SquareKanban,
 Wallet,
 Receipt,
 Server,

@@ -98,6 +98,27 @@ export default function KanbanBoardsPage() {
   };
 
   const boards = boardsQuery.data;
+  const isEmpty = boards !== undefined && boards.length === 0;
+
+  // The view's one create action: inside the empty state when there are no
+  // boards yet, above the list otherwise.
+  const createForm = (
+    <form onSubmit={handleCreate} className="grid w-full gap-2">
+      <Label htmlFor="kanban-new-board">New board</Label>
+      <div className="flex gap-2">
+        <Input
+          id="kanban-new-board"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Homelab, Job hunt, Daily..."
+        />
+        <Button type="submit" disabled={createMutation.isPending} className="min-h-11">
+          <Plus className="h-4 w-4" />
+          Create
+        </Button>
+      </div>
+    </form>
+  );
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
@@ -107,25 +128,11 @@ export default function KanbanBoardsPage() {
       <h1 className="mt-1 text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
         Boards
       </h1>
-      <p className="mt-2 max-w-[65ch] text-sm text-muted-foreground">
-        Track work through Todo, Doing, and Done. Boards are private to you.
+      <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
+        Move cards from Todo through In progress to Done. Boards are private to you.
       </p>
 
-      <form onSubmit={handleCreate} className="mt-6 grid gap-2">
-        <Label htmlFor="kanban-new-board">New board</Label>
-        <div className="flex gap-2">
-          <Input
-            id="kanban-new-board"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Homelab, Job hunt, Daily..."
-          />
-          <Button type="submit" disabled={createMutation.isPending} className="min-h-11">
-            <Plus className="h-4 w-4" />
-            Create
-          </Button>
-        </div>
-      </form>
+      {!isEmpty && <div className="mt-6">{createForm}</div>}
 
       {actionError && <p className="mt-3 text-sm text-destructive">{actionError}</p>}
 
@@ -142,24 +149,19 @@ export default function KanbanBoardsPage() {
       {boardsQuery.error && (
         <div className="mt-6">
           <p className="text-sm text-destructive">Couldn't load boards.</p>
-          <Button variant="outline" className="mt-2" onClick={() => boardsQuery.refetch()}>
+          <Button variant="outline" className="mt-2 min-h-11" onClick={() => boardsQuery.refetch()}>
             Retry
           </Button>
         </div>
       )}
 
-      {boards && boards.length === 0 && (
-        <div className="mt-10 flex flex-col items-start gap-3 rounded-xl border border-border p-6">
+      {isEmpty && (
+        <div className="mt-6 flex flex-col items-start gap-3 rounded-xl border border-border p-6">
           <SquareKanban className="h-6 w-6 text-muted-foreground" aria-hidden />
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             No boards yet. A new board starts with Todo, Doing, and Done columns.
           </p>
-          <Button
-            variant="outline"
-            onClick={() => document.getElementById("kanban-new-board")?.focus()}
-          >
-            Name your first board
-          </Button>
+          {createForm}
         </div>
       )}
 
@@ -179,10 +181,10 @@ export default function KanbanBoardsPage() {
                       if (e.key === "Escape") setRenamingId(null);
                     }}
                   />
-                  <Button size="sm" onClick={() => handleRename(board.id)}>
+                  <Button className="min-h-11" onClick={() => handleRename(board.id)}>
                     Save
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setRenamingId(null)}>
+                  <Button variant="ghost" className="min-h-11" onClick={() => setRenamingId(null)}>
                     Cancel
                   </Button>
                 </span>
