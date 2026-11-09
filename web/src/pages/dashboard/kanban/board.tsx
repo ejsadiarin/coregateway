@@ -1,4 +1,20 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
@@ -50,6 +66,15 @@ const statusDot: Record<KanbanStatus, string> = {
 type Move = { cardId: string; columnId: string; index: number };
 type DropTarget = { columnId: string; index: number };
 
+const cardClass =
+  "min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
+
+// clientY of the mouse press or first touch that started a drag.
+function pointerY(event: Event): number {
+  if ("touches" in event) return (event as TouchEvent).touches[0]?.clientY ?? 0;
+  return (event as MouseEvent).clientY;
+}
+
 export default function KanbanBoardPage() {
   const { boardId = "" } = useParams();
   const queryClient = useQueryClient();
@@ -58,6 +83,20 @@ export default function KanbanBoardPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  // The pointer's clientY during a drag. Tracked directly rather than as
+  // start + dnd-kit's delta, which also counts any auto-scroll since the drag
+  // began and so drifts from the viewport rects the drop slot is measured in.
+  const dragPointerY = useRef(0);
+  // Each column's card list, measured to find the slot under the pointer.
+  const lists = useRef(new Map<string, HTMLElement>());
+
+  // Mouse drags start after 5px of movement, so a click still opens the
+  // editor. Touch drags start after a short press-and-hold, so a swipe
+  // still scrolls the columns.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+  );
 
   const boardQuery = useQuery({
     queryKey: boardKey,
@@ -117,10 +156,75 @@ export default function KanbanBoardPage() {
     requestMove({ cardId: card.id, columnId: columns[target.col].id, index: target.index });
   };
 
+  // Capture on window runs before dnd-kit's own move handling for the same
+  // event, so the slot is computed from this move, not the last one.
+  useEffect(() => {
+    if (!draggingId) return;
+    const onMouse = (e: MouseEvent) => {
+      dragPointerY.current = e.clientY;
+    };
+    const onTouch = (e: TouchEvent) => {
+      if (e.touches[0]) dragPointerY.current = e.touches[0].clientY;
+    };
+    window.addEventListener("mousemove", onMouse, { capture: true });
+    window.addEventListener("touchmove", onTouch, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMouse, { capture: true });
+      window.removeEventListener("touchmove", onTouch, { capture: true });
+    };
+  }, [draggingId]);
+
   const endDrag = () => {
     setDraggingId(null);
     setDropTarget(null);
   };
+
+  // The drop the pointer is over: the column under it, and the slot among
+  // that column's cards with the dragged one left out (the index coreban's
+  // move takes).
+  const dropTargetOf = (e: DragMoveEvent | DragEndEvent): DropTarget | null => {
+    if (!e.over) return null;
+    const columnId = String(e.over.id);
+    const mids = Array.from(lists.current.get(columnId)?.querySelectorAll<HTMLElement>("[data-card-id]") ?? [])
+      .filter((el) => el.dataset.cardId !== e.active.id)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+    return { columnId, index: dropIndex(mids, dragPointerY.current) };
+  };
+
+  const handleDragStart = (e: DragStartEvent) => {
+    dragPointerY.current = pointerY(e.activatorEvent);
+    setActionError("");
+    setDraggingId(String(e.active.id));
+  };
+
+  const handleDragMove = (e: DragMoveEvent) => {
+    const next = dropTargetOf(e);
+    setDropTarget((t) => (t?.columnId === next?.columnId && t?.index === next?.index ? t : next));
+  };
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    const target = dropTargetOf(e);
+    if (target) requestMove({ cardId: String(e.active.id), ...target });
+    endDrag();
+  };
+
+  const cardTitle = (id: UniqueIdentifier) =>
+    columns.flatMap((c) => c.cards ?? []).find((k) => k.id === id)?.title ?? "card";
+  const columnName = (id: UniqueIdentifier) => columns.find((c) => c.id === id)?.name ?? "column";
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${cardTitle(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over
+        ? `${cardTitle(active.id)} is over ${columnName(over.id)}.`
+        : `${cardTitle(active.id)} is not over a column.`,
+    onDragEnd: ({ active, over }) =>
+      over ? `Dropped ${cardTitle(active.id)} in ${columnName(over.id)}.` : `Dropped ${cardTitle(active.id)}.`,
+    onDragCancel: ({ active }) => `Stopped moving ${cardTitle(active.id)}.`,
+  };
+  const draggingCard = draggingId ? columns.flatMap((c) => c.cards ?? []).find((k) => k.id === draggingId) : undefined;
 
   if (boardQuery.error instanceof KanbanBoardNotFoundError) {
     return (
@@ -146,9 +250,10 @@ export default function KanbanBoardPage() {
         <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
           {boardQuery.data?.name ?? <span className="inline-block h-8 w-48 animate-pulse rounded bg-muted" />}
         </h1>
-        <p className="mt-2 hidden max-w-[65ch] text-sm leading-relaxed text-muted-foreground md:block">
-          Drag cards between columns to change their status, or up and down to set priority. With a
-          card focused, Alt + arrow keys move it.
+        <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
+          Drag cards between columns to change their status, or up and down to set priority. On
+          touch, press and hold a card to pick it up.
+          <span className="hidden md:inline"> With a card focused, Alt + arrow keys move it.</span>
         </p>
         {columns.length > 0 && (
           <NewCardForm boardId={boardId} columns={columns} onCreated={refresh} onError={fail} />
@@ -165,32 +270,49 @@ export default function KanbanBoardPage() {
         </div>
       )}
 
-      <div className="mt-6 flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 md:snap-none md:px-6">
-        {boardQuery.isLoading &&
-          [0, 1, 2].map((i) => (
-            <div key={i} className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-xl bg-muted md:w-72" aria-busy="true" />
+      <DndContext
+        sensors={sensors}
+        collisionDetection={pointerWithin}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+        onDragCancel={endDrag}
+        accessibility={{
+          announcements,
+          screenReaderInstructions: {
+            draggable: "Open the card to edit it. Alt + arrow keys move it between and within columns.",
+          },
+        }}
+      >
+        <div className="mt-6 flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 md:snap-none md:px-6">
+          {boardQuery.isLoading &&
+            [0, 1, 2].map((i) => (
+              <div key={i} className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-xl bg-muted md:w-72" aria-busy="true" />
+            ))}
+          {columns.map((column) => (
+            <ColumnView
+              key={column.id}
+              column={column}
+              draggingId={draggingId}
+              dropIndexHere={dropTarget?.columnId === column.id ? dropTarget.index : null}
+              listRef={(el) => {
+                if (el) lists.current.set(column.id, el);
+                else lists.current.delete(column.id);
+              }}
+              onOpenCard={setEditingId}
+              onCardKey={handleCardKey}
+            />
           ))}
-        {columns.map((column) => (
-          <ColumnView
-            key={column.id}
-            column={column}
-            draggingId={draggingId}
-            dropIndexHere={dropTarget?.columnId === column.id ? dropTarget.index : null}
-            onDragStartCard={setDraggingId}
-            onDragEndCard={endDrag}
-            onDragOverIndex={(index) => setDropTarget({ columnId: column.id, index })}
-            onDragLeaveColumn={() =>
-              setDropTarget((t) => (t?.columnId === column.id ? null : t))
-            }
-            onDrop={(index) => {
-              if (draggingId) requestMove({ cardId: draggingId, columnId: column.id, index });
-              endDrag();
-            }}
-            onOpenCard={setEditingId}
-            onCardKey={handleCardKey}
-          />
-        ))}
-      </div>
+        </div>
+        {/* No drop animation: the optimistic move already shows the card in its new place. */}
+        <DragOverlay dropAnimation={null}>
+          {draggingCard && (
+            <div className={cn(cardClass, "cursor-grabbing ring-2 ring-ring")}>
+              <span className="line-clamp-3 break-words">{draggingCard.title}</span>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       <CardEditor
         key={editing?.id ?? "none"}
@@ -211,62 +333,27 @@ function ColumnView({
   column,
   draggingId,
   dropIndexHere,
-  onDragStartCard,
-  onDragEndCard,
-  onDragOverIndex,
-  onDragLeaveColumn,
-  onDrop,
+  listRef,
   onOpenCard,
   onCardKey,
 }: {
   column: KanbanColumn;
   draggingId: string | null;
   dropIndexHere: number | null;
-  onDragStartCard: (id: string) => void;
-  onDragEndCard: () => void;
-  onDragOverIndex: (index: number) => void;
-  onDragLeaveColumn: () => void;
-  onDrop: (index: number) => void;
+  listRef: (el: HTMLOListElement | null) => void;
   onOpenCard: (id: string) => void;
   onCardKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
 }) {
-  const listRef = useRef<HTMLOListElement>(null);
+  const { setNodeRef } = useDroppable({ id: column.id });
   const cards = column.cards ?? [];
-
-  // The slot under the pointer among this column's cards, the dragged one
-  // left out (the index coreban's move takes).
-  const indexAt = (clientY: number) => {
-    const els = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-card-id]") ?? []);
-    const mids = els
-      .filter((el) => el.dataset.cardId !== draggingId)
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return r.top + r.height / 2;
-      });
-    return dropIndex(mids, clientY);
-  };
-
   const indicator = <li aria-hidden className="h-0.5 rounded-full bg-primary" />;
   let slot = 0;
 
   return (
     <section
+      ref={setNodeRef}
       aria-label={`${column.name} (${statusLabel[column.status]})`}
       className="flex w-[85vw] max-w-80 shrink-0 snap-start flex-col rounded-xl border border-border bg-muted/30 md:w-72"
-      onDragOver={(e) => {
-        if (!draggingId) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        const index = indexAt(e.clientY);
-        if (index !== dropIndexHere) onDragOverIndex(index);
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onDragLeaveColumn();
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop(indexAt(e.clientY));
-      }}
     >
       <header className="flex items-center gap-2 px-3 pb-2 pt-3">
         <span className={cn("h-2 w-2 shrink-0 rounded-full", statusDot[column.status])} aria-hidden />
@@ -284,39 +371,52 @@ function ColumnView({
           return (
             <Fragment key={card.id}>
               {before}
-              <li data-card-id={card.id}>
-                <button
-                  type="button"
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = "move";
-                    e.dataTransfer.setData("text/plain", card.id);
-                    onDragStartCard(card.id);
-                  }}
-                  onDragEnd={onDragEndCard}
-                  onClick={() => onOpenCard(card.id)}
-                  onKeyDown={(e) => onCardKey(e, card)}
-                  aria-label={`${card.title}, ${statusLabel[card.status]}. Open to edit; Alt + arrow keys move it.`}
-                  className={cn(
-                    "min-h-11 w-full cursor-grab rounded-lg border border-border bg-background px-3 py-2 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-opacity hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
-                    dragged && "opacity-40",
-                  )}
-                >
-                  <span className="line-clamp-3 break-words">{card.title}</span>
-                  {card.description.trim() !== "" && (
-                    <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Notes
-                    </span>
-                  )}
-                </button>
-              </li>
+              <CardItem card={card} dragged={dragged} onOpen={onOpenCard} onKey={onCardKey} />
             </Fragment>
           );
         })}
         {dropIndexHere !== null && dropIndexHere >= slot && indicator}
       </ol>
-
     </section>
+  );
+}
+
+function CardItem({
+  card,
+  dragged,
+  onOpen,
+  onKey,
+}: {
+  card: KanbanCard;
+  dragged: boolean;
+  onOpen: (id: string) => void;
+  onKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
+}) {
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: card.id });
+  return (
+    <li data-card-id={card.id}>
+      <button
+        ref={setNodeRef}
+        type="button"
+        {...attributes}
+        {...listeners}
+        onClick={() => onOpen(card.id)}
+        onKeyDown={(e) => onKey(e, card)}
+        aria-label={`${card.title}, ${statusLabel[card.status]}`}
+        className={cn(
+          cardClass,
+          "cursor-grab select-none transition-opacity [-webkit-touch-callout:none] hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          dragged && "opacity-40",
+        )}
+      >
+        <span className="line-clamp-3 break-words">{card.title}</span>
+        {card.description.trim() !== "" && (
+          <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            Notes
+          </span>
+        )}
+      </button>
+    </li>
   );
 }
 

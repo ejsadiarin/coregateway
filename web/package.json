@@ -12,6 +12,8 @@
     "icons:gen": "node scripts/gen-icon-sprite.mjs"
   },
   "dependencies": {
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/utilities": "3.2.2",
     "@excalidraw/excalidraw": "0.18.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
