@@ -38,7 +38,7 @@ Replace `coreban` / `COREBAN_URL` with the new service name throughout.
 | 2 | `internal/config/config.go` | `CorebanURL string` + `getEnv("COREBAN_URL", …)` |
 | 3 | `internal/services/coreban/client.go` | Reverse-proxy client (copy `coredraw`) |
 | 4 | `internal/server/server.go` | `CorebanClient` field + init in `New()` |
-| 5 | `internal/server/routes.go` | `/api/coreban` route with `EdgeIdentity` + `RequireServiceKeyScope("coreban")` |
+| 5 | `internal/server/routes.go` | `/api/coreban` route with `EdgeIdentity("coreban", …)` + `RequireServiceKeyScope("coreban")` |
 | 6 | `.env.example`, `.env`, `compose.yml` | `COREBAN_URL`, `JWT_AUDIENCE` gains `coreban` |
 | 7 | `compose.yml` | `coreban-api` service block; optional `web.depends_on` |
 | 8 | `internal/server/coreban_scope_test.go` | Key-scope gate test (copy `coredraw_scope_test.go`) |
@@ -165,7 +165,7 @@ func New(…) (*http.Server, error) {
 
 ```go
 r.Route("/api/coreban", func(r chi.Router) {
-	r.Use(middleware.EdgeIdentity(s.TokenIssuer, s.KeysService, userExists))
+	r.Use(middleware.EdgeIdentity("coreban", s.TokenIssuer, s.KeysService, userExists))
 	r.Use(auth.RequireServiceKeyScope("coreban"))
 	r.Use(middleware.ForwardHeaders())
 	r.Handle("/*", s.CorebanClient.Proxy())
@@ -174,7 +174,7 @@ r.Route("/api/coreban", func(r chi.Router) {
 
 | Gate | Effect |
 |---|---|
-| `EdgeIdentity` | authenticates a session **or** `cgw_live_*` key, mints the ≤300s Ed25519 JWT (`sub`, `azp`, `scope`, optional `act_as`), strips `X-User-ID`/`Cookie`. Anything unauthenticated → 401, never proxied. |
+| `EdgeIdentity("coreban", …)` | the first argument names the downstream: it becomes the token's single `aud` and must be in `JWT_AUDIENCE`, or minting fails. Authenticates a session **or** `cgw_live_*` key, mints the ≤300s Ed25519 JWT (`sub`, `azp`, `scope`, optional `act_as`), strips `X-User-ID`/`Cookie`. Anything unauthenticated → 401, never proxied. |
 | `RequireServiceKeyScope("coreban")` | key-authed callers need `coreban:read` (GET/HEAD) or `coreban:write` (everything else), else 403. `admin` and `coreban:admin` cover both. Session callers pass through to the downstream's own role checks. |
 | `ForwardHeaders` | copies the chi request ID into `X-Request-ID` for correlation (`middleware/forward.go`). It does **not** touch identity — `EdgeIdentity` already set `Authorization` and deleted `X-User-ID`/`Cookie`. |
 

@@ -422,4 +422,34 @@ Content-Type: application/json
 
 GET {{host}}/api/coredraw/boards
 
+
+# ─── Kanban (reverse-proxied to coreban) ───────────────────────────────────
+# Any method/subpath under /api/coreban/** is proxied to COREBAN_URL with a
+# coreban-audience internal JWT. Same edge contract as coredraw: key callers
+# need `coreban:read` cover for GET/HEAD and `coreban:write` for writes.
+# Full endpoint list: services/coreban/coreban-api.http
+
+### Coreban verified health (session or any covering key; expect 200)
+
+GET {{host}}/api/coreban/health
+
+### Coreban with read-scoped API key (expect 200)
+
+GET {{host}}/api/coreban/health
+Authorization: Bearer cgw_live_PASTE_COREBAN_READ_KEY_HERE
+
+### Coreban write with read-only API key (expect 403, never proxied)
+
+POST {{host}}/api/coreban/boards
+Authorization: Bearer cgw_live_PASTE_COREBAN_READ_KEY_HERE
+Content-Type: application/json
+
+{
+  "name": "Homelab"
+}
+
+### Coreban without credentials (expect 401, never proxied)
+
+GET {{host}}/api/coreban/health
+
 # @key_id = 00000000-0000-0000-0000-000000000000

@@ -34,11 +34,12 @@ services:
       - ALLOWED_ORIGINS=http://localhost:3000,http://100.119.212.55:3000
       - COREFINANCE_URL=http://corefinance-api:6969
       - COREDRAW_URL=http://coredraw-api:6971
+      - COREBAN_URL=http://coreban-api:6972
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - JWT_KID=${JWT_KID:-2026-09-a}
       - JWT_ISSUER=${JWT_ISSUER:-https://gateway.internal}
-      - JWT_AUDIENCE=${JWT_AUDIENCE:-corefinance,coredraw}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-corefinance,coredraw,coreban}
       - JWT_TTL_SECONDS=${JWT_TTL_SECONDS:-300}
       - JWT_PRIVATE_KEY_FILE=/run/secrets/jwt_private_key
       # Rotation-only: the previous key still travels inline. Prefer a second
@@ -97,6 +98,28 @@ services:
       - ./services/coredraw/.env
     environment:
       - PORT=6971
+      - GODEBUG=netdns=go
+      # Dev override: reach the gateway by compose service name over plain HTTP.
+      - JWT_JWKS_URL=http://coregateway-api:8080/.well-known/jwks.json
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    depends_on:
+      coregateway-api:
+        condition: service_healthy
+
+  coreban-api:
+    build:
+      context: ./services/coreban
+      dockerfile: Dockerfile.coreban-api
+      target: api
+    ports:
+      # Not needed outside this machine (gateway reaches it by service name).
+      - "127.0.0.1:6972:6972"
+    env_file:
+      - ./services/coreban/.env
+    environment:
+      - PORT=6972
       - GODEBUG=netdns=go
       # Dev override: reach the gateway by compose service name over plain HTTP.
       - JWT_JWKS_URL=http://coregateway-api:8080/.well-known/jwks.json

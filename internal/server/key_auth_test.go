@@ -126,6 +126,8 @@ const (
 	testAdminReadKeyPlaintext = "test-admin-read-key"
 	testCoredrawReadKeyPlaintext = "test-coredraw-read-key"
 	testCoredrawWriteKeyPlaintext = "test-coredraw-write-key"
+	testCorebanReadKeyPlaintext = "test-coreban-read-key"
+	testCorebanWriteKeyPlaintext = "test-coreban-write-key"
 )
 
 func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUID, uuid.UUID) {
@@ -148,6 +150,8 @@ func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUI
 			auth.HashAPIKey(testAdminReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:read"}},
 			auth.HashAPIKey(testCoredrawReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coredraw:read"}},
 			auth.HashAPIKey(testCoredrawWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"coredraw:write"}},
+			auth.HashAPIKey(testCorebanReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coreban:read"}},
+			auth.HashAPIKey(testCorebanWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"coreban:write"}},
 		},
 	}
 	authSvc := auth.NewService(q)

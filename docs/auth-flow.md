@@ -32,7 +32,7 @@ There are **two trust zones**:
    keys (`cgw_live_...`). The gateway is the *only* component that
    validates these credentials.
 2. **Inside (gateway → downstream services).** Downstream services
-   (today: corefinance) accept exactly one credential: a short-lived JWT
+   (today: corefinance, coredraw, coreban) accept exactly one credential: a short-lived JWT
    minted by the gateway and verified against the gateway's JWKS. They
    never see API keys (the edge overwrites `Authorization` with the
    minted token), browser cookies (stripped on the proxy leg), or
@@ -50,7 +50,7 @@ gateway edge (:8080)
   │  validate credential → mint internal JWT (Ed25519, TTL from JWT_TTL_SECONDS, per request)
   │  Authorization: Bearer <internal-jwt>  (+ X-Request-ID)
   ▼
-downstream (corefinance :6969)
+downstream (corefinance :6969 · coredraw :6971 · coreban :6972)
    JWKS at boot (fail-closed) → cached 5m, refresh on unknown kid
    → verify iss/aud/sig/exp → add to request context → authorize
 ```
@@ -166,6 +166,10 @@ at the top, or point `ADMIN_JAR` at a live admin cookie jar).
 `coredraw:read` cover, other methods need `coredraw:write` cover;
 uncovered keys get 403 and are never proxied. Sessions pass through to
 the downstream checks.
+
+**Coreban routes enforce the same cover** (`RequireServiceKeyScope("coreban")`):
+key-authed `GET`/`HEAD` needs `coreban:read` cover, other methods need
+`coreban:write` cover; the minted token's audience is `coreban`.
 
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`
@@ -329,7 +333,7 @@ JWT_KID=2026-09-a           # key ID published in JWT header + JWKS (required)
 JWT_PREV_PRIVATE_KEY_PEM=   # previous private key during rotation (optional)
 JWT_PREV_KID=               # previous key ID (optional)
 JWT_ISSUER=https://gateway.internal
-JWT_AUDIENCE=corefinance,coredraw
+JWT_AUDIENCE=corefinance,coredraw,coreban
 JWT_TTL_SECONDS=300
 ```
 
@@ -339,7 +343,7 @@ JWT_TTL_SECONDS=300
 | `JWT_KID` | yes (non-empty) | Names *which* key signed a token, so verifiers can pick the right public key and old/new keys coexist during rotation. Date-letter scheme (`2026-09-a`) is convention only — any non-empty value passes, no format check — but it keeps rotations ordered and greppable. |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | only during rotation — and asymmetric: `JWT_PREV_KID` is required when `JWT_PREV_PRIVATE_KEY_PEM` is set (startup error otherwise), but `JWT_PREV_KID` alone without the PEM is silently ignored | Overlap window: the old key stays verifiable while the new one signs. Cleared after rotation. |
 | `JWT_ISSUER` | no — defaults to `https://gateway.internal` when unset | `iss` claim: the single authorized signer. Rejects tokens minted by anyone else, even if correctly signed by some other key the verifier might know. Same value everywhere *by design* (decision: one issuer; environments are separated by network + secrets, not by issuer string). |
-| `JWT_AUDIENCE` | no — defaults to `corefinance,coredraw` when unset | Allow-list of downstreams the gateway may mint for. Comma-separated (`corefinance,coredraw`). Every minted token carries exactly **one** audience — the downstream the request is proxied to — so a token captured at one service is rejected by its siblings. A route naming a downstream outside this list fails instead of minting. |
+| `JWT_AUDIENCE` | no — defaults to `corefinance,coredraw,coreban` when unset | Allow-list of downstreams the gateway may mint for. Comma-separated (`corefinance,coredraw,coreban`). Every minted token carries exactly **one** audience — the downstream the request is proxied to — so a token captured at one service is rejected by its siblings. A route naming a downstream outside this list fails instead of minting. |
 | `JWT_TTL_SECONDS` | no — defaults to `300` | Token lifetime. Short enough that a leaked token is nearly useless, long enough to cover any single proxied request with margin. Explicit `<=0` fails startup; a non-numeric value silently falls back to `300`. |
 
 Downstream services need their own side of the handshake (see

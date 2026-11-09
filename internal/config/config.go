@@ -19,6 +19,7 @@ type Config struct {
 	AllowedOrigins      string
 	CorefinanceURL      string
 	CoredrawURL         string
+	CorebanURL          string
 	// Internal JWT identity (gateway is the sole signer).
 	//
 	// JWTPrivateKeyPEM holds the resolved key material: either the contents
@@ -33,7 +34,7 @@ type Config struct {
 	JWTIssuer            string
 	// JWTAudience is the allow-list of downstreams the gateway may mint
 	// tokens for. Comma-separated in JWT_AUDIENCE (e.g.
-	// "corefinance,coredraw"); each token carries exactly one of them.
+	// "corefinance,coredraw,coreban"); each token carries exactly one of them.
 	JWTAudience   []string
 	JWTTTLSeconds int
 
@@ -54,10 +55,11 @@ func Load() *Config {
 		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 		CorefinanceURL:      getEnv("COREFINANCE_URL", "http://localhost:6969"),
 		CoredrawURL:         getEnv("COREDRAW_URL", "http://localhost:6971"),
+		CorebanURL:          getEnv("COREBAN_URL", "http://localhost:6972"),
 		JWTKID:              os.Getenv("JWT_KID"),
 		JWTPrevKID:          os.Getenv("JWT_PREV_KID"),
 		JWTIssuer:           getEnv("JWT_ISSUER", "https://gateway.internal"),
-		JWTAudience:         getEnvList("JWT_AUDIENCE", "corefinance,coredraw"),
+		JWTAudience:         getEnvList("JWT_AUDIENCE", "corefinance,coredraw,coreban"),
 		JWTTTLSeconds:       getEnvInt("JWT_TTL_SECONDS", 300),
 	}
 

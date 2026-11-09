@@ -161,6 +161,16 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Handle("/*", s.CoredrawClient.Proxy())
 	})
 
+	// coreban — same proxy contract as coredraw: internal JWT downstream
+	// (audience coreban), coreban:read for GET/HEAD and coreban:write
+	// otherwise for key callers; sessions pass through to downstream checks.
+	r.Route("/api/coreban", func(r chi.Router) {
+		r.Use(middleware.EdgeIdentity("coreban", s.TokenIssuer, s.KeysService, userExists))
+		r.Use(auth.RequireServiceKeyScope("coreban"))
+		r.Use(middleware.ForwardHeaders())
+		r.Handle("/*", s.CorebanClient.Proxy())
+	})
+
 	return r
 }
 

@@ -62,7 +62,7 @@ coregateway/
 │   ├── auth/                 # Authentication (register, login, sessions)
 │   ├── user/                 # User management (CRUD)
 │   ├── monitor/              # Service monitoring (CRUD, health checks, stats)
-│   ├── services/             # Downstream clients + streaming proxy (corefinance, coredraw)
+│   ├── services/             # Downstream clients + streaming proxy (corefinance, coredraw, coreban)
 │   ├── token/                # Internal JWT minting (Ed25519) + JWKS
 │   ├── server/               # HTTP server, routes, middleware wiring
 │   ├── middleware/           # Request ID, slog logging, edge identity, forward headers
@@ -77,7 +77,8 @@ coregateway/
 │       └── sqlc/             # sqlc-generated Go code (DO NOT EDIT)
 ├── services/
 │   ├── corefinance/          # Corefinance microservice (separate repo/deployment)
-│   └── coredraw/             # Coredraw whiteboard microservice (git submodule, own Go module)
+│   ├── coredraw/             # Coredraw whiteboard microservice (git submodule, own Go module)
+│   └── coreban/              # Coreban kanban + reminders microservice (git submodule, own Go module)
 ├── proto/                    # Protobuf definitions (buf-managed)
 ├── compose.yml               # Docker Compose for local development
 ├── coregateway-api.http      # HTTP client file (VS Code REST Client)
@@ -164,12 +165,13 @@ Budget API flow:
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `COREFINANCE_URL` | `http://localhost:6969` | Corefinance-api base URL (internal service) |
 | `COREDRAW_URL` | `http://localhost:6971` | Coredraw-api base URL (internal service) |
+| `COREBAN_URL` | `http://localhost:6972` | Coreban-api base URL (internal service) |
 | `JWT_PRIVATE_KEY_FILE` | - | Path to the Ed25519 signing key, PKCS8 PEM (preferred; required unless `JWT_PRIVATE_KEY_PEM` is set) |
 | `JWT_PRIVATE_KEY_PEM` | - | Inline signing key, PEM with literal `\n` (fallback; visible via `docker inspect`) |
 | `JWT_KID` | - | Signing key ID published in JWKS (required) |
 | `JWT_PREV_PRIVATE_KEY_PEM` / `JWT_PREV_KID` | - | Previous key pair, rotation overlap only |
 | `JWT_ISSUER` | `https://gateway.internal` | Internal JWT issuer |
-| `JWT_AUDIENCE` | `corefinance,coredraw` | Allow-list of downstreams the gateway may mint for; each token carries exactly one |
+| `JWT_AUDIENCE` | `corefinance,coredraw,coreban` | Allow-list of downstreams the gateway may mint for; each token carries exactly one |
 | `JWT_TTL_SECONDS` | `300` | Internal JWT lifetime in seconds |
 
 See `docs/auth-flow.md` and `.env.example` for the full auth picture.
@@ -218,7 +220,8 @@ Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
   ├── /api/auth/*    → coregateway handlers (auth, users, services)
   ├── /api/services/* → coregateway handlers (monitoring)
   ├── /api/budget/*  → ForwardHeaders → httputil.ReverseProxy → corefinance-api:6969
-  └── /api/coredraw/* → ForwardHeaders + key-scope gate (coredraw:read|write) → httputil.ReverseProxy → coredraw-api:6971
+  ├── /api/coredraw/* → ForwardHeaders + key-scope gate (coredraw:read|write) → httputil.ReverseProxy → coredraw-api:6971
+  └── /api/coreban/*  → ForwardHeaders + key-scope gate (coreban:read|write) → httputil.ReverseProxy → coreban-api:6972
 ```
 
 ### Current services
@@ -227,6 +230,7 @@ Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
 |---------|-----|--------|-------------|
 | corefinance-api | `http://corefinance-api:6969` | `/api/budget/*` | Budget/finance tracking |
 | coredraw-api | `http://coredraw-api:6971` | `/api/coredraw/*` | Whiteboard boards (snapshots + docs) |
+| coreban-api | `http://coreban-api:6972` | `/api/coreban/*` | Kanban boards + ntfy reminders |
 
 ### Adding a new microservice (Runbook)
 

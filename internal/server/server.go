@@ -10,6 +10,7 @@ import (
 	"github.com/ejsadiarin/coregateway/internal/auth"
 	"github.com/ejsadiarin/coregateway/internal/config"
 	monitor "github.com/ejsadiarin/coregateway/internal/monitor"
+	"github.com/ejsadiarin/coregateway/internal/services/coreban"
 	"github.com/ejsadiarin/coregateway/internal/services/coredraw"
 	"github.com/ejsadiarin/coregateway/internal/services/corefinance"
 	"github.com/ejsadiarin/coregateway/internal/token"
@@ -29,6 +30,7 @@ type Server struct {
 	AuthService       *auth.Service
 	CorefinanceClient *corefinance.Client
 	CoredrawClient    *coredraw.Client
+	CorebanClient     *coreban.Client
 	TokenIssuer       *token.Issuer
 	Queries           *db.Queries
 	Pool              *pgxpool.Pool
@@ -72,6 +74,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)
 	s.CoredrawClient = coredraw.New(cfg.CoredrawURL)
+	s.CorebanClient = coreban.New(cfg.CorebanURL)
 	s.TokenIssuer = issuer
 
 	return &http.Server{
