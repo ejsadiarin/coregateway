@@ -30,6 +30,13 @@ export interface KanbanColumn {
   cards?: KanbanCard[];
 }
 
+// KanbanColumnEdit is a partial column edit: fields left out stay as they
+// are. Adding a column needs both.
+export interface KanbanColumnEdit {
+  name?: string;
+  status?: KanbanStatus;
+}
+
 // KanbanBoard mirrors coreban's board responses. Lists omit columns; a
 // single board (GET /api/coreban/boards/:id) carries them in board order.
 export interface KanbanBoard {

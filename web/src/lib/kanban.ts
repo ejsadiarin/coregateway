@@ -2,6 +2,8 @@ import type {
   KanbanBoard,
   KanbanCard,
   KanbanCardEdit,
+  KanbanColumn,
+  KanbanColumnEdit,
   KanbanReminder,
   KanbanReminderEdit,
   KanbanSettings,
@@ -56,6 +58,8 @@ async function throwIfError(
 }
 
 const cardNotFound = () => new KanbanCardNotFoundError();
+
+const columnNotFound = () => new Error("Column not found — it may have been changed on another device");
 
 const reminderNotFound = () => new Error("Reminder not found — it may have been deleted on another device");
 
@@ -151,6 +155,53 @@ export async function moveKanbanCard(
   });
   await throwIfError(res, "moving card", cardNotFound);
   return res.json();
+}
+
+const columnsUrl = (boardId: string) => `${boardsUrl}/${boardId}/columns`;
+
+// addKanbanColumn appends a column with a status to the board.
+export async function addKanbanColumn(boardId: string, column: Required<KanbanColumnEdit>): Promise<KanbanColumn> {
+  const res = await fetch(columnsUrl(boardId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(column),
+  });
+  await throwIfError(res, "adding column");
+  return res.json();
+}
+
+// editKanbanColumn renames a column or changes its status. coreban refuses
+// (409) to leave a status with no column on the board.
+export async function editKanbanColumn(boardId: string, columnId: string, edit: KanbanColumnEdit): Promise<KanbanColumn> {
+  const res = await fetch(`${columnsUrl(boardId)}/${columnId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(edit),
+  });
+  await throwIfError(res, "saving column", columnNotFound);
+  return res.json();
+}
+
+// moveKanbanColumn puts a column at index among the board's other columns
+// (leftmost is 0).
+export async function moveKanbanColumn(boardId: string, columnId: string, index: number): Promise<KanbanColumn> {
+  const res = await fetch(`${columnsUrl(boardId)}/${columnId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ index }),
+  });
+  await throwIfError(res, "moving column", columnNotFound);
+  return res.json();
+}
+
+// deleteKanbanColumn removes an empty column. coreban refuses (409) one
+// holding cards or the board's last column of its status.
+export async function deleteKanbanColumn(boardId: string, columnId: string): Promise<void> {
+  const res = await fetch(`${columnsUrl(boardId)}/${columnId}`, { method: "DELETE", credentials: "include" });
+  await throwIfError(res, "deleting column", columnNotFound);
 }
 
 const settingsUrl = `${apiBaseUrl}/api/coreban/settings`;

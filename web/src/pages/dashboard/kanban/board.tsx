@@ -18,15 +18,27 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, MoreHorizontal, Plus } from "lucide-react";
 import {
   fetchKanbanBoard,
   createKanbanCard,
   editKanbanCard,
   moveKanbanCard,
+  addKanbanColumn,
+  editKanbanColumn,
+  moveKanbanColumn,
+  deleteKanbanColumn,
   KanbanBoardNotFoundError,
+  KanbanRequestError,
 } from "@/lib/kanban";
-import type { KanbanBoard, KanbanCard, KanbanCardEdit, KanbanColumn, KanbanStatus } from "@/types/kanban";
+import type {
+  KanbanBoard,
+  KanbanCard,
+  KanbanCardEdit,
+  KanbanColumn,
+  KanbanColumnEdit,
+  KanbanStatus,
+} from "@/types/kanban";
 import { dropIndex, moveCard } from "@/pages/dashboard/kanban/drop";
 import { cn } from "@/lib/utils";
 import { markdownProseClass } from "@/lib/markdown";
@@ -50,12 +62,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const statusLabel: Record<KanbanStatus, string> = {
   todo: "Todo",
   in_progress: "In progress",
   done: "Done",
 };
+
+const statuses = Object.keys(statusLabel) as KanbanStatus[];
+
+// errorText is what to tell the owner about a failed request: coreban's own
+// explanation when it refused one (such as removing a board's last Done
+// column), else the error's message.
+const errorText = (err: unknown, fallback: string) =>
+  err instanceof KanbanRequestError && err.detail ? err.detail : err instanceof Error ? err.message : fallback;
 
 const statusDot: Record<KanbanStatus, string> = {
   todo: "bg-muted-foreground",
@@ -83,6 +110,8 @@ export default function KanbanBoardPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  // The column dialog: adding one ("new"), editing one, or closed.
+  const [columnDialog, setColumnDialog] = useState<KanbanColumn | "new" | null>(null);
   // The pointer's clientY during a drag. Tracked directly rather than as
   // start + dnd-kit's delta, which also counts any auto-scroll since the drag
   // began and so drifts from the viewport rects the drop slot is measured in.
@@ -103,8 +132,7 @@ export default function KanbanBoardPage() {
     queryFn: () => fetchKanbanBoard(boardId),
     retry: (count, err) => !(err instanceof KanbanBoardNotFoundError) && count < 3,
   });
-  const fail = (fallback: string) => (err: unknown) =>
-    setActionError(err instanceof Error ? err.message : fallback);
+  const fail = (fallback: string) => (err: unknown) => setActionError(errorText(err, fallback));
   const refresh = () => queryClient.invalidateQueries({ queryKey: boardKey });
 
   // Moves apply to the cached board at once and roll back if coreban refuses.
@@ -129,6 +157,17 @@ export default function KanbanBoardPage() {
   });
 
   const columns = boardQuery.data?.columns ?? [];
+
+  // Column moves and deletes from a column's menu; refusals show above the board.
+  const columnMutation = useMutation({
+    mutationFn: async (op: { kind: "move"; column: KanbanColumn; index: number } | { kind: "delete"; column: KanbanColumn }) => {
+      if (op.kind === "move") await moveKanbanColumn(boardId, op.column.id, op.index);
+      else await deleteKanbanColumn(boardId, op.column.id);
+    },
+    onMutate: () => setActionError(""),
+    onError: fail("Couldn't change this column"),
+    onSettled: refresh,
+  });
 
   // requestMove skips drops that leave the card where it already is.
   const requestMove = (move: Move) => {
@@ -289,7 +328,7 @@ export default function KanbanBoardPage() {
             [0, 1, 2].map((i) => (
               <div key={i} className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-xl bg-muted md:w-72" aria-busy="true" />
             ))}
-          {columns.map((column) => (
+          {columns.map((column, i) => (
             <ColumnView
               key={column.id}
               column={column}
@@ -301,8 +340,34 @@ export default function KanbanBoardPage() {
               }}
               onOpenCard={setEditingId}
               onCardKey={handleCardKey}
+              menu={
+                <ColumnMenu
+                  column={column}
+                  index={i}
+                  count={columns.length}
+                  onEdit={() => {
+                    setActionError("");
+                    setColumnDialog(column);
+                  }}
+                  onMove={(index) => columnMutation.mutate({ kind: "move", column, index })}
+                  onDelete={() => columnMutation.mutate({ kind: "delete", column })}
+                />
+              }
             />
           ))}
+          {columns.length > 0 && (
+            <Button
+              variant="outline"
+              className="min-h-11 shrink-0 snap-start self-start border-dashed"
+              onClick={() => {
+                setActionError("");
+                setColumnDialog("new");
+              }}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Add column
+            </Button>
+          )}
         </div>
         {/* No drop animation: the optimistic move already shows the card in its new place. */}
         <DragOverlay dropAnimation={null}>
@@ -313,6 +378,14 @@ export default function KanbanBoardPage() {
           )}
         </DragOverlay>
       </DndContext>
+
+      <ColumnDialog
+        key={columnDialog === "new" ? "new" : (columnDialog?.id ?? "none")}
+        boardId={boardId}
+        column={columnDialog}
+        onClose={() => setColumnDialog(null)}
+        onSaved={refresh}
+      />
 
       <CardEditor
         key={editing?.id ?? "none"}
@@ -336,6 +409,7 @@ function ColumnView({
   listRef,
   onOpenCard,
   onCardKey,
+  menu,
 }: {
   column: KanbanColumn;
   draggingId: string | null;
@@ -343,6 +417,7 @@ function ColumnView({
   listRef: (el: HTMLOListElement | null) => void;
   onOpenCard: (id: string) => void;
   onCardKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
+  menu: React.ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
   const cards = column.cards ?? [];
@@ -355,12 +430,13 @@ function ColumnView({
       aria-label={`${column.name} (${statusLabel[column.status]})`}
       className="flex w-[85vw] max-w-80 shrink-0 snap-start flex-col rounded-xl border border-border bg-muted/30 md:w-72"
     >
-      <header className="flex items-center gap-2 px-3 pb-2 pt-3">
+      <header className="flex items-center gap-2 pb-1 pl-3 pr-1 pt-1">
         <span className={cn("h-2 w-2 shrink-0 rounded-full", statusDot[column.status])} aria-hidden />
         <h2 className="flex-1 truncate text-sm font-semibold">{column.name}</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           {statusLabel[column.status]} · <span className="tabular-nums">{cards.length}</span>
         </span>
+        {menu}
       </header>
 
       <ol ref={listRef} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
@@ -611,6 +687,150 @@ function CardEditor({
             </Button>
             <Button type="submit" className="min-h-11" disabled={saveMutation.isPending}>
               Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ColumnMenu holds a column's actions. Refusals (a column still holding
+// cards, a board's last column of a status) come back from coreban.
+function ColumnMenu({
+  column,
+  index,
+  count,
+  onEdit,
+  onMove,
+  onDelete,
+}: {
+  column: KanbanColumn;
+  index: number;
+  count: number;
+  onEdit: () => void;
+  onMove: (index: number) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label={`${column.name} column actions`}>
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem className="min-h-11" onSelect={onEdit}>
+          Edit column
+        </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-11" disabled={index === 0} onSelect={() => onMove(index - 1)}>
+          Move left
+        </DropdownMenuItem>
+        <DropdownMenuItem className="min-h-11" disabled={index === count - 1} onSelect={() => onMove(index + 1)}>
+          Move right
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="min-h-11 text-destructive focus:text-destructive" onSelect={onDelete}>
+          Delete column
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ColumnDialog adds a column ("new") or renames one and changes its status.
+function ColumnDialog({
+  boardId,
+  column,
+  onClose,
+  onSaved,
+}: {
+  boardId: string;
+  column: KanbanColumn | "new" | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const existing = column === "new" ? null : column;
+  const [name, setName] = useState(existing?.name ?? "");
+  const [status, setStatus] = useState<KanbanStatus>(existing?.status ?? "in_progress");
+  const [nameError, setNameError] = useState("");
+  const [error, setError] = useState("");
+
+  const saveMutation = useMutation({
+    mutationFn: (edit: KanbanColumnEdit) =>
+      existing
+        ? editKanbanColumn(boardId, existing.id, edit)
+        : addKanbanColumn(boardId, { name: edit.name!, status: edit.status! }),
+    onSuccess: () => {
+      onSaved();
+      onClose();
+    },
+    onError: (err) => setError(errorText(err, "Couldn't save this column")),
+  });
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saveMutation.isPending) return;
+    const n = name.trim();
+    setNameError(n ? "" : "A column needs a name.");
+    if (!n) return;
+    // Adding sends both; editing sends only what changed.
+    const edit: KanbanColumnEdit = {};
+    if (n !== existing?.name) edit.name = n;
+    if (status !== existing?.status) edit.status = status;
+    if (Object.keys(edit).length === 0) {
+      onClose();
+      return;
+    }
+    setError("");
+    saveMutation.mutate(edit);
+  };
+
+  return (
+    <Dialog open={column !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <form onSubmit={handleSave} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>{existing ? "Edit column" : "Add column"}</DialogTitle>
+            <DialogDescription>
+              A column's status is its cards' status. Every board keeps at least one Todo, In progress, and Done
+              column.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="kanban-column-name">Name</Label>
+            <Input
+              id="kanban-column-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={nameError ? true : undefined}
+              className="min-h-11"
+            />
+            {nameError && <p className="text-sm text-destructive">{nameError}</p>}
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="kanban-column-status">Status</Label>
+            <Select value={status} onValueChange={(v) => setStatus(v as KanbanStatus)}>
+              <SelectTrigger id="kanban-column-status" className="min-h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statuses.map((st) => (
+                  <SelectItem key={st} value={st}>
+                    {statusLabel[st]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* coreban's refusals here are about the status: the board's last column of one. */}
+            {error && <p className="text-sm text-destructive">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" className="min-h-11" disabled={saveMutation.isPending}>
+              {existing ? "Save" : "Add"}
             </Button>
           </DialogFooter>
         </form>
