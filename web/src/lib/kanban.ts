@@ -1,4 +1,11 @@
-import type { KanbanBoard, KanbanCard, KanbanCardEdit, KanbanSettings } from "@/types/kanban";
+import type {
+  KanbanBoard,
+  KanbanCard,
+  KanbanCardEdit,
+  KanbanReminder,
+  KanbanReminderEdit,
+  KanbanSettings,
+} from "@/types/kanban";
 import { apiBaseUrl } from "@/lib/api";
 
 const boardsUrl = `${apiBaseUrl}/api/coreban/boards`;
@@ -49,6 +56,8 @@ async function throwIfError(
 }
 
 const cardNotFound = () => new KanbanCardNotFoundError();
+
+const reminderNotFound = () => new Error("Reminder not found — it may have been deleted on another device");
 
 export async function fetchKanbanBoards(): Promise<KanbanBoard[]> {
   const res = await fetch(boardsUrl, { credentials: "include" });
@@ -161,4 +170,40 @@ export async function saveKanbanSettings(settings: KanbanSettings): Promise<Kanb
   });
   await throwIfError(res, "saving settings");
   return res.json();
+}
+
+const remindersUrl = `${apiBaseUrl}/api/coreban/reminders`;
+
+// fetchKanbanReminders lists the owner's reminders, soonest first.
+export async function fetchKanbanReminders(): Promise<KanbanReminder[]> {
+  const res = await fetch(remindersUrl, { credentials: "include" });
+  await throwIfError(res, "fetching reminders");
+  return res.json();
+}
+
+export async function createKanbanReminder(input: Required<KanbanReminderEdit>): Promise<KanbanReminder> {
+  const res = await fetch(remindersUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  await throwIfError(res, "creating reminder");
+  return res.json();
+}
+
+export async function editKanbanReminder(id: string, edit: KanbanReminderEdit): Promise<KanbanReminder> {
+  const res = await fetch(`${remindersUrl}/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(edit),
+  });
+  await throwIfError(res, "saving reminder", reminderNotFound);
+  return res.json();
+}
+
+export async function deleteKanbanReminder(id: string): Promise<void> {
+  const res = await fetch(`${remindersUrl}/${id}`, { method: "DELETE", credentials: "include" });
+  await throwIfError(res, "deleting reminder", reminderNotFound);
 }

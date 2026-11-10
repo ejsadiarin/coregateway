@@ -47,3 +47,31 @@ export interface KanbanSettings {
   ntfy_topic: string | null;
   timezone: string;
 }
+
+// KanbanReminder mirrors coreban's reminders. Times are RFC 3339 in the
+// owner's timezone. next_fire_at is null once nothing is left to send;
+// paused says why it won't be sent when it comes.
+export interface KanbanReminder {
+  id: string;
+  message: string;
+  schedule: KanbanSchedule;
+  next_fire_at: string | null;
+  paused: "no_notification_target" | null;
+  last_delivery: { at: string; late: boolean; error: string | null } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// KanbanSchedule is when a reminder fires. Requests may send at as a
+// wall-clock time with no offset ("2026-11-10T07:00"), read in the owner's
+// timezone.
+export interface KanbanSchedule {
+  kind: "once";
+  at: string;
+}
+
+// KanbanReminderEdit is a partial edit: fields left out stay as they are.
+export interface KanbanReminderEdit {
+  message?: string;
+  schedule?: KanbanSchedule;
+}
