@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint",
     "test": "vitest run",
-    "icons:gen": "node scripts/gen-icon-sprite.mjs"
+    "icons:gen": "node scripts/gen-icon-sprite.mjs",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -77,6 +78,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.65.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

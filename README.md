@@ -212,6 +212,26 @@ directory (`go test ./...`), since the root module never crosses the nested
 module boundary. Coreban (`services/coreban/`) is likewise its own module,
 with `make test` (Docker-backed) and `make test-unit` in that directory.
 
+### Browser e2e (Kanban)
+
+A Playwright suite (`web/e2e/`) drives the dashboard's Kanban section through
+the real gateway and coreban. It runs against a disposable stack, never the
+databases in `.env`:
+
+```bash
+scripts/e2e-up.sh     # throwaway Postgres + ntfy in Docker; gateway, coreban, web run natively
+cd web && pnpm e2e    # headless Chromium; report in web/playwright-report/
+scripts/e2e-down.sh   # stop it all (logs stay in .e2e/)
+```
+
+The stack uses the native-run ports (web `:3001`, gateway `:18080`, coreban
+`:16972`), so it can run next to `compose.yml`. It seeds `admin@e2e.local` /
+`e2e-admin-pass-123`, and ntfy user `owner` / `ownerpw` can read `coreban-e2e`
+to check deliveries by hand. Any console error other than an expected
+non-2xx response fails a test, which catches CORS blocks and React warnings.
+Slow reminder timing (late, skipped, quiet while Done) stays in coreban's Go
+tests, which use an injected clock.
+
 ## Downstream Microservices
 
 Coregateway acts as a **Backend-for-Frontend (BFF)** gateway. All traffic flows through it — the edge proxy (nginx/Traefik) only knows about coregateway, never the internal microservices.
