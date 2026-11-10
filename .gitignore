@@ -60,3 +60,6 @@ main
 
 # Playwright MCP snapshots and console logs
 .playwright-mcp/
+
+# scripts/e2e-up.sh state: keys, logs, PIDs, binaries
+.e2e/
