@@ -44,21 +44,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Use(middleware.RequestIDResponseHeader)
 	r.Use(middleware.SlogMiddleware)
 	r.Use(auth.AuthMiddleware(s.AuthService))
-	// ALLOWED_ORIGINS (comma-separated) extends the local defaults, so the
-	// API stays reachable from extra hosts (e.g. a tailscale IP) when its
-	// port is bound to them. Empty entries are skipped.
-	allowedOrigins := []string{"http://localhost:3000", "http://localhost:3001"}
-	for _, o := range strings.Split(cfg.AllowedOrigins, ",") {
-		if trimmed := strings.TrimSpace(o); trimmed != "" {
-			allowedOrigins = append(allowedOrigins, trimmed)
-		}
-	}
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-User-ID"},
-		AllowCredentials: true,
-	}))
+	r.Use(corsMiddleware(cfg.AllowedOrigins))
 
 	// ops
 	r.Get("/.well-known/jwks.json", s.ServeJWKS)
@@ -211,4 +197,28 @@ func getLegacyServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	helper.RespondJSON(w, http.StatusOK, services)
+}
+
+// corsMiddleware lets the dashboard call the API cross-origin in dev
+// (`pnpm dev` talks to the gateway directly; production is same-origin
+// behind nginx). allowedOriginsCSV (ALLOWED_ORIGINS) extends the local
+// defaults, so the API stays reachable from extra hosts (e.g. a tailscale
+// IP) when its port is bound to them. Empty entries are skipped.
+//
+// AllowedMethods must cover every method the dashboard sends to any
+// proxied service — coreban edits with PATCH — or the preflight fails and
+// the browser reports only "Failed to fetch".
+func corsMiddleware(allowedOriginsCSV string) func(http.Handler) http.Handler {
+	allowedOrigins := []string{"http://localhost:3000", "http://localhost:3001"}
+	for _, o := range strings.Split(allowedOriginsCSV, ",") {
+		if trimmed := strings.TrimSpace(o); trimmed != "" {
+			allowedOrigins = append(allowedOrigins, trimmed)
+		}
+	}
+	return cors.Handler(cors.Options{
+		AllowedOrigins:   allowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-User-ID"},
+		AllowCredentials: true,
+	})
 }
