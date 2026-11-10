@@ -38,6 +38,7 @@ function card(id: string, columnId: string, status: KanbanStatus): KanbanCard {
     status,
     title: id.toUpperCase(),
     description: "",
+    labels: [],
     due: null,
     archived_at: null,
     created_at: "",

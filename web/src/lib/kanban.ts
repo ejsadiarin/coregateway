@@ -4,6 +4,7 @@ import type {
   KanbanCardEdit,
   KanbanColumn,
   KanbanColumnEdit,
+  KanbanLabel,
   KanbanReminder,
   KanbanReminderEdit,
   KanbanSettings,
@@ -216,6 +217,57 @@ export async function moveKanbanColumn(boardId: string, columnId: string, index:
 export async function deleteKanbanColumn(boardId: string, columnId: string): Promise<void> {
   const res = await fetch(`${columnsUrl(boardId)}/${columnId}`, { method: "DELETE", credentials: "include" });
   await throwIfError(res, "deleting column", columnNotFound);
+}
+
+const labelsUrl = (boardId: string) => `${boardsUrl}/${boardId}/labels`;
+
+const labelNotFound = () => new Error("Label not found — it may have been deleted on another device");
+
+// fetchKanbanLabels lists the board's labels by name.
+export async function fetchKanbanLabels(boardId: string): Promise<KanbanLabel[]> {
+  const res = await fetch(labelsUrl(boardId), { credentials: "include" });
+  await throwIfError(res, "fetching labels");
+  return res.json();
+}
+
+// createKanbanLabel defines a label on the board. coreban refuses (409) a
+// name the board already has, ignoring case.
+export async function createKanbanLabel(boardId: string, name: string): Promise<KanbanLabel> {
+  const res = await fetch(labelsUrl(boardId), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name }),
+  });
+  await throwIfError(res, "creating label");
+  return res.json();
+}
+
+export async function renameKanbanLabel(boardId: string, labelId: string, name: string): Promise<KanbanLabel> {
+  const res = await fetch(`${labelsUrl(boardId)}/${labelId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ name }),
+  });
+  await throwIfError(res, "renaming label", labelNotFound);
+  return res.json();
+}
+
+// deleteKanbanLabel deletes a label, taking it off every card.
+export async function deleteKanbanLabel(boardId: string, labelId: string): Promise<void> {
+  const res = await fetch(`${labelsUrl(boardId)}/${labelId}`, { method: "DELETE", credentials: "include" });
+  await throwIfError(res, "deleting label", labelNotFound);
+}
+
+// setKanbanCardLabel applies (on) or removes one of the board's labels on a
+// card.
+export async function setKanbanCardLabel(boardId: string, cardId: string, labelId: string, on: boolean): Promise<void> {
+  const res = await fetch(`${cardsUrl(boardId)}/${cardId}/labels/${labelId}`, {
+    method: on ? "PUT" : "DELETE",
+    credentials: "include",
+  });
+  await throwIfError(res, on ? "applying label" : "removing label", labelNotFound);
 }
 
 const settingsUrl = `${apiBaseUrl}/api/coreban/settings`;

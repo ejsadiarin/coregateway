@@ -18,7 +18,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
-import { Archive, ArrowLeft, MoreHorizontal, Plus } from "lucide-react";
+import { Archive, ArrowLeft, MoreHorizontal, Plus, Tag, Trash2 } from "lucide-react";
 import {
   fetchKanbanBoard,
   createKanbanCard,
@@ -27,6 +27,11 @@ import {
   deleteKanbanCard,
   fetchKanbanArchivedCards,
   fetchKanbanSettings,
+  fetchKanbanLabels,
+  createKanbanLabel,
+  renameKanbanLabel,
+  deleteKanbanLabel,
+  setKanbanCardLabel,
   addKanbanColumn,
   editKanbanColumn,
   moveKanbanColumn,
@@ -41,6 +46,7 @@ import type {
   KanbanColumn,
   KanbanColumnEdit,
   KanbanDue,
+  KanbanLabel,
   KanbanStatus,
 } from "@/types/kanban";
 import { formatDue, isOverdue, toInputValue } from "@/pages/dashboard/kanban/schedule";
@@ -60,13 +66,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -111,6 +111,9 @@ type Move = { cardId: string; columnId: string; index: number };
 type DueLabel = { text: string; overdue: boolean };
 type DropTarget = { columnId: string; index: number };
 
+const labelChipClass =
+  "max-w-full truncate rounded-full border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground";
+
 const cardClass =
   "min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-left text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
 
@@ -131,6 +134,7 @@ export default function KanbanBoardPage() {
   // The column dialog: adding one ("new"), editing one, or closed.
   const [columnDialog, setColumnDialog] = useState<KanbanColumn | "new" | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
+  const [labelsOpen, setLabelsOpen] = useState(false);
   // The pointer's clientY during a drag. Tracked directly rather than as
   // start + dnd-kit's delta, which also counts any auto-scroll since the drag
   // began and so drifts from the viewport rects the drop slot is measured in.
@@ -152,6 +156,11 @@ export default function KanbanBoardPage() {
     retry: (count, err) => !(err instanceof KanbanBoardNotFoundError) && count < 3,
   });
   const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
+  const labelsKey = [...boardKey, "labels"];
+  const labelsQuery = useQuery({ queryKey: labelsKey, queryFn: () => fetchKanbanLabels(boardId) });
+  const boardLabels = labelsQuery.data ?? [];
+  // A label change shows on the board's cards as well as in the label list.
+  const refreshLabels = () => queryClient.invalidateQueries({ queryKey: boardKey });
   const fail = (fallback: string) => (err: unknown) => setActionError(errorText(err, fallback));
 
   // A completed card's due is never overdue: the work is finished.
@@ -191,7 +200,9 @@ export default function KanbanBoardPage() {
 
   // Column moves and deletes from a column's menu; refusals show above the board.
   const columnMutation = useMutation({
-    mutationFn: async (op: { kind: "move"; column: KanbanColumn; index: number } | { kind: "delete"; column: KanbanColumn }) => {
+    mutationFn: async (
+      op: { kind: "move"; column: KanbanColumn; index: number } | { kind: "delete"; column: KanbanColumn },
+    ) => {
       if (op.kind === "move") await moveKanbanColumn(boardId, op.column.id, op.index);
       else await deleteKanbanColumn(boardId, op.column.id);
     },
@@ -216,11 +227,15 @@ export default function KanbanBoardPage() {
     const col = columns.findIndex((c) => c.id === card.column_id);
     const index = (columns[col]?.cards ?? []).findIndex((k) => k.id === card.id);
     const target =
-      e.key === "ArrowUp" ? { col, index: index - 1 }
-      : e.key === "ArrowDown" ? { col, index: index + 1 }
-      : e.key === "ArrowLeft" ? { col: col - 1, index }
-      : e.key === "ArrowRight" ? { col: col + 1, index }
-      : null;
+      e.key === "ArrowUp"
+        ? { col, index: index - 1 }
+        : e.key === "ArrowDown"
+          ? { col, index: index + 1 }
+          : e.key === "ArrowLeft"
+            ? { col: col - 1, index }
+            : e.key === "ArrowRight"
+              ? { col: col + 1, index }
+              : null;
     if (!target || target.index < 0 || !columns[target.col]) return;
     e.preventDefault();
     requestMove({ cardId: card.id, columnId: columns[target.col].id, index: target.index });
@@ -321,19 +336,23 @@ export default function KanbanBoardPage() {
           <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
             {boardQuery.data?.name ?? <span className="inline-block h-8 w-48 animate-pulse rounded bg-muted" />}
           </h1>
-          <Button variant="ghost" className="min-h-11" onClick={() => setArchivedOpen(true)}>
-            <Archive className="h-4 w-4" aria-hidden />
-            Archived
-          </Button>
+          <div className="flex gap-1">
+            <Button variant="ghost" className="min-h-11" onClick={() => setLabelsOpen(true)}>
+              <Tag className="h-4 w-4" aria-hidden />
+              Labels
+            </Button>
+            <Button variant="ghost" className="min-h-11" onClick={() => setArchivedOpen(true)}>
+              <Archive className="h-4 w-4" aria-hidden />
+              Archived
+            </Button>
+          </div>
         </div>
         <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
-          Drag cards between columns to change their status, or up and down to set priority. On
-          touch, press and hold a card to pick it up.
+          Drag cards between columns to change their status, or up and down to set priority. On touch, press and hold a
+          card to pick it up.
           <span className="hidden md:inline"> With a card focused, Alt + arrow keys move it.</span>
         </p>
-        {columns.length > 0 && (
-          <NewCardForm boardId={boardId} columns={columns} onCreated={refresh} onError={fail} />
-        )}
+        {columns.length > 0 && <NewCardForm boardId={boardId} columns={columns} onCreated={refresh} onError={fail} />}
         {actionError && <p className="mt-3 text-sm text-destructive">{actionError}</p>}
       </div>
 
@@ -363,7 +382,11 @@ export default function KanbanBoardPage() {
         <div className="mt-6 flex min-h-0 flex-1 snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 md:snap-none md:px-6">
           {boardQuery.isLoading &&
             [0, 1, 2].map((i) => (
-              <div key={i} className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-xl bg-muted md:w-72" aria-busy="true" />
+              <div
+                key={i}
+                className="h-64 w-[85vw] max-w-80 shrink-0 animate-pulse rounded-xl bg-muted md:w-72"
+                aria-busy="true"
+              />
             ))}
           {columns.map((column, i) => (
             <ColumnView
@@ -417,6 +440,14 @@ export default function KanbanBoardPage() {
         </DragOverlay>
       </DndContext>
 
+      <LabelsDialog
+        boardId={boardId}
+        open={labelsOpen}
+        labels={boardLabels}
+        onClose={() => setLabelsOpen(false)}
+        onChanged={refreshLabels}
+      />
+
       <ArchivedDialog
         boardId={boardId}
         open={archivedOpen}
@@ -438,11 +469,10 @@ export default function KanbanBoardPage() {
         boardId={boardId}
         card={editing}
         columns={columns}
+        labels={boardLabels}
         onClose={() => setEditingId(null)}
         onSaved={refresh}
-        onMove={(columnId) =>
-          editing && requestMove({ cardId: editing.id, columnId, index: Number.MAX_SAFE_INTEGER })
-        }
+        onMove={(columnId) => editing && requestMove({ cardId: editing.id, columnId, index: Number.MAX_SAFE_INTEGER })}
       />
     </div>
   );
@@ -528,13 +558,29 @@ function CardItem({
         {...listeners}
         onClick={() => onOpen(card.id)}
         onKeyDown={(e) => onKey(e, card)}
-        aria-label={`${card.title}, ${statusLabel[card.status]}${due ? `, ${due.text}${due.overdue ? ", overdue" : ""}` : ""}`}
+        aria-label={[
+          card.title,
+          statusLabel[card.status],
+          due && `${due.text}${due.overdue ? ", overdue" : ""}`,
+          card.labels.length > 0 && `labels ${card.labels.map((l) => l.name).join(", ")}`,
+        ]
+          .filter(Boolean)
+          .join(", ")}
         className={cn(
           cardClass,
           "cursor-grab select-none transition-opacity [-webkit-touch-callout:none] hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           dragged && "opacity-40",
         )}
       >
+        {card.labels.length > 0 && (
+          <span className="mb-1 flex flex-wrap gap-1" aria-hidden>
+            {card.labels.map((l) => (
+              <span key={l.id} className={labelChipClass}>
+                {l.name}
+              </span>
+            ))}
+          </span>
+        )}
         <span className="line-clamp-3 break-words">{card.title}</span>
         {(due || card.description.trim() !== "") && (
           <span className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -621,6 +667,7 @@ function CardEditor({
   boardId,
   card,
   columns,
+  labels,
   onClose,
   onSaved,
   onMove,
@@ -628,6 +675,7 @@ function CardEditor({
   boardId: string;
   card: KanbanCard | null;
   columns: KanbanColumn[];
+  labels: KanbanLabel[];
   onClose: () => void;
   onSaved: () => void;
   onMove: (columnId: string) => void;
@@ -650,6 +698,16 @@ function CardEditor({
     onSuccess: done,
     onError: (err) => setError(errorText(err, "Couldn't save this card")),
   });
+  // Labels apply at once, apart from Save.
+  const labelMutation = useMutation({
+    mutationFn: ({ label, on }: { label: KanbanLabel; on: boolean }) =>
+      setKanbanCardLabel(boardId, card!.id, label.id, on),
+    onMutate: () => setError(""),
+    onSuccess: onSaved,
+    onError: (err) => setError(errorText(err, "Couldn't change this card's labels")),
+  });
+  const applied = new Set(card?.labels.map((l) => l.id));
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteKanbanCard(boardId, card!.id),
     onSuccess: done,
@@ -666,7 +724,11 @@ function CardEditor({
     const t = title.trim();
     setError(t ? "" : "A card needs a title.");
     setDueError(
-      dueKind === "none" || dueValue ? "" : dueKind === "date" ? "Pick a day, or choose No due." : "Pick a day and time, or choose No due.",
+      dueKind === "none" || dueValue
+        ? ""
+        : dueKind === "date"
+          ? "Pick a day, or choose No due."
+          : "Pick a day and time, or choose No due.",
     );
     if (!t || (dueKind !== "none" && !dueValue)) return null;
     const edit: KanbanCardEdit = {};
@@ -703,9 +765,7 @@ function CardEditor({
         <form onSubmit={handleSave} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Edit card</DialogTitle>
-            <DialogDescription>
-              Status: {card ? statusLabel[card.status] : ""}, from its column.
-            </DialogDescription>
+            <DialogDescription>Status: {card ? statusLabel[card.status] : ""}, from its column.</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-2">
@@ -734,6 +794,34 @@ function CardEditor({
             </Select>
           </div>
 
+          <fieldset className="grid gap-2">
+            <legend className="mb-2 text-sm font-medium">Labels</legend>
+            {labels.length === 0 ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                This board has no labels yet. Add them from Labels at the top of the board.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {labels.map((l) => {
+                  const on = applied.has(l.id);
+                  return (
+                    <Button
+                      key={l.id}
+                      type="button"
+                      variant={on ? "secondary" : "outline"}
+                      aria-pressed={on}
+                      className="min-h-11 font-mono text-xs"
+                      disabled={labelMutation.isPending}
+                      onClick={() => labelMutation.mutate({ label: l, on: !on })}
+                    >
+                      {l.name}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </fieldset>
+
           <div className="grid gap-2">
             <Label htmlFor="kanban-card-due-kind">Due</Label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -743,7 +831,9 @@ function CardEditor({
                   const kind = v as DueKind;
                   // Keep the day already picked; a new time starts at 09:00.
                   const day = dueValue.slice(0, 10);
-                  setDueValue(kind === "date" ? day : kind === "at" && day ? `${day}T${dueValue.slice(11, 16) || "09:00"}` : "");
+                  setDueValue(
+                    kind === "date" ? day : kind === "at" && day ? `${day}T${dueValue.slice(11, 16) || "09:00"}` : "",
+                  );
                   setDueKind(kind);
                   setDueError("");
                 }}
@@ -942,12 +1032,16 @@ function ArchivedDialog({
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Archived cards</DialogTitle>
-          <DialogDescription>Hidden from the board but kept. Restoring puts a card at the bottom of its column.</DialogDescription>
+          <DialogDescription>
+            Hidden from the board but kept. Restoring puts a card at the bottom of its column.
+          </DialogDescription>
         </DialogHeader>
         {archivedQuery.isLoading && <div className="h-14 animate-pulse rounded bg-muted" aria-busy="true" />}
         {archivedQuery.error && <p className="text-sm text-destructive">Couldn't load archived cards.</p>}
         {cards && cards.length === 0 && (
-          <p className="text-sm leading-relaxed text-muted-foreground">Nothing archived. Archive a card from its editor.</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Nothing archived. Archive a card from its editor.
+          </p>
         )}
         {cards && cards.length > 0 && (
           <ul className="divide-y divide-border border-y border-border">
@@ -1088,8 +1182,7 @@ function ColumnDialog({
           <DialogHeader>
             <DialogTitle>{existing ? "Edit column" : "Add column"}</DialogTitle>
             <DialogDescription>
-              A column's status is its cards' status. Every board keeps at least one Todo, In progress, and Done
-              column.
+              A column's status is its cards' status. Every board keeps at least one Todo, In progress, and Done column.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
@@ -1130,6 +1223,165 @@ function ColumnDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+    </Dialog>
+  );
+}
+
+// LabelsDialog adds, renames, and deletes the board's labels.
+function LabelsDialog({
+  boardId,
+  open,
+  labels,
+  onClose,
+  onChanged,
+}: {
+  boardId: string;
+  open: boolean;
+  labels: KanbanLabel[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<KanbanLabel | null>(null);
+  const [error, setError] = useState("");
+
+  const run = useMutation({
+    mutationFn: async (
+      op:
+        | { kind: "create"; name: string }
+        | { kind: "rename"; id: string; name: string }
+        | { kind: "delete"; id: string },
+    ) => {
+      if (op.kind === "create") await createKanbanLabel(boardId, op.name);
+      else if (op.kind === "rename") await renameKanbanLabel(boardId, op.id, op.name);
+      else await deleteKanbanLabel(boardId, op.id);
+    },
+    onMutate: () => setError(""),
+    onSuccess: (_, op) => {
+      if (op.kind === "create") setNewName("");
+      if (op.kind === "rename") setRenaming(null);
+      onChanged();
+    },
+    onError: (err) => setError(errorText(err, "Couldn't change this board's labels")),
+    onSettled: () => setDeleting(null),
+  });
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name || run.isPending) return;
+    run.mutate({ kind: "create", name });
+  };
+
+  const saveRename = () => {
+    const name = renaming?.name.trim();
+    if (!renaming || !name || run.isPending) return;
+    run.mutate({ kind: "rename", id: renaming.id, name });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Labels</DialogTitle>
+          <DialogDescription>This board's labels. Apply them to cards from a card's editor.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleCreate} className="grid gap-2">
+          <Label htmlFor="kanban-new-label">New label</Label>
+          <div className="flex gap-2">
+            <Input
+              id="kanban-new-label"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="min-h-11"
+            />
+            <Button type="submit" className="min-h-11" disabled={run.isPending || !newName.trim()}>
+              Add
+            </Button>
+          </div>
+          {error && !renaming && <p className="text-sm text-destructive">{error}</p>}
+        </form>
+        {labels.length > 0 && (
+          <ul className="divide-y divide-border border-y border-border">
+            {labels.map((l) => (
+              <li key={l.id} className="flex items-center gap-2 py-1">
+                {renaming?.id === l.id ? (
+                  <div className="grid flex-1 gap-2 py-1">
+                    <Label htmlFor="kanban-rename-label">Rename {l.name}</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="kanban-rename-label"
+                        value={renaming.name}
+                        onChange={(e) => setRenaming({ id: l.id, name: e.target.value })}
+                        autoFocus
+                        className="min-h-11 flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            saveRename();
+                          }
+                          if (e.key === "Escape") setRenaming(null);
+                        }}
+                      />
+                      <Button variant="outline" className="min-h-11" onClick={saveRename} disabled={run.isPending}>
+                        Save
+                      </Button>
+                    </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
+                  </div>
+                ) : (
+                  <>
+                    <span className="flex-1 truncate font-mono text-sm">{l.name}</span>
+                    <Button
+                      variant="ghost"
+                      className="min-h-11"
+                      onClick={() => {
+                        setError("");
+                        setRenaming({ id: l.id, name: l.name });
+                      }}
+                    >
+                      Rename
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="min-h-11 min-w-11 text-destructive hover:text-destructive"
+                      aria-label={`Delete label ${l.name}`}
+                      onClick={() => setDeleting(l)}
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden />
+                    </Button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </DialogContent>
+      <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this label?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleting?.name}" is removed from this board and from every card that has it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-11"
+              disabled={run.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleting) run.mutate({ kind: "delete", id: deleting.id });
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

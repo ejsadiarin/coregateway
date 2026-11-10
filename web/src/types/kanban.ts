@@ -11,11 +11,20 @@ export interface KanbanCard {
   status: KanbanStatus;
   title: string;
   description: string;
+  // The board's labels applied to this card, by name.
+  labels: KanbanLabel[];
   due: KanbanDue | null;
   // Set while the card is archived: hidden from its board, but kept.
   archived_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// KanbanLabel is a named tag defined on one board and applied to its cards.
+// Names are unique within a board, ignoring case.
+export interface KanbanLabel {
+  id: string;
+  name: string;
 }
 
 // KanbanDue is when a card is expected to be finished: a calendar date, or
