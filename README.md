@@ -209,7 +209,8 @@ own Go module — corefinance has its own (`services/corefinance/Makefile`)
 with the same `test` / `test-unit` / `test-integration` targets. Coredraw is
 also its own Go module (`services/coredraw/`); run its suites from that
 directory (`go test ./...`), since the root module never crosses the nested
-module boundary.
+module boundary. Coreban (`services/coreban/`) is likewise its own module,
+with `make test` (Docker-backed) and `make test-unit` in that directory.
 
 ## Downstream Microservices
 
@@ -230,7 +231,7 @@ Browser → Edge Proxy (nginx:3000) → coregateway-api:8080
 |---------|-----|--------|-------------|
 | corefinance-api | `http://corefinance-api:6969` | `/api/budget/*` | Budget/finance tracking |
 | coredraw-api | `http://coredraw-api:6971` | `/api/coredraw/*` | Whiteboard boards (snapshots + docs) |
-| coreban-api | `http://coreban-api:6972` | `/api/coreban/*` | Kanban boards + ntfy reminders |
+| coreban-api | `http://coreban-api:6972` | `/api/coreban/*` | Kanban boards (columns, cards, dues, labels, archive) and one-off/recurring reminders pushed through ntfy — see [services/coreban/README.md](services/coreban/README.md) |
 
 ### Adding a new microservice (Runbook)
 

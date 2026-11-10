@@ -167,9 +167,13 @@ at the top, or point `ADMIN_JAR` at a live admin cookie jar).
 uncovered keys get 403 and are never proxied. Sessions pass through to
 the downstream checks.
 
-**Coreban routes enforce the same cover** (`RequireServiceKeyScope("coreban")`):
-key-authed `GET`/`HEAD` needs `coreban:read` cover, other methods need
-`coreban:write` cover; the minted token's audience is `coreban`.
+**Coreban routes enforce the same cover** (`RequireServiceKeyScope("coreban")`,
+`internal/server/routes.go`): key-authed `GET`/`HEAD` needs
+`coreban:read` cover, other methods need `coreban:write` cover;
+uncovered keys get 403 and are never proxied. Sessions pass through to
+the downstream checks. The minted token's audience is `coreban`, and
+coreban honours `act_as` only on reads (boards, cards, labels,
+reminders, settings); every write binds to `sub`.
 
 Note: the downstream *can* distinguish session- from key-derived
 requests — `azp` (`session` vs `api-key:<keyID>`) and `scope`
