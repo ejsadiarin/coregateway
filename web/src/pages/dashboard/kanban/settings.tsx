@@ -38,6 +38,15 @@ const bareTopicName = (input: string) => {
   return typed.startsWith(topicPrefix) ? typed.slice(topicPrefix.length) : typed;
 };
 
+// previewTopicName is what the help text shows after the prefix: the typed
+// name only once coreban would accept it (its normalizeTopic rule: letters,
+// digits, - and _, at most 64 characters with the prefix), so a pasted URL
+// is never echoed back as a topic to subscribe to.
+const previewTopicName = (input: string) => {
+  const name = bareTopicName(input);
+  return /^[A-Za-z0-9_-]+$/.test(name) && topicPrefix.length + name.length <= 64 ? name : "…";
+};
+
 export default function KanbanSettingsPage() {
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
 
@@ -150,7 +159,7 @@ function SettingsForm({ saved }: { saved: KanbanSettings }) {
         </div>
         <p id="kanban-topic-help" className="text-xs leading-relaxed text-muted-foreground">
           An ntfy topic name on the homelab's ntfy server, not a URL: letters, digits, - and _. Subscribe to{" "}
-          <span className="font-mono">{topicPrefix}{bareTopicName(topicName) || "…"}</span> in the ntfy app. Leave empty to
+          <span className="font-mono">{topicPrefix}{previewTopicName(topicName)}</span> in the ntfy app. Leave empty to
           stop reminders.
         </p>
         {topicError && <p className="text-sm text-destructive">{topicError}</p>}
