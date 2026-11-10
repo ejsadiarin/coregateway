@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { formatDue, formatWall, isOverdue, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
-import type { KanbanReminder } from "@/types/kanban";
+import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
+import type { KanbanReminder, KanbanSchedule } from "@/types/kanban";
 
 // coreban renders reminder times in the owner's timezone, so the wall
 // time is read straight from the string, whatever zone this device is in.
@@ -98,5 +98,60 @@ describe("isOverdue", () => {
     expect(isOverdue({ date: "2026-11-13" }, now, "Asia/Manila")).toBe(true);
     // Still the 13th in New York.
     expect(isOverdue({ date: "2026-11-13" }, new Date("2026-11-14T02:00:00Z"), "America/New_York")).toBe(false);
+  });
+});
+
+describe("describeSchedule", () => {
+  it("names each preset with its time of day", () => {
+    expect(describeSchedule({ kind: "once", at: "2026-11-10T07:00:00+08:00" })).toBe("Once");
+    expect(describeSchedule({ kind: "daily", time: "07:00" })).toBe("Daily at 07:00");
+    expect(describeSchedule({ kind: "weekly", time: "19:30", weekdays: ["MO", "WE", "FR"] })).toBe(
+      "Mon, Wed, Fri at 19:30",
+    );
+    expect(describeSchedule({ kind: "every", time: "08:00", days: 3, from: "2026-11-10" })).toBe(
+      "Every 3 days at 08:00",
+    );
+    expect(describeSchedule({ kind: "every", time: "08:00", days: 1, from: "2026-11-10" })).toBe("Every day at 08:00");
+  });
+});
+
+describe("schedule fields", () => {
+  it("round-trips each preset through the form", () => {
+    const schedules: KanbanSchedule[] = [
+      { kind: "once", at: "2026-11-10T07:00:00+08:00" },
+      { kind: "daily", time: "07:00" },
+      { kind: "weekly", time: "19:30", weekdays: ["MO", "FR"] },
+      { kind: "every", time: "08:00", days: 3, from: "2026-11-10" },
+    ];
+    expect(schedules.map((s) => scheduleOf(fieldsOf(s)))).toEqual([
+      { schedule: { kind: "once", at: "2026-11-10T07:00" } },
+      { schedule: { kind: "daily", time: "07:00" } },
+      { schedule: { kind: "weekly", time: "19:30", weekdays: ["MO", "FR"] } },
+      { schedule: { kind: "every", time: "08:00", days: 3, from: "2026-11-10" } },
+    ]);
+  });
+
+  it("starts a new reminder as a one-off with a 07:00 default for recurring", () => {
+    expect(fieldsOf()).toMatchObject({ kind: "once", at: "", time: "07:00", weekdays: [] });
+  });
+
+  it("says which field is missing", () => {
+    const blank = fieldsOf();
+    expect(scheduleOf(blank)).toEqual({ field: "at", error: "Choose when it should reach you." });
+    expect(scheduleOf({ ...blank, kind: "daily", time: "" })).toEqual({ field: "time", error: "Choose a time of day." });
+    expect(scheduleOf({ ...blank, kind: "weekly" })).toEqual({ field: "weekdays", error: "Pick at least one day." });
+    expect(scheduleOf({ ...blank, kind: "every", days: "0" })).toEqual({
+      field: "days",
+      error: "Repeat every 1 to 365 days.",
+    });
+  });
+
+  it("keeps weekdays in week order and leaves an empty start date to coreban", () => {
+    expect(scheduleOf({ ...fieldsOf(), kind: "weekly", weekdays: ["FR", "MO"] })).toEqual({
+      schedule: { kind: "weekly", time: "07:00", weekdays: ["MO", "FR"] },
+    });
+    expect(scheduleOf({ ...fieldsOf(), kind: "every", days: "2", from: "" })).toEqual({
+      schedule: { kind: "every", time: "07:00", days: 2 },
+    });
   });
 });

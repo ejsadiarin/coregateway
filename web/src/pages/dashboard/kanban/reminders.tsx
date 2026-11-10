@@ -10,12 +10,23 @@ import {
   deleteKanbanReminder,
   KanbanRequestError,
 } from "@/lib/kanban";
-import type { KanbanReminder } from "@/types/kanban";
-import { reminderStatus, toInputValue, zoneLabel, type ReminderStatus } from "@/pages/dashboard/kanban/schedule";
+import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
+import {
+  describeSchedule,
+  fieldsOf,
+  reminderStatus,
+  scheduleOf,
+  weekdayNames,
+  zoneLabel,
+  type ReminderStatus,
+  type ScheduleField,
+  type ScheduleFields,
+} from "@/pages/dashboard/kanban/schedule";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,7 +107,7 @@ export default function KanbanRemindersPage() {
           timezone={timezone}
           submitLabel="Add"
           onSaved={refresh}
-          save={(v) => createKanbanReminder({ message: v.message, schedule: { kind: "once", at: v.at } })}
+          save={(message, schedule) => createKanbanReminder({ message, schedule })}
         />
       </div>
 
@@ -139,25 +150,27 @@ export default function KanbanRemindersPage() {
                 {editingId === r.id ? (
                   <ReminderForm
                     timezone={timezone}
-                    initial={{ message: r.message, at: toInputValue(r.schedule.at) }}
+                    initial={r}
                     submitLabel="Save"
                     onCancel={() => setEditingId(null)}
                     onSaved={() => {
                       setEditingId(null);
                       refresh();
                     }}
-                    save={(v) =>
-                      editKanbanReminder(r.id, {
-                        message: v.message,
-                        // Only a new moment reschedules (and re-arms) it.
-                        ...(v.at !== toInputValue(r.schedule.at) && { schedule: { kind: "once", at: v.at } }),
-                      })
-                    }
+                    save={(message, schedule) => {
+                      const before = scheduleOf(fieldsOf(r.schedule));
+                      const changed = !("schedule" in before) || JSON.stringify(before.schedule) !== JSON.stringify(schedule);
+                      // Only a changed schedule reschedules (and re-arms) it.
+                      return editKanbanReminder(r.id, { message, ...(changed && { schedule }) });
+                    }}
                   />
                 ) : (
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{r.message}</p>
+                      <p className="mt-1 font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
+                        {describeSchedule(r.schedule)}
+                      </p>
                       <p className={`mt-1 font-mono text-xs tabular-nums ${toneClass[status.tone]}`}>{status.text}</p>
                     </div>
                     <Button
@@ -219,62 +232,77 @@ export default function KanbanRemindersPage() {
   );
 }
 
-interface ReminderValues {
-  message: string;
-  // datetime-local value, read by coreban in the owner's timezone.
-  at: string;
+// fieldOf names the form field a coreban 400 detail is about, if any.
+function fieldOf(detail: string): "message" | ScheduleField | null {
+  if (detail.startsWith("message")) return "message";
+  const field = /^schedule\.(at|time|weekdays|days|from)\b/.exec(detail)?.[1];
+  return (field as ScheduleField | undefined) ?? null;
 }
 
-// fieldOf names the form field a coreban 400 detail is about, if any.
-function fieldOf(detail: string): "message" | "at" | null {
-  if (detail.startsWith("message")) return "message";
-  if (detail.startsWith("schedule.at")) return "at";
-  return null;
-}
+const kindLabels: Record<ScheduleFields["kind"], string> = {
+  once: "Once",
+  daily: "Daily",
+  weekly: "On chosen days",
+  every: "Every few days",
+};
 
 function ReminderForm({
   timezone,
-  initial = { message: "", at: "" },
+  initial,
   submitLabel,
   save,
   onSaved,
   onCancel,
 }: {
   timezone: string | undefined;
-  initial?: ReminderValues;
+  initial?: KanbanReminder;
   submitLabel: string;
-  save: (v: ReminderValues) => Promise<KanbanReminder>;
+  save: (message: string, schedule: KanbanScheduleInput) => Promise<KanbanReminder>;
   onSaved: () => void;
   onCancel?: () => void;
 }) {
-  const [values, setValues] = useState(initial);
-  const [atMissing, setAtMissing] = useState("");
+  const [message, setMessage] = useState(initial?.message ?? "");
+  const [fields, setFields] = useState(() => fieldsOf(initial?.schedule));
+  const [missing, setMissing] = useState<{ field: ScheduleField; error: string } | null>(null);
   const idPrefix = onCancel ? "kanban-edit-reminder" : "kanban-new-reminder";
+  const set = (patch: Partial<ScheduleFields>) => setFields((f) => ({ ...f, ...patch }));
 
   const mutation = useMutation({
-    mutationFn: save,
+    mutationFn: ({ message, schedule }: { message: string; schedule: KanbanScheduleInput }) => save(message, schedule),
     onSuccess: () => {
-      if (!onCancel) setValues(initial);
+      if (!onCancel) {
+        setMessage("");
+        setFields(fieldsOf());
+      }
       onSaved();
     },
   });
 
   const detail = mutation.error instanceof KanbanRequestError ? mutation.error.detail : "";
   const field = fieldOf(detail);
-  const messageError = field === "message" ? detail.replace(/^message/, "The message") : "";
-  const atError = field === "at" ? detail.replace(/^schedule\.at/, "The time") : atMissing;
+  // coreban names fields the API's way ("schedule.time …"); say it plainly.
+  const plain = detail.replace(/^schedule\.(\w+)/, "This").replace(/^message/, "The message");
+  const errorFor = (f: ScheduleField) => (missing?.field === f ? missing.error : field === f ? plain : "");
+  const messageError = field === "message" ? plain : "";
   const otherError =
     mutation.error && !field ? detail || (onCancel ? "Couldn't save this reminder." : "Couldn't add this reminder.") : "";
+  const zoneNote = timezone ? `In ${zoneLabel(timezone)}, your Kanban timezone.` : "In your Kanban timezone.";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (mutation.isPending) return;
-    if (!values.at) {
-      setAtMissing("Choose when it should reach you.");
+    const read = scheduleOf(fields);
+    if (!("schedule" in read)) {
+      setMissing(read);
       return;
     }
-    setAtMissing("");
-    mutation.mutate(values);
+    setMissing(null);
+    mutation.mutate({ message, schedule: read.schedule });
+  };
+
+  const fieldError = (f: ScheduleField) => {
+    const text = errorFor(f);
+    return text && <p className="text-sm text-destructive">{text}</p>;
   };
 
   return (
@@ -283,8 +311,8 @@ function ReminderForm({
         <Label htmlFor={`${idPrefix}-message`}>{onCancel ? "Message" : "New reminder"}</Label>
         <Textarea
           id={`${idPrefix}-message`}
-          value={values.message}
-          onChange={(e) => setValues({ ...values, message: e.target.value })}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
           aria-invalid={messageError ? true : undefined}
           rows={2}
           className="min-h-11"
@@ -292,22 +320,121 @@ function ReminderForm({
         />
         {messageError && <p className="text-sm text-destructive">{messageError}</p>}
       </div>
+
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-at`}>When</Label>
-        <Input
-          id={`${idPrefix}-at`}
-          type="datetime-local"
-          value={values.at}
-          onChange={(e) => setValues({ ...values, at: e.target.value })}
-          aria-describedby={`${idPrefix}-at-help`}
-          aria-invalid={atError ? true : undefined}
-          className="min-h-11 font-mono tabular-nums sm:max-w-64"
-        />
-        <p id={`${idPrefix}-at-help`} className="text-xs leading-relaxed text-muted-foreground">
-          {timezone ? `In ${zoneLabel(timezone)}, your Kanban timezone.` : "In your Kanban timezone."}
-        </p>
-        {atError && <p className="text-sm text-destructive">{atError}</p>}
+        <Label htmlFor={`${idPrefix}-kind`}>Repeat</Label>
+        <Select value={fields.kind} onValueChange={(v) => set({ kind: v as ScheduleFields["kind"] })}>
+          <SelectTrigger id={`${idPrefix}-kind`} className="min-h-11 sm:max-w-64">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(kindLabels) as ScheduleFields["kind"][]).map((k) => (
+              <SelectItem key={k} value={k}>
+                {kindLabels[k]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {fields.kind === "once" ? (
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-at`}>When</Label>
+          <Input
+            id={`${idPrefix}-at`}
+            type="datetime-local"
+            value={fields.at}
+            onChange={(e) => set({ at: e.target.value })}
+            aria-describedby={`${idPrefix}-zone`}
+            aria-invalid={errorFor("at") ? true : undefined}
+            className="min-h-11 font-mono tabular-nums sm:max-w-64"
+          />
+          <p id={`${idPrefix}-zone`} className="text-xs leading-relaxed text-muted-foreground">
+            {zoneNote}
+          </p>
+          {fieldError("at")}
+        </div>
+      ) : (
+        <>
+          {fields.kind === "weekly" && (
+            <fieldset className="grid gap-2">
+              <legend className="mb-2 text-sm font-medium">Days</legend>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(weekdayNames) as KanbanWeekday[]).map((d) => {
+                  const on = fields.weekdays.includes(d);
+                  return (
+                    <Button
+                      key={d}
+                      type="button"
+                      variant={on ? "secondary" : "outline"}
+                      aria-pressed={on}
+                      className="min-h-11 min-w-11 font-mono text-xs"
+                      onClick={() =>
+                        set({ weekdays: on ? fields.weekdays.filter((x) => x !== d) : [...fields.weekdays, d] })
+                      }
+                    >
+                      {weekdayNames[d]}
+                    </Button>
+                  );
+                })}
+              </div>
+              {fieldError("weekdays")}
+            </fieldset>
+          )}
+          {fields.kind === "every" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor={`${idPrefix}-days`}>Every how many days</Label>
+                <Input
+                  id={`${idPrefix}-days`}
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={365}
+                  value={fields.days}
+                  onChange={(e) => set({ days: e.target.value })}
+                  aria-invalid={errorFor("days") ? true : undefined}
+                  className="min-h-11 font-mono tabular-nums"
+                />
+                {fieldError("days")}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor={`${idPrefix}-from`}>Counting from</Label>
+                <Input
+                  id={`${idPrefix}-from`}
+                  type="date"
+                  value={fields.from}
+                  onChange={(e) => set({ from: e.target.value })}
+                  aria-describedby={`${idPrefix}-from-help`}
+                  aria-invalid={errorFor("from") ? true : undefined}
+                  className="min-h-11 font-mono tabular-nums"
+                />
+                <p id={`${idPrefix}-from-help`} className="text-xs leading-relaxed text-muted-foreground">
+                  Leave empty to start today.
+                </p>
+                {fieldError("from")}
+              </div>
+            </div>
+          )}
+          <div className="grid gap-2">
+            <Label htmlFor={`${idPrefix}-time`}>Time of day</Label>
+            <Input
+              id={`${idPrefix}-time`}
+              type="time"
+              value={fields.time}
+              onChange={(e) => set({ time: e.target.value })}
+              aria-describedby={`${idPrefix}-zone`}
+              aria-invalid={errorFor("time") ? true : undefined}
+              className="min-h-11 font-mono tabular-nums sm:max-w-40"
+            />
+            <p id={`${idPrefix}-zone`} className="text-xs leading-relaxed text-muted-foreground">
+              {zoneNote} Missed while coreban is down, it waits for the next one.
+            </p>
+            {fieldError("time")}
+          </div>
+        </>
+      )}
+
       <div className="flex items-center gap-2">
         <Button type="submit" variant={onCancel ? "outline" : "default"} className="min-h-11" disabled={mutation.isPending}>
           {submitLabel}

@@ -90,16 +90,29 @@ export interface KanbanReminder {
   updated_at: string;
 }
 
-// KanbanSchedule is when a reminder fires. Requests may send at as a
-// wall-clock time with no offset ("2026-11-10T07:00"), read in the owner's
-// timezone.
-export interface KanbanSchedule {
-  kind: "once";
-  at: string;
-}
+// KanbanSchedule is when a reminder fires: once at a moment (RFC 3339 in
+// the owner's timezone), or a recurring preset at a time of day ("07:00")
+// in the owner's timezone.
+export type KanbanSchedule =
+  | { kind: "once"; at: string }
+  | { kind: "daily"; time: string }
+  | { kind: "weekly"; time: string; weekdays: KanbanWeekday[] }
+  | { kind: "every"; time: string; days: number; from: string };
+
+// KanbanWeekday is an iCalendar day code.
+export type KanbanWeekday = "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";
+
+// KanbanScheduleInput is a schedule as sent: a one-off's at may be a
+// wall-clock time with no offset, and an every-N-days from defaults to
+// today.
+export type KanbanScheduleInput =
+  | { kind: "once"; at: string }
+  | { kind: "daily"; time: string }
+  | { kind: "weekly"; time: string; weekdays: KanbanWeekday[] }
+  | { kind: "every"; time: string; days: number; from?: string };
 
 // KanbanReminderEdit is a partial edit: fields left out stay as they are.
 export interface KanbanReminderEdit {
   message?: string;
-  schedule?: KanbanSchedule;
+  schedule?: KanbanScheduleInput;
 }
