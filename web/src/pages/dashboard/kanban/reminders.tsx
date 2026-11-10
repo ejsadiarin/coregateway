@@ -54,7 +54,7 @@ export default function KanbanRemindersPage() {
   const [deleting, setDeleting] = useState<KanbanReminder | null>(null);
   const [actionError, setActionError] = useState("");
 
-  const remindersQuery = useQuery({ queryKey: remindersKey, queryFn: fetchKanbanReminders });
+  const remindersQuery = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders() });
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
   const refresh = () => queryClient.invalidateQueries({ queryKey: remindersKey });
 
@@ -168,6 +168,14 @@ export default function KanbanRemindersPage() {
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{r.message}</p>
+                      {r.card && (
+                        <Link
+                          to={`/dashboard/kanban/${r.card.board_id}`}
+                          className="mt-1 inline-flex min-h-11 items-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                        >
+                          On card: {r.card.title}
+                        </Link>
+                      )}
                       <p className="mt-1 font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
                         {describeSchedule(r.schedule)}
                       </p>
@@ -246,13 +254,18 @@ const kindLabels: Record<ScheduleFields["kind"], string> = {
   every: "Every few days",
 };
 
-function ReminderForm({
+// ReminderForm adds a reminder, or edits one (initial, with onCancel).
+// secondary renders its submit as a secondary action, for a view whose
+// primary action is elsewhere (the card editor's Save).
+export function ReminderForm({
   timezone,
   initial,
   submitLabel,
   save,
   onSaved,
   onCancel,
+  secondary = false,
+  messageLabel,
 }: {
   timezone: string | undefined;
   initial?: KanbanReminder;
@@ -260,6 +273,8 @@ function ReminderForm({
   save: (message: string, schedule: KanbanScheduleInput) => Promise<KanbanReminder>;
   onSaved: () => void;
   onCancel?: () => void;
+  secondary?: boolean;
+  messageLabel?: string;
 }) {
   const [message, setMessage] = useState(initial?.message ?? "");
   const [fields, setFields] = useState(() => fieldsOf(initial?.schedule));
@@ -308,7 +323,7 @@ function ReminderForm({
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-message`}>{onCancel ? "Message" : "New reminder"}</Label>
+        <Label htmlFor={`${idPrefix}-message`}>{messageLabel ?? (onCancel ? "Message" : "New reminder")}</Label>
         <Textarea
           id={`${idPrefix}-message`}
           value={message}
@@ -436,7 +451,12 @@ function ReminderForm({
       )}
 
       <div className="flex items-center gap-2">
-        <Button type="submit" variant={onCancel ? "outline" : "default"} className="min-h-11" disabled={mutation.isPending}>
+        <Button
+          type="submit"
+          variant={onCancel || secondary ? "outline" : "default"}
+          className="min-h-11"
+          disabled={mutation.isPending}
+        >
           {submitLabel}
         </Button>
         {onCancel && (

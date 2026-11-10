@@ -27,6 +27,9 @@ import {
   deleteKanbanCard,
   fetchKanbanArchivedCards,
   fetchKanbanSettings,
+  fetchKanbanReminders,
+  createKanbanReminder,
+  editKanbanReminder,
   fetchKanbanLabels,
   createKanbanLabel,
   renameKanbanLabel,
@@ -49,7 +52,14 @@ import type {
   KanbanLabel,
   KanbanStatus,
 } from "@/types/kanban";
-import { formatDue, isOverdue, toInputValue } from "@/pages/dashboard/kanban/schedule";
+import {
+  describeSchedule,
+  formatDue,
+  isOverdue,
+  reminderStatus,
+  toInputValue,
+} from "@/pages/dashboard/kanban/schedule";
+import { ReminderForm } from "@/pages/dashboard/kanban/reminders";
 import { dropIndex, moveCard } from "@/pages/dashboard/kanban/drop";
 import { cn } from "@/lib/utils";
 import { markdownProseClass } from "@/lib/markdown";
@@ -173,7 +183,12 @@ export default function KanbanBoardPage() {
       overdue: card.status !== "done" && tz !== undefined && isOverdue(card.due, new Date(), tz),
     };
   };
-  const refresh = () => queryClient.invalidateQueries({ queryKey: boardKey });
+  // A card's moves, archiving, and deletion change its reminders too (paused
+  // or gone), so reminder lists refresh with the board.
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: boardKey });
+    queryClient.invalidateQueries({ queryKey: ["kanban", "reminders"] });
+  };
 
   // Moves apply to the cached board at once and roll back if coreban refuses.
   const moveMutation = useMutation({
@@ -762,7 +777,7 @@ function CardEditor({
   return (
     <Dialog open={card !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
-        <form onSubmit={handleSave} className="grid gap-4">
+        <form id="kanban-card-form" onSubmit={handleSave} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Edit card</DialogTitle>
             <DialogDescription>Status: {card ? statusLabel[card.status] : ""}, from its column.</DialogDescription>
@@ -896,37 +911,39 @@ function CardEditor({
           </Tabs>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <DialogFooter className="gap-2 sm:justify-between">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                disabled={saveMutation.isPending}
-                onClick={handleArchive}
-              >
-                Archive
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="min-h-11 text-destructive hover:text-destructive"
-                onClick={() => setConfirmDelete(true)}
-              >
-                Delete
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" className="min-h-11" disabled={saveMutation.isPending}>
-                Save
-              </Button>
-            </div>
-          </DialogFooter>
         </form>
+
+        {card && <CardReminders card={card} />}
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={saveMutation.isPending}
+              onClick={handleArchive}
+            >
+              Archive
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11 text-destructive hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" form="kanban-card-form" className="min-h-11" disabled={saveMutation.isPending}>
+              Save
+            </Button>
+          </div>
+        </DialogFooter>
       </DialogContent>
       <ConfirmDeleteCard
         card={confirmDelete ? card : null}
@@ -1383,5 +1400,104 @@ function LabelsDialog({
         </AlertDialogContent>
       </AlertDialog>
     </Dialog>
+  );
+}
+
+// CardReminders is the card editor's reminders section: the card's
+// reminders, "remind me at due", and adding one. It sits outside the card
+// form, whose Save it doesn't wait for.
+function CardReminders({ card }: { card: KanbanCard }) {
+  const queryClient = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [error, setError] = useState("");
+  const remindersQuery = useQuery({
+    queryKey: ["kanban", "reminders", "card", card.id],
+    queryFn: () => fetchKanbanReminders(card.id),
+  });
+  const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
+  // Every reminders list, the reminders page's included.
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["kanban", "reminders"] });
+
+  const atDueMutation = useMutation({
+    mutationFn: () => createKanbanReminder({ message: "", schedule: { kind: "due" }, card_id: card.id }),
+    onMutate: () => setError(""),
+    onSuccess: refresh,
+    onError: (err) => setError(errorText(err, "Couldn't add the reminder")),
+  });
+  const detachMutation = useMutation({
+    mutationFn: (id: string) => editKanbanReminder(id, { card_id: null }),
+    onMutate: () => setError(""),
+    onSuccess: refresh,
+    onError: (err) => setError(errorText(err, "Couldn't detach the reminder")),
+  });
+  const year = new Date().getFullYear();
+  const reminders = remindersQuery.data ?? [];
+
+  return (
+    <section aria-labelledby="kanban-card-reminders" className="grid gap-3 border-t border-border pt-4">
+      <h3 id="kanban-card-reminders" className="text-sm font-medium">
+        Reminders
+      </h3>
+      {remindersQuery.isLoading && <div className="h-11 animate-pulse rounded bg-muted" aria-busy="true" />}
+      {reminders.length > 0 && (
+        <ul className="divide-y divide-border border-y border-border">
+          {reminders.map((r) => (
+            <li key={r.id} className="flex items-center gap-2 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{r.message}</p>
+                <p className="font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
+                  {describeSchedule(r.schedule)} · {reminderStatus(r, year).text}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                className="min-h-11"
+                disabled={detachMutation.isPending}
+                onClick={() => detachMutation.mutate(r.id)}
+              >
+                Detach
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {remindersQuery.data && reminders.length === 0 && !adding && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          None yet. Reminders on a card stay quiet while it's Done or archived.
+        </p>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {adding ? (
+        <ReminderForm
+          timezone={settingsQuery.data?.timezone}
+          submitLabel="Add"
+          secondary
+          messageLabel="Message (the card's title if empty)"
+          onCancel={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            refresh();
+          }}
+          save={(message, schedule) => createKanbanReminder({ message, schedule, card_id: card.id })}
+        />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {card.due && (
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={atDueMutation.isPending}
+              onClick={() => atDueMutation.mutate()}
+            >
+              Due reminder
+            </Button>
+          )}
+          <Button variant="ghost" className="min-h-11" onClick={() => setAdding(true)}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Add reminder
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }

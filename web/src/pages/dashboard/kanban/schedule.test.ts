@@ -29,6 +29,7 @@ function reminder(over: Partial<KanbanReminder>): KanbanReminder {
     next_fire_at: null,
     paused: null,
     last_delivery: null,
+    card: null,
     created_at: "",
     updated_at: "",
     ...over,
@@ -46,6 +47,17 @@ describe("reminderStatus", () => {
     expect(reminderStatus(reminder({ next_fire_at: at, paused: "no_notification_target" }), 2026)).toEqual({
       tone: "warning",
       text: "Set for Tue 10 Nov, 07:00 · not sent until you set a notification target",
+    });
+  });
+
+  it("says a reminder is quiet while its card is completed or archived", () => {
+    expect(reminderStatus(reminder({ next_fire_at: at, paused: "card_completed" }), 2026)).toEqual({
+      tone: "pending",
+      text: "Set for Tue 10 Nov, 07:00 · quiet while its card is Done",
+    });
+    expect(reminderStatus(reminder({ next_fire_at: at, paused: "card_archived" }), 2026)).toEqual({
+      tone: "pending",
+      text: "Set for Tue 10 Nov, 07:00 · quiet while its card is archived",
     });
   });
 

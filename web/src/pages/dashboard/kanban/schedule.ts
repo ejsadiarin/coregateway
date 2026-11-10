@@ -79,9 +79,16 @@ export interface ReminderStatus {
 export function reminderStatus(r: KanbanReminder, currentYear: number): ReminderStatus {
   const wall = (iso: string) => formatWall(iso, currentYear);
   if (r.next_fire_at) {
-    return r.paused
-      ? { tone: "warning", text: `Set for ${wall(r.next_fire_at)} · not sent until you set a notification target` }
-      : { tone: "pending", text: `Next: ${wall(r.next_fire_at)}` };
+    const at = wall(r.next_fire_at);
+    switch (r.paused) {
+      case "no_notification_target":
+        return { tone: "warning", text: `Set for ${at} · not sent until you set a notification target` };
+      case "card_completed":
+        return { tone: "pending", text: `Set for ${at} · quiet while its card is Done` };
+      case "card_archived":
+        return { tone: "pending", text: `Set for ${at} · quiet while its card is archived` };
+    }
+    return { tone: "pending", text: `Next: ${at}` };
   }
   const d = r.last_delivery;
   if (!d) return { tone: "done", text: "Nothing left to send" };

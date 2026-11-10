@@ -84,8 +84,12 @@ export interface KanbanReminder {
   message: string;
   schedule: KanbanSchedule;
   next_fire_at: string | null;
-  paused: "no_notification_target" | null;
+  // Why next_fire_at won't be sent when it comes: no notification target,
+  // or its card is completed (Done) or archived.
+  paused: "no_notification_target" | "card_completed" | "card_archived" | null;
   last_delivery: { at: string; late: boolean; error: string | null } | null;
+  // The card the reminder is about, if any.
+  card: { id: string; board_id: string; title: string } | null;
   created_at: string;
   updated_at: string;
 }
@@ -109,10 +113,15 @@ export type KanbanScheduleInput =
   | { kind: "once"; at: string }
   | { kind: "daily"; time: string }
   | { kind: "weekly"; time: string; weekdays: KanbanWeekday[] }
-  | { kind: "every"; time: string; days: number; from?: string };
+  | { kind: "every"; time: string; days: number; from?: string }
+  // Once, at the reminder's card's due (09:00 on a date-only due).
+  | { kind: "due" };
 
 // KanbanReminderEdit is a partial edit: fields left out stay as they are.
+// card_id attaches it to one of the owner's cards (null detaches); with a
+// card, an empty message becomes the card's title.
 export interface KanbanReminderEdit {
   message?: string;
   schedule?: KanbanScheduleInput;
+  card_id?: string | null;
 }

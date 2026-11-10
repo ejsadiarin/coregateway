@@ -291,14 +291,18 @@ export async function saveKanbanSettings(settings: KanbanSettings): Promise<Kanb
 
 const remindersUrl = `${apiBaseUrl}/api/coreban/reminders`;
 
-// fetchKanbanReminders lists the owner's reminders, soonest first.
-export async function fetchKanbanReminders(): Promise<KanbanReminder[]> {
-  const res = await fetch(remindersUrl, { credentials: "include" });
+// fetchKanbanReminders lists the owner's reminders (only one card's, given
+// cardId), soonest first.
+export async function fetchKanbanReminders(cardId?: string): Promise<KanbanReminder[]> {
+  const url = cardId ? `${remindersUrl}?card_id=${encodeURIComponent(cardId)}` : remindersUrl;
+  const res = await fetch(url, { credentials: "include" });
   await throwIfError(res, "fetching reminders");
   return res.json();
 }
 
-export async function createKanbanReminder(input: Required<KanbanReminderEdit>): Promise<KanbanReminder> {
+export async function createKanbanReminder(
+  input: Required<Pick<KanbanReminderEdit, "message" | "schedule">> & Pick<KanbanReminderEdit, "card_id">,
+): Promise<KanbanReminder> {
   const res = await fetch(remindersUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
