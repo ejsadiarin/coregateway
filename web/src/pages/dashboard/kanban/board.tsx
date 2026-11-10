@@ -472,7 +472,7 @@ export default function KanbanBoardPage() {
       />
 
       <ColumnDialog
-        key={columnDialog === "new" ? "new" : (columnDialog?.id ?? "none")}
+        key={`column-${columnDialog === "new" ? "new" : (columnDialog?.id ?? "none")}`}
         boardId={boardId}
         column={columnDialog}
         onClose={() => setColumnDialog(null)}
@@ -480,7 +480,7 @@ export default function KanbanBoardPage() {
       />
 
       <CardEditor
-        key={editing?.id ?? "none"}
+        key={`card-${editing?.id ?? "none"}`}
         boardId={boardId}
         card={editing}
         columns={columns}
