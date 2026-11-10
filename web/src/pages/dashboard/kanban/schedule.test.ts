@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatWall, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
+import { formatDue, formatWall, isOverdue, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
 import type { KanbanReminder } from "@/types/kanban";
 
 // coreban renders reminder times in the owner's timezone, so the wall
@@ -70,5 +70,33 @@ describe("reminderStatus", () => {
 describe("zoneLabel", () => {
   it("reads an IANA zone with spaces", () => {
     expect(zoneLabel("America/Argentina/Buenos_Aires")).toBe("America/Argentina/Buenos Aires");
+  });
+});
+
+describe("formatDue", () => {
+  it("shows a date due without a time", () => {
+    expect(formatDue({ date: "2026-11-14" }, 2026)).toBe("Sat 14 Nov");
+    expect(formatDue({ date: "2027-01-01" }, 2026)).toBe("Fri 1 Jan 2027");
+  });
+
+  it("shows a moment due with its time in the owner's zone", () => {
+    expect(formatDue({ at: "2026-11-14T17:00:00+08:00" }, 2026)).toBe("Sat 14 Nov, 17:00");
+  });
+});
+
+describe("isOverdue", () => {
+  // 2026-11-14T16:30 in Manila (+08:00).
+  const now = new Date("2026-11-14T08:30:00Z");
+
+  it("compares a moment due with now", () => {
+    expect(isOverdue({ at: "2026-11-14T17:00:00+08:00" }, now, "Asia/Manila")).toBe(false);
+    expect(isOverdue({ at: "2026-11-14T16:00:00+08:00" }, now, "Asia/Manila")).toBe(true);
+  });
+
+  it("counts a date due as overdue only once that day has passed in the owner's zone", () => {
+    expect(isOverdue({ date: "2026-11-14" }, now, "Asia/Manila")).toBe(false);
+    expect(isOverdue({ date: "2026-11-13" }, now, "Asia/Manila")).toBe(true);
+    // Still the 13th in New York.
+    expect(isOverdue({ date: "2026-11-13" }, new Date("2026-11-14T02:00:00Z"), "America/New_York")).toBe(false);
   });
 });

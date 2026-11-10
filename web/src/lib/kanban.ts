@@ -139,6 +139,20 @@ export async function editKanbanCard(
   return res.json();
 }
 
+// fetchKanbanArchivedCards lists a board's archived cards, most recently
+// archived first.
+export async function fetchKanbanArchivedCards(boardId: string): Promise<KanbanCard[]> {
+  const res = await fetch(`${cardsUrl(boardId)}?archived=true`, { credentials: "include" });
+  await throwIfError(res, "fetching archived cards");
+  return res.json();
+}
+
+// deleteKanbanCard removes a card for good, archived or not.
+export async function deleteKanbanCard(boardId: string, cardId: string): Promise<void> {
+  const res = await fetch(`${cardsUrl(boardId)}/${cardId}`, { method: "DELETE", credentials: "include" });
+  await throwIfError(res, "deleting card", cardNotFound);
+}
+
 // moveKanbanCard puts a card into a column at index, its slot among that
 // column's other cards (top is 0). The card's status follows the column.
 export async function moveKanbanCard(

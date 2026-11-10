@@ -18,12 +18,15 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
-import { ArrowLeft, MoreHorizontal, Plus } from "lucide-react";
+import { Archive, ArrowLeft, MoreHorizontal, Plus } from "lucide-react";
 import {
   fetchKanbanBoard,
   createKanbanCard,
   editKanbanCard,
   moveKanbanCard,
+  deleteKanbanCard,
+  fetchKanbanArchivedCards,
+  fetchKanbanSettings,
   addKanbanColumn,
   editKanbanColumn,
   moveKanbanColumn,
@@ -37,8 +40,10 @@ import type {
   KanbanCardEdit,
   KanbanColumn,
   KanbanColumnEdit,
+  KanbanDue,
   KanbanStatus,
 } from "@/types/kanban";
+import { formatDue, isOverdue, toInputValue } from "@/pages/dashboard/kanban/schedule";
 import { dropIndex, moveCard } from "@/pages/dashboard/kanban/drop";
 import { cn } from "@/lib/utils";
 import { markdownProseClass } from "@/lib/markdown";
@@ -69,6 +74,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const statusLabel: Record<KanbanStatus, string> = {
   todo: "Todo",
@@ -91,6 +106,9 @@ const statusDot: Record<KanbanStatus, string> = {
 };
 
 type Move = { cardId: string; columnId: string; index: number };
+
+// DueLabel is how a card shows its due on the board.
+type DueLabel = { text: string; overdue: boolean };
 type DropTarget = { columnId: string; index: number };
 
 const cardClass =
@@ -112,6 +130,7 @@ export default function KanbanBoardPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // The column dialog: adding one ("new"), editing one, or closed.
   const [columnDialog, setColumnDialog] = useState<KanbanColumn | "new" | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
   // The pointer's clientY during a drag. Tracked directly rather than as
   // start + dnd-kit's delta, which also counts any auto-scroll since the drag
   // began and so drifts from the viewport rects the drop slot is measured in.
@@ -132,7 +151,19 @@ export default function KanbanBoardPage() {
     queryFn: () => fetchKanbanBoard(boardId),
     retry: (count, err) => !(err instanceof KanbanBoardNotFoundError) && count < 3,
   });
+  const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
   const fail = (fallback: string) => (err: unknown) => setActionError(errorText(err, fallback));
+
+  // A completed card's due is never overdue: the work is finished.
+  const year = new Date().getFullYear();
+  const dueLabel = (card: KanbanCard): DueLabel | null => {
+    if (!card.due) return null;
+    const tz = settingsQuery.data?.timezone;
+    return {
+      text: `Due ${formatDue(card.due, year)}`,
+      overdue: card.status !== "done" && tz !== undefined && isOverdue(card.due, new Date(), tz),
+    };
+  };
   const refresh = () => queryClient.invalidateQueries({ queryKey: boardKey });
 
   // Moves apply to the cached board at once and roll back if coreban refuses.
@@ -286,9 +317,15 @@ export default function KanbanBoardPage() {
           <ArrowLeft className="h-3 w-3" aria-hidden />
           Kanban / Boards
         </Link>
-        <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
-          {boardQuery.data?.name ?? <span className="inline-block h-8 w-48 animate-pulse rounded bg-muted" />}
-        </h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">
+            {boardQuery.data?.name ?? <span className="inline-block h-8 w-48 animate-pulse rounded bg-muted" />}
+          </h1>
+          <Button variant="ghost" className="min-h-11" onClick={() => setArchivedOpen(true)}>
+            <Archive className="h-4 w-4" aria-hidden />
+            Archived
+          </Button>
+        </div>
         <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
           Drag cards between columns to change their status, or up and down to set priority. On
           touch, press and hold a card to pick it up.
@@ -340,6 +377,7 @@ export default function KanbanBoardPage() {
               }}
               onOpenCard={setEditingId}
               onCardKey={handleCardKey}
+              dueLabel={dueLabel}
               menu={
                 <ColumnMenu
                   column={column}
@@ -379,6 +417,14 @@ export default function KanbanBoardPage() {
         </DragOverlay>
       </DndContext>
 
+      <ArchivedDialog
+        boardId={boardId}
+        open={archivedOpen}
+        columns={columns}
+        onClose={() => setArchivedOpen(false)}
+        onChanged={refresh}
+      />
+
       <ColumnDialog
         key={columnDialog === "new" ? "new" : (columnDialog?.id ?? "none")}
         boardId={boardId}
@@ -409,6 +455,7 @@ function ColumnView({
   listRef,
   onOpenCard,
   onCardKey,
+  dueLabel,
   menu,
 }: {
   column: KanbanColumn;
@@ -417,6 +464,7 @@ function ColumnView({
   listRef: (el: HTMLOListElement | null) => void;
   onOpenCard: (id: string) => void;
   onCardKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
+  dueLabel: (card: KanbanCard) => DueLabel | null;
   menu: React.ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
@@ -447,7 +495,7 @@ function ColumnView({
           return (
             <Fragment key={card.id}>
               {before}
-              <CardItem card={card} dragged={dragged} onOpen={onOpenCard} onKey={onCardKey} />
+              <CardItem card={card} due={dueLabel(card)} dragged={dragged} onOpen={onOpenCard} onKey={onCardKey} />
             </Fragment>
           );
         })}
@@ -459,11 +507,13 @@ function ColumnView({
 
 function CardItem({
   card,
+  due,
   dragged,
   onOpen,
   onKey,
 }: {
   card: KanbanCard;
+  due: DueLabel | null;
   dragged: boolean;
   onOpen: (id: string) => void;
   onKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
@@ -478,7 +528,7 @@ function CardItem({
         {...listeners}
         onClick={() => onOpen(card.id)}
         onKeyDown={(e) => onKey(e, card)}
-        aria-label={`${card.title}, ${statusLabel[card.status]}`}
+        aria-label={`${card.title}, ${statusLabel[card.status]}${due ? `, ${due.text}${due.overdue ? ", overdue" : ""}` : ""}`}
         className={cn(
           cardClass,
           "cursor-grab select-none transition-opacity [-webkit-touch-callout:none] hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -486,9 +536,10 @@ function CardItem({
         )}
       >
         <span className="line-clamp-3 break-words">{card.title}</span>
-        {card.description.trim() !== "" && (
-          <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            Notes
+        {(due || card.description.trim() !== "") && (
+          <span className="mt-1 flex flex-wrap gap-x-3 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            {due && <span className={cn("tabular-nums", due.overdue && "text-destructive")}>{due.text}</span>}
+            {card.description.trim() !== "" && <span>Notes</span>}
           </span>
         )}
       </button>
@@ -583,34 +634,67 @@ function CardEditor({
 }) {
   const [title, setTitle] = useState(card?.title ?? "");
   const [description, setDescription] = useState(card?.description ?? "");
+  const initialDue = dueFields(card?.due ?? null);
+  const [dueKind, setDueKind] = useState(initialDue.kind);
+  const [dueValue, setDueValue] = useState(initialDue.value);
+  const [dueError, setDueError] = useState("");
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
+  const done = () => {
+    onSaved();
+    onClose();
+  };
   const saveMutation = useMutation({
     mutationFn: (edit: KanbanCardEdit) => editKanbanCard(boardId, card!.id, edit),
-    onSuccess: () => {
-      onSaved();
-      onClose();
+    onSuccess: done,
+    onError: (err) => setError(errorText(err, "Couldn't save this card")),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteKanbanCard(boardId, card!.id),
+    onSuccess: done,
+    onError: (err) => {
+      setConfirmDelete(false);
+      setError(errorText(err, "Couldn't delete this card"));
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Couldn't save this card"),
   });
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!card || saveMutation.isPending) return;
+  // pendingEdit is what the form changed, or null (with the problem shown)
+  // when it can't be saved as it stands.
+  const pendingEdit = (): KanbanCardEdit | null => {
+    if (!card) return null;
     const t = title.trim();
-    if (!t) {
-      setError("A card needs a title.");
-      return;
-    }
+    setError(t ? "" : "A card needs a title.");
+    setDueError(
+      dueKind === "none" || dueValue ? "" : dueKind === "date" ? "Pick a day, or choose No due." : "Pick a day and time, or choose No due.",
+    );
+    if (!t || (dueKind !== "none" && !dueValue)) return null;
     const edit: KanbanCardEdit = {};
     if (t !== card.title) edit.title = t;
     if (description !== card.description) edit.description = description;
+    if (dueKind !== initialDue.kind || dueValue !== initialDue.value) {
+      edit.due = dueKind === "none" ? null : dueKind === "date" ? { date: dueValue } : { at: dueValue };
+    }
+    return edit;
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saveMutation.isPending) return;
+    const edit = pendingEdit();
+    if (!edit) return;
     if (Object.keys(edit).length === 0) {
       onClose();
       return;
     }
-    setError("");
     saveMutation.mutate(edit);
+  };
+
+  // Archiving keeps any edits made in the form.
+  const handleArchive = () => {
+    if (saveMutation.isPending) return;
+    const edit = pendingEdit();
+    if (edit) saveMutation.mutate({ ...edit, archived: true });
   };
 
   return (
@@ -650,6 +734,48 @@ function CardEditor({
             </Select>
           </div>
 
+          <div className="grid gap-2">
+            <Label htmlFor="kanban-card-due-kind">Due</Label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select
+                value={dueKind}
+                onValueChange={(v) => {
+                  const kind = v as DueKind;
+                  // Keep the day already picked; a new time starts at 09:00.
+                  const day = dueValue.slice(0, 10);
+                  setDueValue(kind === "date" ? day : kind === "at" && day ? `${day}T${dueValue.slice(11, 16) || "09:00"}` : "");
+                  setDueKind(kind);
+                  setDueError("");
+                }}
+              >
+                <SelectTrigger id="kanban-card-due-kind" className="min-h-11 sm:w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No due</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="at">Date and time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {dueKind !== "none" && (
+              <div className="grid gap-2">
+                <Label htmlFor="kanban-card-due-value" className="text-xs text-muted-foreground">
+                  {dueKind === "date" ? "Day" : "Day and time, in your Kanban timezone"}
+                </Label>
+                <Input
+                  id="kanban-card-due-value"
+                  type={dueKind === "date" ? "date" : "datetime-local"}
+                  value={dueValue}
+                  onChange={(e) => setDueValue(e.target.value)}
+                  aria-invalid={dueError ? true : undefined}
+                  className="min-h-11 font-mono tabular-nums sm:max-w-64"
+                />
+              </div>
+            )}
+            {dueError && <p className="text-sm text-destructive">{dueError}</p>}
+          </div>
+
           <Tabs defaultValue="write" className="grid gap-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="kanban-card-description">Description</Label>
@@ -681,16 +807,185 @@ function CardEditor({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <DialogFooter>
-            <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" className="min-h-11" disabled={saveMutation.isPending}>
-              Save
-            </Button>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={saveMutation.isPending}
+                onClick={handleArchive}
+              >
+                Archive
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-h-11 text-destructive hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" className="min-h-11" disabled={saveMutation.isPending}>
+                Save
+              </Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>
+      <ConfirmDeleteCard
+        card={confirmDelete ? card : null}
+        pending={deleteMutation.isPending}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => deleteMutation.mutate()}
+      />
+    </Dialog>
+  );
+}
+
+type DueKind = "none" | "date" | "at";
+
+// dueFields splits a due into the editor's kind and input value.
+function dueFields(due: KanbanDue | null): { kind: DueKind; value: string } {
+  if (!due) return { kind: "none", value: "" };
+  return "at" in due ? { kind: "at", value: toInputValue(due.at) } : { kind: "date", value: due.date };
+}
+
+function ConfirmDeleteCard({
+  card,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  card: KanbanCard | null;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog open={card !== null} onOpenChange={(open) => !open && onCancel()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this card?</AlertDialogTitle>
+          <AlertDialogDescription>
+            "{card?.title}" is removed for good. To hide it but keep it, archive it instead.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="min-h-11"
+            disabled={pending}
+            onClick={(e) => {
+              e.preventDefault();
+              onConfirm();
+            }}
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+// ArchivedDialog lists the board's archived cards to restore or delete.
+function ArchivedDialog({
+  boardId,
+  open,
+  columns,
+  onClose,
+  onChanged,
+}: {
+  boardId: string;
+  open: boolean;
+  columns: KanbanColumn[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const archivedKey = ["kanban", "board", boardId, "archived"];
+  const [deleting, setDeleting] = useState<KanbanCard | null>(null);
+  const [error, setError] = useState("");
+  const archivedQuery = useQuery({
+    queryKey: archivedKey,
+    queryFn: () => fetchKanbanArchivedCards(boardId),
+    enabled: open,
+  });
+  const changed = () => {
+    queryClient.invalidateQueries({ queryKey: archivedKey });
+    onChanged();
+  };
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => editKanbanCard(boardId, id, { archived: false }),
+    onMutate: () => setError(""),
+    onSuccess: changed,
+    onError: (err) => setError(errorText(err, "Couldn't restore this card")),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteKanbanCard(boardId, id),
+    onMutate: () => setError(""),
+    onSuccess: changed,
+    onError: (err) => setError(errorText(err, "Couldn't delete this card")),
+    onSettled: () => setDeleting(null),
+  });
+  const columnName = (id: string) => columns.find((c) => c.id === id)?.name ?? "";
+  const cards = archivedQuery.data;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Archived cards</DialogTitle>
+          <DialogDescription>Hidden from the board but kept. Restoring puts a card at the bottom of its column.</DialogDescription>
+        </DialogHeader>
+        {archivedQuery.isLoading && <div className="h-14 animate-pulse rounded bg-muted" aria-busy="true" />}
+        {archivedQuery.error && <p className="text-sm text-destructive">Couldn't load archived cards.</p>}
+        {cards && cards.length === 0 && (
+          <p className="text-sm leading-relaxed text-muted-foreground">Nothing archived. Archive a card from its editor.</p>
+        )}
+        {cards && cards.length > 0 && (
+          <ul className="divide-y divide-border border-y border-border">
+            {cards.map((k) => (
+              <li key={k.id} className="flex items-center gap-2 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{k.title}</p>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    {columnName(k.column_id)} · {statusLabel[k.status]}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={restoreMutation.isPending}
+                  onClick={() => restoreMutation.mutate(k.id)}
+                >
+                  Restore
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="min-h-11 text-destructive hover:text-destructive"
+                  onClick={() => setDeleting(k)}
+                >
+                  Delete
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </DialogContent>
+      <ConfirmDeleteCard
+        card={deleting}
+        pending={deleteMutation.isPending}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
     </Dialog>
   );
 }

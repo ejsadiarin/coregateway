@@ -11,14 +11,26 @@ export interface KanbanCard {
   status: KanbanStatus;
   title: string;
   description: string;
+  due: KanbanDue | null;
+  // Set while the card is archived: hidden from its board, but kept.
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
+// KanbanDue is when a card is expected to be finished: a calendar date, or
+// an instant (RFC 3339 in the owner's timezone). Requests may send at as a
+// wall-clock time with no offset, read in the owner's timezone.
+export type KanbanDue = { date: string } | { at: string };
+
 // KanbanCardEdit is a partial card edit: fields left out stay as they are.
+// due: null clears it; archived: false restores the card to the bottom of
+// its column.
 export interface KanbanCardEdit {
   title?: string;
   description?: string;
+  due?: KanbanDue | null;
+  archived?: boolean;
 }
 
 export interface KanbanColumn {
