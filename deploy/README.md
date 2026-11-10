@@ -4,10 +4,13 @@ Order matters. Each step ends with a manual verification before moving on.
 Adjust the `TODO` names in each manifest first (namespace `coregateway`,
 Service/label names, image pins).
 
-Assumes ArgoCD syncs this directory (or `kubectl apply -f deploy/` for a
-first manual pass). Nothing here is applied by automation in this repo —
-you are the applier. Neither applies subdirectories, so `deploy/examples/`
-is a template shelf, not live config.
+The homelab cluster uses **Flux with sops + age (Source B)**; the full build
+is in [`docs/deploy/homelab-k3s.md`](../docs/deploy/homelab-k3s.md). The Vault
+files (Source A) stay here as an unused alternative.
+
+These files are templates: copy them into the GitOps repo (`core-infra`) and
+adjust names there. Nothing here is applied by automation in this repo, and
+`deploy/examples/` is a template shelf, not live config.
 
 ## File map
 
@@ -31,9 +34,11 @@ fight over the same Secret.
 
 ## 0. Prereqs
 
-- [ ] k3s cluster with Cilium (mTLS on) and ArgoCD
-- [ ] One of: Vault (single node, integrated raft) + external-secrets
-      operator, **or** Flux with kustomize-controller (sops path)
+- [ ] k3s cluster with Cilium and Flux (`docs/deploy/homelab-k3s.md`,
+      sections 1–9). Cilium mutual authentication is not enabled; the
+      network policy plus the internal token are the two layers
+- [ ] One of: Flux with kustomize-controller (sops path, the chosen one),
+      **or** Vault (single node, integrated raft) + external-secrets operator
 - [ ] Reloader installed (Stakater; watches Secrets → rolls Deployments)
 - [ ] `kubectl`, `jq`, `curl`; `age`/`sops` too if you chose sops
 
