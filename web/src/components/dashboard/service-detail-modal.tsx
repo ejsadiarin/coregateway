@@ -178,7 +178,7 @@ export function ServiceDetailModal({
                 onClick={handleVisitUrl}
                 className="border-primary/50 hover:bg-primary/10"
               >
-                <ExternalLink className="w-4 h-4 mr-2" />
+                <ExternalLink className="w-4 h-4" />
                 Visit
               </Button>
               <Button
@@ -189,9 +189,9 @@ export function ServiceDetailModal({
                 className="border-accent/50 hover:bg-accent/10"
               >
                 {triggerHealthCheck.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <RefreshCw className="w-4 h-4" />
                 )}
                 Check Now
               </Button>

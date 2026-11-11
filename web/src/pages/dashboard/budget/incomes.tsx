@@ -179,7 +179,7 @@ export default function IncomesPage() {
         <div>
           <Link to="/dashboard/budget">
             <Button variant="ghost" size="sm" className="mb-2 pl-0">
-              <ArrowLeft className="mr-2 h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" />
               Back to Budget
             </Button>
           </Link>
@@ -198,7 +198,7 @@ export default function IncomesPage() {
           </p>
         </div>
         <Button onClick={handleAddClick}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="h-4 w-4" />
           Add Income
         </Button>
       </motion.div>
@@ -403,7 +403,7 @@ export default function IncomesPage() {
                 <p className="text-xs">Sign in or create an account to manage your own income.</p>
               ) : (
                 <Button variant="outline" size="sm" className="mt-2" onClick={handleAddClick}>
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                   Add your first income
                 </Button>
               )}

@@ -55,7 +55,7 @@ export function ServiceGrid() {
             onClick={() => refetch()}
             className="border-destructive/50 hover:bg-destructive/10"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
+            <RefreshCw className="w-4 h-4" />
             Try Again
           </Button>
         </motion.div>
@@ -106,7 +106,7 @@ export function ServiceGrid() {
             className="border-primary/50 hover:bg-primary/10"
             onClick={() => setIsAddModalOpen(true)}
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Add Service
           </Button>
         </motion.div>

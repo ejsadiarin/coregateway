@@ -202,7 +202,7 @@ export function EntrancePortal() {
               className="bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => navigate("/login")}
             >
-              <LogIn className="w-5 h-5 mr-2" />
+              <LogIn className="w-5 h-5" />
               Access System
             </Button>
           </motion.div>

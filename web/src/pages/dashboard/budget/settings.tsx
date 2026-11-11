@@ -134,11 +134,11 @@ function AdminBackfillCard() {
 
         <div className="flex flex-col gap-3 md:flex-row">
           <Button onClick={handleCheck} disabled={dryRun.isPending} variant="outline">
-            <Search className="mr-2 h-4 w-4" />
+            <Search className="h-4 w-4" />
             {dryRun.isPending ? "Checking..." : "Check"}
           </Button>
           <Button onClick={() => setConfirmOpen(true)} disabled={!canExecute}>
-            <Play className="mr-2 h-4 w-4" />
+            <Play className="h-4 w-4" />
             {execute.isPending ? "Running..." : "Run backfill"}
           </Button>
         </div>
@@ -436,7 +436,7 @@ export default function SettingsPage() {
       >
         <Link to="/dashboard/budget">
           <Button variant="ghost" size="sm" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className="h-4 w-4" />
             Back to Budget
           </Button>
         </Link>
@@ -460,7 +460,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-end">
               <Button onClick={handleExportBudget} disabled={exportBudget.isPending} className="md:w-auto">
-                <Download className="mr-2 h-4 w-4" />
+                <Download className="h-4 w-4" />
                 {exportBudget.isPending ? "Exporting..." : "Export JSON"}
               </Button>
               <div className="grid gap-2">
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                     disabled={!newCategory.name.trim() || createCategory.isPending}
                     size="sm"
                   >
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Add Category
                   </Button>
                 </div>
@@ -597,7 +597,7 @@ export default function SettingsPage() {
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" onClick={handleUpdateCategory}>
-                              <Save className="mr-2 h-4 w-4" />
+                              <Save className="h-4 w-4" />
                               Save
                             </Button>
                             <Button
@@ -686,7 +686,7 @@ export default function SettingsPage() {
                     disabled={!newTag.name.trim() || createTag.isPending}
                     size="sm"
                   >
-                    <Plus className="mr-2 h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Add Tag
                   </Button>
                 </div>
@@ -715,7 +715,7 @@ export default function SettingsPage() {
                           />
                           <div className="flex gap-2">
                             <Button size="sm" onClick={handleUpdateTag}>
-                              <Save className="mr-2 h-4 w-4" />
+                              <Save className="h-4 w-4" />
                               Save
                             </Button>
                             <Button

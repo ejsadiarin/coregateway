@@ -221,7 +221,7 @@ export default function UsersPage() {
                     }}
                     className="bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-4 h-4" />
                     Add User
                 </Button>
             </motion.div>

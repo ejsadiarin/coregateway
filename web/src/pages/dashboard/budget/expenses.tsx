@@ -150,7 +150,7 @@ export default function ExpensesPage() {
         <div>
           <Link to="/dashboard/budget">
             <Button variant="ghost" size="sm" className="mb-2 pl-0">
-              <ArrowLeft className="mr-2 h-4 w-4" />
+              <ArrowLeft className="h-4 w-4" />
               Back to Budget
             </Button>
           </Link>
@@ -169,7 +169,7 @@ export default function ExpensesPage() {
           </p>
         </div>
         <Button onClick={() => setShowExpenseDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="h-4 w-4" />
           Add Expense
         </Button>
       </motion.div>
@@ -330,7 +330,7 @@ export default function ExpensesPage() {
                   className="mt-2"
                   onClick={() => setShowExpenseDialog(true)}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                   Add your first expense
                 </Button>
               )}

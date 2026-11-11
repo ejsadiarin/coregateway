@@ -219,7 +219,7 @@ export default function BudgetDashboard() {
             disabled={isGuest}
             title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Add Income
           </Button>
           <Button
@@ -227,7 +227,7 @@ export default function BudgetDashboard() {
             disabled={isGuest}
             title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
           >
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Add Expense
           </Button>
         </div>
@@ -326,7 +326,7 @@ export default function BudgetDashboard() {
               <Link to="/dashboard/budget/incomes">
                 <Button variant="ghost" size="sm">
                   View All
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
@@ -356,7 +356,7 @@ export default function BudgetDashboard() {
                   title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
                   onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}
                 >
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="h-4 w-4" />
                   Add your first income
                 </Button>
               </div>
@@ -426,7 +426,7 @@ export default function BudgetDashboard() {
               <Link to="/dashboard/budget/expenses">
                 <Button variant="ghost" size="sm">
                   View All
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
@@ -462,7 +462,7 @@ export default function BudgetDashboard() {
                       disabled={isGuest}
                       onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}
                     >
-                      <Plus className="mr-2 h-4 w-4" />
+                      <Plus className="h-4 w-4" />
                       Add your first expense
                     </Button>
                   </>

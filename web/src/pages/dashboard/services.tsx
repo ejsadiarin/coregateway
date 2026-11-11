@@ -171,7 +171,7 @@ export default function ServicesPage() {
             </p>
           </div>
           <Button onClick={() => setIsAddModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-4 h-4" />
             Add Service
           </Button>
         </div>
@@ -288,7 +288,7 @@ export default function ServicesPage() {
             </p>
             {services?.length === 0 && (
               <Button onClick={() => setIsAddModalOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="w-4 h-4" />
                 Add Your First Service
               </Button>
             )}
