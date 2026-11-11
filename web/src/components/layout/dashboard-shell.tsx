@@ -4,6 +4,7 @@ import { SidebarProvider } from "./sidebar-context";
 import { Sidebar } from "./sidebar";
 import { MobileBottomNav } from "./mobile-bottom-nav";
 import { ContentHeader } from "./content-header";
+import { PageTitleProvider } from "./page-title";
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -43,7 +44,9 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
-      <ShellInner>{children}</ShellInner>
+      <PageTitleProvider>
+        <ShellInner>{children}</ShellInner>
+      </PageTitleProvider>
     </SidebarProvider>
   );
 }

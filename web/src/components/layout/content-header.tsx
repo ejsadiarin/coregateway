@@ -24,26 +24,31 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { navItems } from "./sidebar-nav-items";
 import { THEMES, useTheme } from "@/lib/theme";
+import { useCurrentPageTitle } from "./page-title";
 
-// derive breadcrumbs from pathname
+// isId says a path segment is a record id (a board's UUID), not a word.
+const isId = (segment: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
+
+// derive breadcrumbs from pathname; an id segment shows the title its page
+// gives (usePageTitle), or an ellipsis while that page is still loading.
 function useBreadcrumbs() {
   const { pathname } = useLocation();
+  const pageTitle = useCurrentPageTitle();
   const segments = pathname.split("/").filter(Boolean);
 
   const crumbs: { label: string; path: string }[] = [];
   let accumulated = "";
 
-  for (const segment of segments) {
+  segments.forEach((segment, idx) => {
     accumulated += `/${segment}`;
 
     // find matching nav item for a human-readable label
     const navItem = navItems.find((item) => item.path === accumulated);
-    const label = navItem
-      ? navItem.label
-      : segment.charAt(0).toUpperCase() + segment.slice(1);
+    let label = navItem ? navItem.label : segment.charAt(0).toUpperCase() + segment.slice(1);
+    if (isId(segment)) label = (idx === segments.length - 1 && pageTitle) || "…";
 
     crumbs.push({ label, path: accumulated });
-  }
+  });
 
   return crumbs;
 }

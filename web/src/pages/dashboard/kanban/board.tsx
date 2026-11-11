@@ -77,6 +77,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePageTitle } from "@/components/layout/page-title";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,6 +103,11 @@ const statusLabel: Record<KanbanStatus, string> = {
 };
 
 const statuses = Object.keys(statusLabel) as KanbanStatus[];
+
+// columnOption names a column in a picker: "Doing · In progress", or just
+// "Todo" when the column is already named after its status.
+const columnOption = (c: Pick<KanbanColumn, "name" | "status">) =>
+  c.name.trim().toLowerCase() === statusLabel[c.status].toLowerCase() ? c.name : `${c.name} · ${statusLabel[c.status]}`;
 
 // errorText is what to tell the owner about a failed request: coreban's own
 // explanation when it refused one (such as removing a board's last Done
@@ -165,6 +171,7 @@ export default function KanbanBoardPage() {
     queryFn: () => fetchKanbanBoard(boardId),
     retry: (count, err) => !(err instanceof KanbanBoardNotFoundError) && count < 3,
   });
+  usePageTitle(boardQuery.data?.name);
   const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
   const labelsKey = [...boardKey, "labels"];
   const labelsQuery = useQuery({ queryKey: labelsKey, queryFn: () => fetchKanbanLabels(boardId) });
@@ -662,7 +669,7 @@ function NewCardForm({
             <SelectContent>
               {columns.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {c.name} · {statusLabel[c.status]}
+                  {columnOption(c)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -802,7 +809,7 @@ function CardEditor({
               <SelectContent>
                 {columns.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name} · {statusLabel[c.status]}
+                    {columnOption(c)}
                   </SelectItem>
                 ))}
               </SelectContent>

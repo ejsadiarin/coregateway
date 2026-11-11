@@ -16,6 +16,7 @@ import {
 } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { IconPalette, StyleBar, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
+import { usePageTitle } from "@/components/layout/page-title";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
 
 function sameStyle(a: DrawStyle, b: DrawStyle): boolean {
@@ -62,6 +63,7 @@ export default function DrawPage() {
 
   const sync = useBoardSync(boardId, engineRef.current);
   const { meta, updateDoc, scheduleSave, reloadLatest } = sync;
+  usePageTitle(meta?.title);
 
   // Only arm a save when the scene actually differs from the last known state
   // (the adapter owns that judgement; it also refreshes the rail highlight).
