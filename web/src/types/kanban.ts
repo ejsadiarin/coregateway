@@ -70,10 +70,12 @@ export interface KanbanBoard {
 
 // KanbanSettings mirrors coreban's settings: the owner's notification
 // target (an ntfy topic name under coreban-, or null for none) and the IANA
-// timezone their schedules are read in.
+// timezone their schedules are read in. saved is false while these are
+// coreban's defaults, before the owner has saved their own.
 export interface KanbanSettings {
   ntfy_topic: string | null;
   timezone: string;
+  saved: boolean;
 }
 
 // KanbanReminder mirrors coreban's reminders. Times are RFC 3339 in the
