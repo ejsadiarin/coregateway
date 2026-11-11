@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  MessageSquareText,
   PenTool,
   SquareKanban,
   Wallet,
@@ -53,6 +54,12 @@ export const navItems: NavItem[] = [
     label: "Dashboard",
     icon: LayoutDashboard,
     path: "/dashboard",
+    section: "overview",
+  },
+  {
+    label: "Feed",
+    icon: MessageSquareText,
+    path: "/dashboard/feed",
     section: "overview",
   },
   {

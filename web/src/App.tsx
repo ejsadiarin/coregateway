@@ -20,6 +20,7 @@ import KanbanBoardsPage from "@/pages/dashboard/kanban/boards";
 import KanbanBoardPage from "@/pages/dashboard/kanban/board";
 import KanbanSettingsPage from "@/pages/dashboard/kanban/settings";
 import KanbanRemindersPage from "@/pages/dashboard/kanban/reminders";
+import FeedPage from "@/pages/dashboard/feed/page";
 
 // tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw/:boardId.
 const DrawPage = lazy(() => import("@/pages/dashboard/draw/page"));
@@ -52,6 +53,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="feed" element={<FeedPage />} />
         <Route path="services" element={<ServicesPage />} />
         <Route path="budget" element={<BudgetPage />} />
         <Route path="budget/expenses" element={<ExpensesPage />} />

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import {
 LayoutDashboard,
+MessageSquareText,
 PenTool,
 SquareKanban,
 Wallet,
@@ -32,6 +33,7 @@ interface BottomNavItem {
 }
 
 const primaryItems: BottomNavItem[] = [
+  { label: "Feed", icon: MessageSquareText, path: "/dashboard/feed" },
   { label: "Home", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Budget", icon: Wallet, path: "/dashboard/budget" },
   { label: "Expenses", icon: Receipt, path: "/dashboard/budget/expenses" },
