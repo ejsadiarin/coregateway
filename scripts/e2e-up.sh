@@ -18,8 +18,16 @@
 # compose.yml (:3000/:8080/:6972). State, logs and PIDs live in .e2e/.
 #
 # Then: cd web && pnpm e2e
+#
+# To try it from a phone, set E2E_HOST to an address the phone can reach,
+# e.g. E2E_HOST=$(tailscale ip -4). The web is then a production build
+# (vite preview) bound to that host. The dev server would reload the page
+# whenever the phone switches apps, because its HMR socket drops while the
+# tab is suspended. The API URL, CORS origin and ntfy follow that host. The
+# gateway and coreban bind every interface either way.
 set -euo pipefail
 
+HOST=${E2E_HOST:-localhost}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 E2E="$ROOT/.e2e"
 PG=cb-e2e-pg
@@ -39,7 +47,7 @@ wait_for() {
   die "timed out waiting for $what (logs: $E2E/*.log)"
 }
 
-for cmd in docker psql goose go pnpm curl openssl; do
+for cmd in docker goose go pnpm curl openssl; do
   command -v "$cmd" >/dev/null || die "missing $cmd"
 done
 [ -f "$E2E/pids" ] && die "a stack is already up; run scripts/e2e-down.sh first"
@@ -58,21 +66,23 @@ log "starting Postgres and ntfy"
 docker rm -f "$PG" "$NTFY" >/dev/null 2>&1 || true
 docker run -d --name "$PG" -e POSTGRES_USER=neondb_owner -e POSTGRES_PASSWORD=owner \
   -e POSTGRES_DB=coredb -p 127.0.0.1:55432:5432 ghcr.io/fboulnois/pg_uuidv7:1.6.0 >/dev/null
-cat > "$E2E/ntfy.yml" <<'YAML'
-base-url: http://localhost:18090
+cat > "$E2E/ntfy.yml" <<YAML
+base-url: http://$HOST:18090
 listen-http: ":80"
 auth-file: /var/lib/ntfy/user.db
 auth-default-access: deny-all
 YAML
 docker run -d --name "$NTFY" -v "$E2E/ntfy.yml:/etc/ntfy/server.yml:ro" --tmpfs /var/lib/ntfy \
-  -p 127.0.0.1:18090:80 binwiederhier/ntfy serve >/dev/null
+  -p 127.0.0.1:18090:80 ${E2E_HOST:+-p "$HOST:18090:80"} binwiederhier/ntfy serve >/dev/null
 
-wait_for Postgres 60 psql "$OWNER_URL" -c 'select 1'
+# psql from the container itself, so the host needs no Postgres client.
+psql() { docker exec -i "$PG" psql -U neondb_owner -d coredb "$@"; }
+wait_for Postgres 60 psql -c 'select 1'
 log "migrating"
-psql "$OWNER_URL" -qc 'CREATE SCHEMA IF NOT EXISTS coregateway'
+psql -qc 'CREATE SCHEMA IF NOT EXISTS coregateway'
 goose -dir "$ROOT/internal/db/migrations" postgres "$OWNER_URL&options=-c%20search_path%3Dcoregateway" up >/dev/null
-sed 's/REPLACE_ME/gwpw/' "$ROOT/internal/db/bootstrap.sql" | psql "$OWNER_URL" -q
-sed 's/REPLACE_ME/cbpw/' "$ROOT/services/coreban/internal/db/bootstrap.sql" | psql "$OWNER_URL" -q
+sed 's/REPLACE_ME/gwpw/' "$ROOT/internal/db/bootstrap.sql" | psql -q
+sed 's/REPLACE_ME/cbpw/' "$ROOT/services/coreban/internal/db/bootstrap.sql" | psql -q
 MIGRATION_URL="$OWNER_URL&options=-c%20search_path%3Dcoreban" DATABASE_URL=unused JWT_JWKS_URL=unused \
   "$E2E/bin/coreban" migrate >/dev/null
 
@@ -81,14 +91,16 @@ docker exec -e NTFY_PASSWORD=corebanpw "$NTFY" ntfy user add coreban >/dev/null
 docker exec "$NTFY" ntfy access coreban 'coreban-*' write-only >/dev/null
 docker exec -e NTFY_PASSWORD=ownerpw "$NTFY" ntfy user add owner >/dev/null
 docker exec "$NTFY" ntfy access owner coreban-e2e read-only >/dev/null
-NTFY_TOKEN=$(docker exec "$NTFY" ntfy token add coreban | awk '{print $2}')
+# ntfy prints the new token on stderr.
+NTFY_TOKEN=$(docker exec "$NTFY" ntfy token add coreban 2>&1 | awk '{print $2}')
+[ -n "$NTFY_TOKEN" ] || die "could not create the ntfy token for coreban"
 
 [ -f "$E2E/jwt.pem" ] || openssl genpkey -algorithm ed25519 -out "$E2E/jwt.pem"
 
 log "starting gateway :18080"
 env -i PATH="$PATH" HOME="$HOME" \
   DATABASE_URL="postgresql://coregateway_role:gwpw@localhost:55432/coredb?sslmode=disable" \
-  PORT=18080 ENV=development ALLOWED_ORIGINS=http://localhost:3001 \
+  PORT=18080 ENV=development ALLOWED_ORIGINS="http://localhost:3001${E2E_HOST:+,http://$HOST:3001}" \
   COREBAN_URL=http://localhost:16972 COREFINANCE_URL=http://localhost:16969 COREDRAW_URL=http://localhost:16971 \
   ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASSWORD="$ADMIN_PASSWORD" \
   JWT_KID=e2e JWT_ISSUER=https://gateway.internal JWT_AUDIENCE=corefinance,coredraw,coreban \
@@ -112,11 +124,20 @@ env -i PATH="$PATH" HOME="$HOME" $(cat "$E2E/coreban.env") "$E2E/bin/coreban" > 
 echo "coreban $!" >> "$E2E/pids"
 wait_for coreban 30 curl -sf http://localhost:16972/health
 
-log "starting web :3001"
-(cd "$ROOT/web" && VITE_API_URL=http://localhost:18080 exec node_modules/.bin/vite --port 3001 --strictPort) \
-  > "$E2E/web.log" 2>&1 &
+if [ -n "${E2E_HOST:-}" ]; then
+  log "building web for $HOST"
+  (cd "$ROOT/web" && VITE_API_URL="http://$HOST:18080" node_modules/.bin/vite build --outDir "$E2E/web" --emptyOutDir) \
+    > "$E2E/web-build.log" 2>&1 || die "web build failed (log: $E2E/web-build.log)"
+  log "starting web http://$HOST:3001"
+  (cd "$ROOT/web" && exec node_modules/.bin/vite preview --outDir "$E2E/web" --host "$HOST" --port 3001 --strictPort) \
+    > "$E2E/web.log" 2>&1 &
+else
+  log "starting web :3001"
+  (cd "$ROOT/web" && VITE_API_URL=http://localhost:18080 exec node_modules/.bin/vite --port 3001 --strictPort) \
+    > "$E2E/web.log" 2>&1 &
+fi
 echo "web $!" >> "$E2E/pids"
-wait_for web 60 curl -sf http://localhost:3001/
+wait_for web 60 curl -sf "http://$HOST:3001/"
 
-log "up. admin: $ADMIN_EMAIL / $ADMIN_PASSWORD; ntfy subscriber: owner / ownerpw on coreban-e2e"
+log "up at http://$HOST:3001. admin: $ADMIN_EMAIL / $ADMIN_PASSWORD; ntfy subscriber: owner / ownerpw on coreban-e2e"
 log "run the browser suite: cd web && pnpm e2e    stop: scripts/e2e-down.sh"
