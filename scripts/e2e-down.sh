@@ -11,7 +11,7 @@ if [ -f "$E2E/pids" ]; then
   done < "$E2E/pids"
   rm -f "$E2E/pids"
 fi
-for c in cb-e2e-pg cb-e2e-ntfy; do
+for c in cb-e2e-pg cb-e2e-ntfy cb-e2e-s3; do
   [ -n "$(docker ps -aq --filter "name=^$c$")" ] && docker rm -f "$c" >/dev/null && echo "[e2e] removed $c"
 done
 exit 0
