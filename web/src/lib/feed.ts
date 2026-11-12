@@ -300,3 +300,17 @@ export function noteCopyText(
   const { title, detail } = linkSummary(note.link, currentYear, categoryName);
   return detail ? `${title} · ${detail}` : title;
 }
+
+// enterSends says whether a key press in a note's text box sends it. On a
+// desktop Enter sends, leaving Shift+Enter to type a line break. A touch
+// device's keyboard has no Shift+Enter, so there Enter is a line break and
+// the Send or Save button sends. Ctrl+Enter or Cmd+Enter sends anywhere, for
+// a hardware keyboard on a tablet. The Enter that confirms an IME word
+// never sends (Safari flags it only by keyCode 229).
+export function enterSends(
+  e: { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; isComposing: boolean; keyCode: number },
+  touchDevice: boolean,
+): boolean {
+  if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return false;
+  return e.ctrlKey || e.metaKey || (!touchDevice && !e.shiftKey);
+}

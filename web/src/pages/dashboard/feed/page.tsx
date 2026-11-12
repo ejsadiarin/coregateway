@@ -23,6 +23,7 @@ import {
   copyText,
   deleteNote,
   editNoteText,
+  enterSends,
   feedNotes,
   fetchFeed,
   linkKindName,
@@ -42,6 +43,7 @@ import { budgetRecordOf, deleteBudgetRecord, isBudgetLink } from "@/lib/feed-rec
 import { budgetKeys } from "@/hooks/use-budget";
 import type { Note, NoteLink } from "@/types/feed";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
+import { useTouchDevice } from "@/hooks/use-touch-device";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -116,14 +118,23 @@ function LinkLine({ link, categoryName, className }: { link: NoteLink; categoryN
   );
 }
 
-// sendOnEnter runs send on Enter, leaving Shift+Enter (and an IME still
-// composing a word) to type a line break.
-const sendOnEnter = (send: () => void) => (e: React.KeyboardEvent) => {
-  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-    e.preventDefault();
-    send();
-  }
-};
+// useEnterToSend gives a note's text box its keys: Enter sends on a
+// desktop and types a line break on a touch device (see enterSends), with
+// the on-screen key labelled to match; Escape runs onEscape, if given.
+function useEnterToSend(send: () => void, onEscape?: () => void) {
+  const touch = useTouchDevice();
+  return {
+    enterKeyHint: touch ? ("enter" as const) : ("send" as const),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Escape" && onEscape) return onEscape();
+      const { key, shiftKey, ctrlKey, metaKey, keyCode, nativeEvent } = e;
+      if (enterSends({ key, shiftKey, ctrlKey, metaKey, keyCode, isComposing: nativeEvent.isComposing }, touch)) {
+        e.preventDefault();
+        send();
+      }
+    },
+  };
+}
 
 // What a live note's menu and taps can do.
 interface NoteActions {
@@ -224,6 +235,7 @@ function LiveNote({
     if (draft.trim() === note.text) return setDraft(null);
     actions.saveText(draft, () => setDraft(null));
   };
+  const keys = useEnterToSend(save, () => setDraft(null));
 
   if (draft !== null) {
     return (
@@ -231,10 +243,7 @@ function LiveNote({
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setDraft(null);
-            else sendOnEnter(save)(e);
-          }}
+          {...keys}
           aria-label="Note text"
           className="min-h-11 [field-sizing:content] max-h-60"
           autoFocus
@@ -499,6 +508,7 @@ export default function FeedPage() {
     postMutation.mutate(text);
     input.current?.focus();
   };
+  const keys = useEnterToSend(send);
 
   useEffect(() => {
     if (!status) return;
@@ -664,7 +674,7 @@ export default function FeedPage() {
             ref={input}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={sendOnEnter(send)}
+            {...keys}
             aria-label="New note"
             placeholder="Write a note"
             rows={1}

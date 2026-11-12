@@ -171,3 +171,55 @@ test("Make card converts a note in place; archiving it archives the card and Res
   await page.getByRole("button", { name: `Delete ${board}` }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
 });
+
+test("on a desktop keyboard Enter posts and Shift+Enter breaks the line", async ({ page }) => {
+  const first = unique("groceries");
+  const box = page.getByRole("textbox", { name: "New note" });
+  await box.fill(first);
+  await box.press("Shift+Enter");
+  await box.pressSequentially("eggs");
+  await expect(box).toHaveValue(`${first}\neggs`);
+  await box.press("Enter");
+  await expect(box).toHaveValue("");
+  await expect(noteItem(page, first)).toContainText(`${first}\neggs`, { useInnerText: true });
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("Enter makes a new line in a note and its edit; Send and Save post them", async ({ page }) => {
+    // isMobile + hasTouch are what make Chromium report a touch device.
+    expect(await page.evaluate(() => matchMedia("(hover: none) and (pointer: coarse)").matches)).toBe(true);
+    // Every write to the Feed, so a wrongly sent Enter shows up here
+    // rather than racing the assertions on what's on screen.
+    const writes: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("/api/coreban/notes") && r.method() !== "GET") writes.push(r.method());
+    });
+
+    const first = unique("packing list");
+    const box = page.getByRole("textbox", { name: "New note" });
+    await expect(box).toHaveAttribute("enterkeyhint", "enter");
+    await box.fill(first);
+    await box.press("Enter");
+    await box.pressSequentially("charger");
+    await expect(box).toHaveValue(`${first}\ncharger`);
+    expect(writes).toEqual([]);
+
+    await page.getByRole("main").getByRole("button", { name: "Send", exact: true }).click();
+    await expect(box).toHaveValue("");
+    const note = noteItem(page, first);
+    await expect(note).toContainText(`${first}\ncharger`, { useInnerText: true });
+
+    await noteAction(page, first, "Edit text");
+    const editor = page.getByRole("textbox", { name: "Note text" });
+    await editor.press("Control+End");
+    await editor.press("Enter");
+    await editor.pressSequentially("passport");
+    expect(writes).toEqual(["POST"]);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(note).toContainText(`${first}\ncharger\npassport`, { useInnerText: true });
+    expect(writes).toEqual(["POST", "PATCH"]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
+  });
+});

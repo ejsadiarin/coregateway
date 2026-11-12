@@ -3,6 +3,7 @@ import type { InfiniteData } from "@tanstack/react-query";
 import {
   appendNote,
   archivePrompt,
+  enterSends,
   feedNotes,
   linkSummary,
   noteCopyText,
@@ -293,5 +294,34 @@ describe("archivePrompt for budget records", () => {
       "Archive this note and delete its income? The income can't be brought back.",
     );
     expect(archivePrompt(expenseNote("n", "e1", true, lunch))).toBeNull();
+  });
+});
+
+describe("enterSends", () => {
+  const enter = { key: "Enter", shiftKey: false, ctrlKey: false, metaKey: false, isComposing: false, keyCode: 13 };
+
+  it("sends on Enter from a desktop keyboard, but not Shift+Enter or mid-composition", () => {
+    expect(enterSends(enter, false)).toBe(true);
+    expect(enterSends({ ...enter, shiftKey: true }, false)).toBe(false);
+    expect(enterSends({ ...enter, isComposing: true }, false)).toBe(false);
+  });
+
+  it("never sends on a plain Enter from a touch device: Enter is a line break there", () => {
+    expect(enterSends(enter, true)).toBe(false);
+  });
+
+  it("sends on Ctrl+Enter or Cmd+Enter anywhere, for a hardware keyboard on a tablet", () => {
+    expect(enterSends({ ...enter, ctrlKey: true }, true)).toBe(true);
+    expect(enterSends({ ...enter, metaKey: true }, true)).toBe(true);
+    expect(enterSends({ ...enter, metaKey: true }, false)).toBe(true);
+  });
+
+  it("doesn't send the Enter that confirms an IME word in Safari (keyCode 229)", () => {
+    expect(enterSends({ ...enter, keyCode: 229 }, false)).toBe(false);
+    expect(enterSends({ ...enter, ctrlKey: true, isComposing: true }, true)).toBe(false);
+  });
+
+  it("ignores every other key", () => {
+    expect(enterSends({ ...enter, key: "a" }, false)).toBe(false);
   });
 });
