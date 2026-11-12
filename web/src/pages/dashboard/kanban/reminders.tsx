@@ -15,6 +15,7 @@ import {
   describeSchedule,
   fieldsOf,
   reminderStatus,
+  reminderEdit,
   scheduleOf,
   weekdayNames,
   zoneLabel,
@@ -157,12 +158,7 @@ export default function KanbanRemindersPage() {
                       setEditingId(null);
                       refresh();
                     }}
-                    save={(message, schedule) => {
-                      const before = scheduleOf(fieldsOf(r.schedule));
-                      const changed = !("schedule" in before) || JSON.stringify(before.schedule) !== JSON.stringify(schedule);
-                      // Only a changed schedule reschedules (and re-arms) it.
-                      return editKanbanReminder(r.id, { message, ...(changed && { schedule }) });
-                    }}
+                    save={(message, schedule) => editKanbanReminder(r.id, reminderEdit(r.schedule, message, schedule))}
                   />
                 ) : (
                   <div className="flex items-start gap-3">
@@ -266,6 +262,7 @@ export function ReminderForm({
   onCancel,
   secondary = false,
   messageLabel,
+  initialMessage,
 }: {
   timezone: string | undefined;
   initial?: KanbanReminder;
@@ -275,8 +272,10 @@ export function ReminderForm({
   onCancel?: () => void;
   secondary?: boolean;
   messageLabel?: string;
+  // initialMessage pre-fills a new reminder's message (text typed in the Feed).
+  initialMessage?: string;
 }) {
-  const [message, setMessage] = useState(initial?.message ?? "");
+  const [message, setMessage] = useState(initial?.message ?? initialMessage ?? "");
   const [fields, setFields] = useState(() => fieldsOf(initial?.schedule));
   const [missing, setMissing] = useState<{ field: ScheduleField; error: string } | null>(null);
   const idPrefix = onCancel ? "kanban-edit-reminder" : "kanban-new-reminder";

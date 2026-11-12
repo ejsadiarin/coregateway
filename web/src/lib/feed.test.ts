@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { InfiniteData } from "@tanstack/react-query";
-import { appendNote, feedNotes, noteTime, removeNote, replaceNote, splitLinks } from "./feed";
-import type { FeedPage, Note } from "@/types/feed";
+import {
+  appendNote,
+  archivePrompt,
+  feedNotes,
+  linkSummary,
+  noteCopyText,
+  noteTime,
+  removeNote,
+  replaceNote,
+  splitLinks,
+} from "./feed";
+import type { FeedPage, Note, NoteCard, NoteLink } from "@/types/feed";
+import type { KanbanReminder } from "@/types/kanban";
 
 const note = (id: string, text = id): Note => ({
   id,
   text,
+  link: null,
   archived_at: null,
   created_at: "2026-11-11T10:00:00Z",
   updated_at: "2026-11-11T10:00:00Z",
@@ -118,5 +130,90 @@ describe("noteTime", () => {
 
   it("adds the year for a note from another year", () => {
     expect(noteTime(new Date(2025, 0, 2, 7, 0).toISOString(), now)).toBe("Thu 2 Jan 2025, 07:00");
+  });
+});
+
+const reminder: KanbanReminder = {
+  id: "r1",
+  message: "call dentist",
+  schedule: { kind: "once", at: "2026-11-17T07:00:00+08:00" },
+  next_fire_at: "2026-11-17T07:00:00+08:00",
+  paused: null,
+  last_delivery: null,
+  card: null,
+  created_at: "2026-11-11T10:00:00+08:00",
+  updated_at: "2026-11-11T10:00:00+08:00",
+};
+
+const card: NoteCard = {
+  id: "c1",
+  board_id: "b1",
+  board_name: "Homelab",
+  column_name: "Doing",
+  status: "in_progress",
+  title: "fix NAS backup",
+  archived_at: null,
+};
+
+const linked = (link: NoteLink, archived = false): Note => ({
+  ...note("n"),
+  text: "",
+  link,
+  archived_at: archived ? "2026-11-12T10:00:00Z" : null,
+});
+
+describe("linkSummary", () => {
+  it("names a reminder and when it fires next, in the owner's own wall time", () => {
+    expect(linkSummary({ kind: "reminder", deleted: false, reminder }, 2026)).toEqual({
+      title: "call dentist",
+      detail: "Tue 17 Nov, 07:00",
+    });
+  });
+
+  it("says how a recurring reminder repeats once nothing is left to send", () => {
+    const daily = { ...reminder, schedule: { kind: "daily" as const, time: "07:00" }, next_fire_at: null };
+    expect(linkSummary({ kind: "reminder", deleted: false, reminder: daily }, 2026).detail).toBe("Daily at 07:00");
+  });
+
+  it("names a card with its board and column", () => {
+    expect(linkSummary({ kind: "card", deleted: false, card }, 2026)).toEqual({
+      title: "fix NAS backup",
+      detail: "Homelab · Doing",
+    });
+    expect(linkSummary({ kind: "card", deleted: false, card: { ...card, archived_at: "2026-11-12T00:00:00Z" } }, 2026).detail).toBe(
+      "Homelab · Doing · archived",
+    );
+  });
+
+  it("marks a deleted record, even one that left nothing behind", () => {
+    expect(linkSummary({ kind: "card", deleted: true, card }, 2026).title).toBe("fix NAS backup (deleted)");
+    expect(linkSummary({ kind: "reminder", deleted: true }, 2026)).toEqual({ title: "Reminder (deleted)", detail: "" });
+  });
+});
+
+describe("archivePrompt", () => {
+  it("names the reminder that archiving its note deletes", () => {
+    expect(archivePrompt(linked({ kind: "reminder", deleted: false, reminder }))).toBe(
+      "Archive this note and delete its reminder “call dentist”? The reminder can't be brought back.",
+    );
+  });
+
+  it("names the card that archiving its note archives", () => {
+    expect(archivePrompt(linked({ kind: "card", deleted: false, card }))).toBe(
+      "Archive this note and archive its card “fix NAS backup”? Restore the note to bring the card back.",
+    );
+  });
+
+  it("asks nothing when only the note changes", () => {
+    expect(archivePrompt(note("plain"))).toBeNull();
+    expect(archivePrompt(linked({ kind: "reminder", deleted: true, reminder }))).toBeNull();
+    expect(archivePrompt(linked({ kind: "card", deleted: false, card: { ...card, archived_at: "2026-11-12T00:00:00Z" } }))).toBeNull();
+  });
+});
+
+describe("noteCopyText", () => {
+  it("copies a plain note's text, and a linked note's summary", () => {
+    expect(noteCopyText(note("a", "buy milk"), 2026)).toBe("buy milk");
+    expect(noteCopyText(linked({ kind: "card", deleted: false, card }), 2026)).toBe("fix NAS backup · Homelab · Doing");
   });
 });

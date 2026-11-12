@@ -15,7 +15,8 @@ import {
   type DragStartEvent,
   type UniqueIdentifier,
 } from "@dnd-kit/core";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { columnOption, statusLabel } from "./columns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { Archive, ArrowLeft, MoreHorizontal, Plus, Tag, Trash2 } from "lucide-react";
@@ -96,18 +97,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const statusLabel: Record<KanbanStatus, string> = {
-  todo: "Todo",
-  in_progress: "In progress",
-  done: "Done",
-};
-
 const statuses = Object.keys(statusLabel) as KanbanStatus[];
-
-// columnOption names a column in a picker: "Doing · In progress", or just
-// "Todo" when the column is already named after its status.
-const columnOption = (c: Pick<KanbanColumn, "name" | "status">) =>
-  c.name.trim().toLowerCase() === statusLabel[c.status].toLowerCase() ? c.name : `${c.name} · ${statusLabel[c.status]}`;
 
 // errorText is what to tell the owner about a failed request: coreban's own
 // explanation when it refused one (such as removing a board's last Done
@@ -144,7 +134,9 @@ export default function KanbanBoardPage() {
   const queryClient = useQueryClient();
   const boardKey = ["kanban", "board", boardId];
   const [actionError, setActionError] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // ?card=<id> opens that card's editor, as a Feed note links to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [editingId, setEditingId] = useState<string | null>(() => searchParams.get("card"));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   // The column dialog: adding one ("new"), editing one, or closed.
@@ -492,7 +484,10 @@ export default function KanbanBoardPage() {
         card={editing}
         columns={columns}
         labels={boardLabels}
-        onClose={() => setEditingId(null)}
+        onClose={() => {
+          setEditingId(null);
+          if (searchParams.has("card")) setSearchParams({}, { replace: true });
+        }}
         onSaved={refresh}
         onMove={(columnId) => editing && requestMove({ cardId: editing.id, columnId, index: Number.MAX_SAFE_INTEGER })}
       />

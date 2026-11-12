@@ -110,16 +110,21 @@ export async function fetchKanbanBoard(id: string): Promise<KanbanBoard> {
 
 const cardsUrl = (boardId: string) => `${boardsUrl}/${boardId}/cards`;
 
+// FeedNote gives a record created from the Feed its note there: "new"
+// adds one at the end, a plain note's id converts that note in place.
+export type FeedNote = "new" | string;
+
 export async function createKanbanCard(
   boardId: string,
   columnId: string,
   title: string,
+  note?: FeedNote,
 ): Promise<KanbanCard> {
   const res = await fetch(cardsUrl(boardId), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ column_id: columnId, title }),
+    body: JSON.stringify({ column_id: columnId, title, note }),
   });
   await throwIfError(res, "creating card");
   return res.json();
@@ -323,7 +328,8 @@ export async function fetchKanbanReminders(cardId?: string): Promise<KanbanRemin
 }
 
 export async function createKanbanReminder(
-  input: Required<Pick<KanbanReminderEdit, "message" | "schedule">> & Pick<KanbanReminderEdit, "card_id">,
+  input: Required<Pick<KanbanReminderEdit, "message" | "schedule">> &
+    Pick<KanbanReminderEdit, "card_id"> & { note?: FeedNote },
 ): Promise<KanbanReminder> {
   const res = await fetch(remindersUrl, {
     method: "POST",

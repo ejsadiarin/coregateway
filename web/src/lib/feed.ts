@@ -1,6 +1,7 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import { format, isSameDay, isSameYear } from "date-fns";
-import type { FeedPage, Note } from "@/types/feed";
+import type { FeedPage, Note, NoteLink } from "@/types/feed";
+import { describeSchedule, formatWall } from "@/pages/dashboard/kanban/schedule";
 import { apiBaseUrl } from "@/lib/api";
 
 const notesUrl = `${apiBaseUrl}/api/coreban/notes`;
@@ -168,4 +169,48 @@ export async function copyText(text: string): Promise<void> {
   const ok = document.execCommand("copy");
   area.remove();
   if (!ok) throw new Error("Couldn't copy this note");
+}
+
+// linkSummary is the one line a linked note shows about its record: what
+// it is, and when (a reminder's next send) or where (a card's board and
+// column). Times are the owner's wall clock, as coreban renders them.
+export function linkSummary(link: NoteLink, currentYear: number): { title: string; detail: string } {
+  let title: string;
+  let detail = "";
+  if (link.kind === "reminder") {
+    const r = link.reminder;
+    title = r?.message ?? "Reminder";
+    if (r) {
+      const at = r.next_fire_at ?? (r.schedule.kind === "once" ? r.schedule.at : null);
+      detail = at ? formatWall(at, currentYear) : describeSchedule(r.schedule);
+    }
+  } else {
+    const c = link.card;
+    title = c?.title ?? "Card";
+    if (c) detail = `${c.board_name} · ${c.column_name}${c.archived_at ? " · archived" : ""}`;
+  }
+  return { title: link.deleted ? `${title} (deleted)` : title, detail };
+}
+
+// archivePrompt is the confirmation archiving a note needs, naming what
+// happens to its record, or null when only the note changes (a plain note,
+// a record already gone, a card already archived).
+export function archivePrompt(note: Note): string | null {
+  const link = note.link;
+  if (!link || link.deleted) return null;
+  if (link.kind === "reminder" && link.reminder) {
+    return `Archive this note and delete its reminder \u201c${link.reminder.message}\u201d? The reminder can't be brought back.`;
+  }
+  if (link.kind === "card" && link.card && !link.card.archived_at) {
+    return `Archive this note and archive its card \u201c${link.card.title}\u201d? Restore the note to bring the card back.`;
+  }
+  return null;
+}
+
+// noteCopyText is what Copy puts on the clipboard: a plain note's text, or
+// a linked note's one-line summary.
+export function noteCopyText(note: Note, currentYear: number): string {
+  if (!note.link) return note.text;
+  const { title, detail } = linkSummary(note.link, currentYear);
+  return detail ? `${title} · ${detail}` : title;
 }

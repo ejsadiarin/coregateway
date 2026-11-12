@@ -92,3 +92,80 @@ test("a blank note can't be sent", async ({ page }) => {
   await page.getByRole("textbox", { name: "New note" }).fill("   ");
   await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
 });
+
+test("+ Reminder captures a reminder from the chat box, shown live in the Feed", async ({ page }) => {
+  const message = unique("call dentist");
+  await page.getByRole("textbox", { name: "New note" }).fill(message);
+  await page.getByRole("button", { name: "Reminder", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New reminder" });
+  await expect(dialog.getByRole("textbox", { name: "Message" })).toHaveValue(message);
+  await dialog.getByLabel("When").fill("2030-03-05T07:00");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "New note" })).toHaveValue("");
+  await expect(noteItem(page, message)).toContainText("Tue 5 Mar 2030, 07:00");
+
+  // Editing it from the note changes it on the Reminders page.
+  await noteItem(page, message).getByRole("button", { name: new RegExp(message) }).click();
+  const editor = page.getByRole("dialog", { name: "Edit reminder" });
+  await editor.getByRole("textbox", { name: "Message" }).fill(`${message} back`);
+  await editor.getByRole("button", { name: "Save" }).click();
+  await expect(editor).toBeHidden();
+  await page.goto("/dashboard/kanban/reminders");
+  await expect(page.getByRole("main").getByText(`${message} back`, { exact: true })).toBeVisible();
+
+  // Archiving its note deletes the reminder, after naming it.
+  await page.goto("/dashboard/feed");
+  await noteAction(page, `${message} back`, "Archive");
+  const confirm = page.getByRole("alertdialog");
+  await expect(confirm).toContainText(`delete its reminder “${message} back”`);
+  await confirm.getByRole("button", { name: "Archive" }).click();
+  await expect(noteItem(page, `${message} back`).getByRole("button", { name: /Archived/ })).toBeVisible();
+  await page.goto("/dashboard/kanban/reminders");
+  await expect(page.getByRole("main").getByText(`${message} back`, { exact: true })).toHaveCount(0);
+});
+
+test("Make card converts a note in place; archiving it archives the card and Restore brings it back", async ({ page }) => {
+  const board = `Feed ${Date.now().toString(36)}`;
+  await page.goto("/dashboard/kanban");
+  await page.getByLabel("New board").fill(board);
+  await page.getByRole("main").getByRole("button", { name: "Create" }).click();
+  await expect(page.getByRole("main").getByText(board, { exact: true })).toBeVisible();
+
+  await page.goto("/dashboard/feed");
+  const title = unique("fix NAS backup");
+  await post(page, title);
+  await noteAction(page, title, "Make card");
+  const dialog = page.getByRole("dialog", { name: "New card" });
+  await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue(title);
+  await dialog.getByRole("combobox", { name: "Board" }).click();
+  await page.getByRole("option", { name: board }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(noteItem(page, title)).toContainText(`${board} · Todo`);
+
+  await noteAction(page, title, "Archive");
+  await expect(page.getByRole("alertdialog")).toContainText(`archive its card “${title}”`);
+  await page.getByRole("alertdialog").getByRole("button", { name: "Archive" }).click();
+  await expect(noteItem(page, title).getByRole("button", { name: /Archived/ })).toBeVisible();
+
+  await page.goto("/dashboard/kanban");
+  await page.getByRole("main").getByText(board, { exact: true }).click();
+  await expect(page.getByRole("main").getByText(title, { exact: true })).toHaveCount(0);
+
+  await page.goto("/dashboard/feed");
+  await noteItem(page, title).getByRole("button", { name: /Archived/ }).click();
+  await noteItem(page, title).getByRole("button", { name: "Restore" }).click();
+  await noteItem(page, title).getByRole("button", { name: new RegExp(title) }).click();
+  await expect(page.getByRole("dialog", { name: "Edit card" })).toBeVisible();
+
+  // Deleting the card on its board leaves the note showing it, deleted.
+  await page.getByRole("dialog", { name: "Edit card" }).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  await page.goto("/dashboard/feed");
+  await expect(noteItem(page, title)).toContainText(`${title} (deleted)`);
+
+  await page.goto("/dashboard/kanban");
+  await page.getByRole("button", { name: `Delete ${board}` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+});

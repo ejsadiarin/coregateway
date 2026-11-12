@@ -1,4 +1,11 @@
-import type { KanbanDue, KanbanReminder, KanbanSchedule, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
+import type {
+  KanbanDue,
+  KanbanReminder,
+  KanbanReminderEdit,
+  KanbanSchedule,
+  KanbanScheduleInput,
+  KanbanWeekday,
+} from "@/types/kanban";
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -149,4 +156,13 @@ export function scheduleOf(
       return { schedule: { kind: "every", time: f.time, days, ...(f.from && { from: f.from }) } };
     }
   }
+}
+
+// reminderEdit is the edit to save for a reminder whose form now holds
+// message and schedule: the schedule only if it changed, since a new
+// schedule reschedules (and re-arms) the reminder.
+export function reminderEdit(current: KanbanSchedule, message: string, schedule: KanbanScheduleInput): KanbanReminderEdit {
+  const before = scheduleOf(fieldsOf(current));
+  const changed = !("schedule" in before) || JSON.stringify(before.schedule) !== JSON.stringify(schedule);
+  return { message, ...(changed && { schedule }) };
 }

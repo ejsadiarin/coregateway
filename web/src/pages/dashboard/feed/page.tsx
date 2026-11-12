@@ -1,14 +1,30 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, ChevronDown, Copy, MessageSquareText, MoreHorizontal, Pencil, SendHorizontal, Trash2 } from "lucide-react";
+import {
+  Archive,
+  BellRing,
+  ChevronDown,
+  Copy,
+  MessageSquareText,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  SendHorizontal,
+  SquareKanban,
+  Trash2,
+} from "lucide-react";
 import {
   appendNote,
+  archivePrompt,
   copyText,
   deleteNote,
   editNoteText,
   feedNotes,
   fetchFeed,
+  linkSummary,
   MAX_NOTE_LENGTH,
+  noteCopyText,
   noteTime,
   postNote,
   removeNote,
@@ -17,7 +33,7 @@ import {
   splitLinks,
   type FeedData,
 } from "@/lib/feed";
-import type { Note } from "@/types/feed";
+import type { Note, NoteLink } from "@/types/feed";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +54,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { CardDialog, ReminderDialog, type CardDialogState, type ReminderDialogState } from "./record-dialogs";
 
 const feedKey = ["coreban", "feed"];
 
@@ -65,6 +82,26 @@ function NoteText({ text, className }: { text: string; className?: string }) {
   );
 }
 
+const linkIcon = (link: NoteLink) => (link.kind === "reminder" ? BellRing : SquareKanban);
+
+// A linked note's record on one line: its icon, what it is, and when or
+// where. A deleted record is muted and marked "(deleted)".
+function LinkLine({ link, className }: { link: NoteLink; className?: string }) {
+  const { title, detail } = linkSummary(link, new Date().getFullYear());
+  const Icon = linkIcon(link);
+  return (
+    <span className={cn("flex min-w-0 items-start gap-2 text-left text-sm leading-relaxed", className)}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-label={link.kind === "reminder" ? "Reminder" : "Card"} />
+      <span className="min-w-0">
+        <span className={cn("block break-words", link.deleted && "text-muted-foreground")}>{title}</span>
+        {detail && (
+          <span className="block font-mono text-[11px] tabular-nums tracking-wide text-muted-foreground">{detail}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 // sendOnEnter runs send on Enter, leaving Shift+Enter (and an IME still
 // composing a word) to type a line break.
 const sendOnEnter = (send: () => void) => (e: React.KeyboardEvent) => {
@@ -74,26 +111,94 @@ const sendOnEnter = (send: () => void) => (e: React.KeyboardEvent) => {
   }
 };
 
-function LiveNote({
-  note,
-  onCopy,
-  onSaveText,
-  onArchive,
-  onDelete,
-  saving,
-}: {
-  note: Note;
-  onCopy: () => void;
-  onSaveText: (text: string, done: () => void) => void;
-  onArchive: () => void;
-  onDelete: () => void;
-  saving: boolean;
-}) {
+// What a live note's menu and taps can do.
+interface NoteActions {
+  copy: () => void;
+  saveText: (text: string, done: () => void) => void;
+  makeReminder: () => void;
+  makeCard: () => void;
+  openRecord: () => void;
+  archive: () => void;
+  erase: () => void;
+}
+
+function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActions; onEditText: () => void }) {
+  const link = note.link;
+  const item = "min-h-11 gap-2";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Note actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {!link && (
+          <>
+            <DropdownMenuItem className={item} onSelect={actions.makeReminder}>
+              <BellRing className="h-4 w-4" aria-hidden />
+              Make reminder
+            </DropdownMenuItem>
+            <DropdownMenuItem className={item} onSelect={actions.makeCard}>
+              <SquareKanban className="h-4 w-4" aria-hidden />
+              Make card
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <DropdownMenuItem className={item} onSelect={actions.copy}>
+          <Copy className="h-4 w-4" aria-hidden />
+          Copy
+        </DropdownMenuItem>
+        {!link && (
+          <DropdownMenuItem className={item} onSelect={onEditText}>
+            <Pencil className="h-4 w-4" aria-hidden />
+            Edit text
+          </DropdownMenuItem>
+        )}
+        {link && !link.deleted && (
+          <DropdownMenuItem className={item} onSelect={actions.openRecord}>
+            <Pencil className="h-4 w-4" aria-hidden />
+            {link.kind === "reminder" ? "Edit reminder" : "Edit card"}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem className={item} onSelect={actions.archive}>
+          <Archive className="h-4 w-4" aria-hidden />
+          Archive
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className={`${item} text-destructive focus:text-destructive`} onSelect={actions.erase}>
+          <Trash2 className="h-4 w-4" aria-hidden />
+          Permanently delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+const bubble =
+  "min-w-0 max-w-[85%] rounded-xl border border-border bg-card px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]";
+
+function NoteTime({ note, className }: { note: Note; className?: string }) {
+  return (
+    <time
+      dateTime={note.created_at}
+      className={cn(
+        "mt-1 block font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground",
+        className,
+      )}
+    >
+      {noteTime(note.created_at)}
+    </time>
+  );
+}
+
+function LiveNote({ note, actions, saving }: { note: Note; actions: NoteActions; saving: boolean }) {
   const [draft, setDraft] = useState<string | null>(null);
   const save = () => {
     if (draft === null || saving) return;
     if (draft.trim() === note.text) return setDraft(null);
-    onSaveText(draft, () => setDraft(null));
+    actions.saveText(draft, () => setDraft(null));
   };
 
   if (draft !== null) {
@@ -122,43 +227,28 @@ function LiveNote({
     );
   }
 
+  const link = note.link;
   return (
     <div className="flex items-start justify-end gap-1">
-      <div className="min-w-0 max-w-[85%] rounded-xl border border-border bg-card px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <NoteText text={note.text} />
-        <time
-          dateTime={note.created_at}
-          className="mt-1 block text-right font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground"
-        >
-          {noteTime(note.created_at)}
-        </time>
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Note actions">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem className="min-h-11 gap-2" onSelect={onCopy}>
-            <Copy className="h-4 w-4" aria-hidden />
-            Copy
-          </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-11 gap-2" onSelect={() => setDraft(note.text)}>
-            <Pencil className="h-4 w-4" aria-hidden />
-            Edit text
-          </DropdownMenuItem>
-          <DropdownMenuItem className="min-h-11 gap-2" onSelect={onArchive}>
-            <Archive className="h-4 w-4" aria-hidden />
-            Archive
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="min-h-11 gap-2 text-destructive focus:text-destructive" onSelect={onDelete}>
-            <Trash2 className="h-4 w-4" aria-hidden />
-            Permanently delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {link ? (
+        link.deleted ? (
+          <div className={bubble}>
+            <LinkLine link={link} />
+            <NoteTime note={note} className="text-right" />
+          </div>
+        ) : (
+          <button type="button" onClick={actions.openRecord} className={cn(bubble, "hover:border-primary/40")}>
+            <LinkLine link={link} />
+            <NoteTime note={note} className="text-right" />
+          </button>
+        )
+      ) : (
+        <div className={bubble}>
+          <NoteText text={note.text} />
+          <NoteTime note={note} className="text-right" />
+        </div>
+      )}
+      <NoteMenu note={note} actions={actions} onEditText={() => setDraft(note.text)} />
     </div>
   );
 }
@@ -177,6 +267,7 @@ function ArchivedNote({
   restoring: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const preview = note.link ? linkSummary(note.link, new Date().getFullYear()).title : note.text;
   return (
     <div className="ml-auto w-full max-w-[85%] rounded-xl border border-dashed border-border">
       <button
@@ -187,18 +278,17 @@ function ArchivedNote({
       >
         <Archive className="h-4 w-4 shrink-0" aria-hidden />
         <span className="font-mono text-[10px] uppercase tracking-[0.18em]">Archived</span>
-        <span className="min-w-0 flex-1 truncate text-sm">{!open && note.text}</span>
+        <span className="min-w-0 flex-1 truncate text-sm">{!open && preview}</span>
         <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", open && "rotate-180")} aria-hidden />
       </button>
       {open && (
         <div className="border-t border-border px-3 pb-2 pt-2">
-          <NoteText text={note.text} className="text-muted-foreground" />
-          <time
-            dateTime={note.created_at}
-            className="mt-1 block font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground"
-          >
-            {noteTime(note.created_at)}
-          </time>
+          {note.link ? (
+            <LinkLine link={note.link} className="text-muted-foreground" />
+          ) : (
+            <NoteText text={note.text} className="text-muted-foreground" />
+          )}
+          <NoteTime note={note} />
           <div className="mt-2 flex flex-wrap justify-end gap-2">
             <Button variant="ghost" className="min-h-11 text-destructive hover:text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" aria-hidden />
@@ -216,10 +306,14 @@ function ArchivedNote({
 
 export default function FeedPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [draft, setDraft] = useState("");
   const [actionError, setActionError] = useState("");
   const [status, setStatus] = useState("");
   const [deleting, setDeleting] = useState<Note | null>(null);
+  const [archiving, setArchiving] = useState<{ note: Note; prompt: string } | null>(null);
+  const [reminderDialog, setReminderDialog] = useState<ReminderDialogState | null>(null);
+  const [cardDialog, setCardDialog] = useState<CardDialogState | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -304,7 +398,12 @@ export default function FeedPage() {
 
   const archiveMutation = useMutation({
     mutationFn: ({ id, archived }: { id: string; archived: boolean }) => setNoteArchived(id, archived),
-    onSuccess: (note) => update((d) => replaceNote(d, note)),
+    onSuccess: (note) => {
+      update((d) => replaceNote(d, note));
+      // Archiving or restoring may have archived, restored, or deleted the
+      // note's record: let its own pages read it afresh.
+      if (note.link) queryClient.invalidateQueries({ queryKey: ["kanban"] });
+    },
     onError: fail("Couldn't change this note"),
   });
 
@@ -320,6 +419,19 @@ export default function FeedPage() {
     },
   });
 
+  // A record was saved from the Feed: re-read the Feed (its note is new,
+  // converted, or shows the edit) and the record's own pages.
+  const recordSaved = (captured: boolean) => {
+    setReminderDialog(null);
+    setCardDialog(null);
+    if (captured) {
+      setDraft("");
+      toBottom.current = true;
+    }
+    queryClient.invalidateQueries({ queryKey: feedKey });
+    queryClient.invalidateQueries({ queryKey: ["kanban"] });
+  };
+
   const send = () => {
     const text = draft.trim();
     if (!text || postMutation.isPending) return;
@@ -332,20 +444,44 @@ export default function FeedPage() {
     input.current?.focus();
   };
 
-  const copy = (note: Note) => {
-    copyText(note.text).then(
-      () => setStatus("Copied."),
-      fail("Couldn't copy this note"),
-    );
-  };
-
   useEffect(() => {
     if (!status) return;
     const t = setTimeout(() => setStatus(""), 2000);
     return () => clearTimeout(t);
   }, [status]);
 
+  const actionsFor = (note: Note): NoteActions => ({
+    copy: () =>
+      copyText(noteCopyText(note, new Date().getFullYear())).then(
+        () => setStatus("Copied."),
+        fail("Couldn't copy this note"),
+      ),
+    saveText: (text, done) => {
+      setActionError("");
+      editMutation.mutate({ id: note.id, text, done });
+    },
+    makeReminder: () => setReminderDialog({ mode: "new", text: note.text, note: note.id }),
+    makeCard: () => setCardDialog({ text: note.text, note: note.id }),
+    openRecord: () => {
+      const link = note.link;
+      if (!link || link.deleted) return;
+      if (link.kind === "reminder" && link.reminder) setReminderDialog({ mode: "edit", reminder: link.reminder });
+      // An archived card has no editor on its board; open the board itself.
+      if (link.kind === "card" && link.card) {
+        const c = link.card;
+        navigate(`/dashboard/kanban/${c.board_id}${c.archived_at ? "" : `?card=${c.id}`}`);
+      }
+    },
+    archive: () => {
+      const prompt = archivePrompt(note);
+      if (prompt) setArchiving({ note, prompt });
+      else archiveMutation.mutate({ id: note.id, archived: true });
+    },
+    erase: () => setDeleting(note),
+  });
+
   const isEmpty = feedQuery.isSuccess && notes.length === 0;
+  const captureText = draft.trim();
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
@@ -392,13 +528,14 @@ export default function FeedPage() {
           <div className="flex h-full flex-col items-start justify-end gap-3 pb-2">
             <MessageSquareText className="h-6 w-6 text-muted-foreground" aria-hidden />
             <p className="max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
-              No notes yet. Type a thought, a todo, or a link below and it lands here, newest last.
+              No notes yet. Type a thought, a todo, or a link below and it lands here, newest last. Turn one into a
+              reminder or a card whenever you like.
             </p>
           </div>
         )}
 
         {notes.length > 0 && (
-          <ol className="grid gap-3">
+          <ol className="grid grid-cols-1 gap-3">
             {notes.map((note) => (
               <li key={note.id}>
                 {note.archived_at ? (
@@ -409,17 +546,7 @@ export default function FeedPage() {
                     onDelete={() => setDeleting(note)}
                   />
                 ) : (
-                  <LiveNote
-                    note={note}
-                    saving={editMutation.isPending}
-                    onCopy={() => copy(note)}
-                    onSaveText={(text, done) => {
-                      setActionError("");
-                      editMutation.mutate({ id: note.id, text, done });
-                    }}
-                    onArchive={() => archiveMutation.mutate({ id: note.id, archived: true })}
-                    onDelete={() => setDeleting(note)}
-                  />
+                  <LiveNote note={note} saving={editMutation.isPending} actions={actionsFor(note)} />
                 )}
               </li>
             ))}
@@ -439,6 +566,26 @@ export default function FeedPage() {
           {status}
         </p>
         {status && <p className="pb-2 text-sm text-muted-foreground">{status}</p>}
+        <div className="flex gap-2 pb-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => setReminderDialog({ mode: "new", text: captureText, note: "new" })}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Reminder
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => setCardDialog({ text: captureText, note: "new" })}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            Card
+          </Button>
+        </div>
         <div className="flex items-end gap-2">
           <Textarea
             ref={input}
@@ -457,12 +604,45 @@ export default function FeedPage() {
         </div>
       </form>
 
+      <ReminderDialog
+        state={reminderDialog}
+        onClose={() => setReminderDialog(null)}
+        onSaved={() => recordSaved(reminderDialog?.mode === "new" && reminderDialog.note === "new")}
+      />
+      <CardDialog
+        state={cardDialog}
+        onClose={() => setCardDialog(null)}
+        onSaved={() => recordSaved(cardDialog?.note === "new")}
+      />
+
+      <AlertDialog open={archiving !== null} onOpenChange={(open) => !open && setArchiving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive note</AlertDialogTitle>
+            <AlertDialogDescription>{archiving?.prompt}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (archiving) archiveMutation.mutate({ id: archiving.note.id, archived: true });
+                setArchiving(null);
+              }}
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Permanently delete note</AlertDialogTitle>
             <AlertDialogDescription>
-              Erase this note for good? Archive it instead to keep it. This cannot be undone.
+              {deleting?.link && !deleting.link.deleted
+                ? `Erase this note for good? Its ${deleting.link.kind} stays; only the note goes. This cannot be undone.`
+                : "Erase this note for good? Archive it instead to keep it. This cannot be undone."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
+import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderEdit, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
 import type { KanbanReminder, KanbanSchedule } from "@/types/kanban";
 
 // coreban renders reminder times in the owner's timezone, so the wall
@@ -164,6 +164,21 @@ describe("schedule fields", () => {
     });
     expect(scheduleOf({ ...fieldsOf(), kind: "every", days: "2", from: "" })).toEqual({
       schedule: { kind: "every", time: "07:00", days: 2 },
+    });
+  });
+});
+
+describe("reminderEdit", () => {
+  const daily: KanbanSchedule = { kind: "daily", time: "07:00" };
+
+  it("leaves an unchanged schedule out, so saving a new message doesn't re-arm the reminder", () => {
+    expect(reminderEdit(daily, "new words", { kind: "daily", time: "07:00" })).toEqual({ message: "new words" });
+  });
+
+  it("sends a changed schedule", () => {
+    expect(reminderEdit(daily, "m", { kind: "daily", time: "08:00" })).toEqual({
+      message: "m",
+      schedule: { kind: "daily", time: "08:00" },
     });
   });
 });
