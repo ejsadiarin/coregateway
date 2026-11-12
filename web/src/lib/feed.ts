@@ -64,7 +64,9 @@ async function send(method: string, url: string, body: unknown, op: string): Pro
   return res.json();
 }
 
-export const postNote = (text: string) => send("POST", notesUrl, { text }, "post this note");
+// postNote posts text, or uploads (by id) with the text as their caption.
+export const postNote = ({ text, attachments }: { text: string; attachments?: string[] }) =>
+  send("POST", notesUrl, attachments?.length ? { text, attachments } : { text }, "post this note");
 
 export const editNoteText = (id: string, text: string) =>
   send("PATCH", `${notesUrl}/${id}`, { text }, "edit this note");
@@ -289,7 +291,27 @@ export function archivePrompt(note: Note): string | null {
   return null;
 }
 
-// noteCopyText is what Copy puts on the clipboard: a plain note's text, or
+// notePreview is the one line a collapsed note shows: its text, a linked
+// note's record, or what its attachments are when it has no caption.
+export function notePreview(
+  note: Note,
+  currentYear: number,
+  categoryName?: (id: string) => string | undefined,
+): string {
+  if (note.link) return linkSummary(note.link, currentYear, categoryName).title;
+  if (note.text || !note.attachments?.length) return note.text;
+  const count = (kind: string) => note.attachments!.filter((a) => a.kind === kind).length;
+  return [
+    [count("image"), "image"],
+    [count("video"), "video"],
+  ]
+    .filter(([n]) => n)
+    .map(([n, what]) => `${n} ${what}${n === 1 ? "" : "s"}`)
+    .join(", ");
+}
+
+// noteCopyText is what Copy puts on the clipboard: a plain note's text
+// (never its attachments), or
 // a linked note's one-line summary.
 export function noteCopyText(
   note: Note,

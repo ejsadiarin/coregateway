@@ -1,5 +1,6 @@
 import type { KanbanReminder, KanbanStatus } from "@/types/kanban";
 import type { Expense, Income } from "@/types/api";
+import type { Attachment } from "@/lib/attachments";
 
 // Note mirrors coreban's note responses: an item in the owner's Feed,
 // either free text the owner posted or a window onto one linked record.
@@ -9,6 +10,9 @@ export interface Note {
   text: string;
   // The record a linked note shows; null on a plain note.
   link: NoteLink | null;
+  // A plain note's images and videos, in album order; its text is their
+  // caption, and may be empty.
+  attachments?: Attachment[];
   // Set while the note is archived: collapsed in the Feed, kept, and still
   // in its place.
   archived_at: string | null;

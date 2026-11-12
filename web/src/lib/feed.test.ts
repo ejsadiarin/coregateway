@@ -7,6 +7,7 @@ import {
   feedNotes,
   linkSummary,
   noteCopyText,
+  notePreview,
   noteTime,
   removeNote,
   replaceNote,
@@ -218,7 +219,32 @@ describe("archivePrompt", () => {
   });
 });
 
+const attached = (text: string, kinds: ("image" | "video")[]): Note => ({
+  ...note("p", text),
+  attachments: kinds.map((kind, i) => ({
+    id: `a${i}`,
+    kind,
+    content_type: kind === "image" ? "image/webp" : "video/mp4",
+    size: 10,
+    filename: `f${i}`,
+    url: `https://s3/f${i}`,
+  })),
+});
+
+describe("notePreview", () => {
+  it("is a plain note's text, or what its attachments are when it has none", () => {
+    expect(notePreview(note("a", "buy milk"), 2026)).toBe("buy milk");
+    expect(notePreview(attached("", ["image"]), 2026)).toBe("1 image");
+    expect(notePreview(attached("", ["image", "image", "video"]), 2026)).toBe("2 images, 1 video");
+    expect(notePreview(attached("beach", ["video", "video"]), 2026)).toBe("beach");
+  });
+});
+
 describe("noteCopyText", () => {
+  it("copies only the text of a note with attachments", () => {
+    expect(noteCopyText(attached("beach day", ["image"]), 2026)).toBe("beach day");
+  });
+
   it("copies a plain note's text, and a linked note's summary", () => {
     expect(noteCopyText(note("a", "buy milk"), 2026)).toBe("buy milk");
     expect(noteCopyText(linked({ kind: "card", deleted: false, card }), 2026)).toBe("fix NAS backup · Homelab · Doing · In progress");

@@ -26,7 +26,7 @@ export default function SharePage() {
     if (!isAuthenticated || text === null || posted.current === attempt) return;
     posted.current = attempt;
     setError(null);
-    postNote(text)
+    postNote({ text })
       .then(async (note) => {
         await queryClient.invalidateQueries({ queryKey: feedKey });
         // Replaces /share, so going back never shares it again.

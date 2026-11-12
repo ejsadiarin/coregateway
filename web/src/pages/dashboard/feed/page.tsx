@@ -9,6 +9,7 @@ import {
   Copy,
   MessageSquareText,
   MoreHorizontal,
+  Paperclip,
   Pencil,
   Plus,
   ReceiptText,
@@ -30,6 +31,7 @@ import {
   linkSummary,
   MAX_NOTE_LENGTH,
   noteCopyText,
+  notePreview,
   noteTime,
   feedKey,
   postNote,
@@ -44,6 +46,10 @@ import { budgetKeys } from "@/hooks/use-budget";
 import type { Note, NoteLink } from "@/types/feed";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
 import { useTouchDevice } from "@/hooks/use-touch-device";
+import { useAuth } from "@/contexts/auth-context";
+import { AttachmentGrid, AttachmentViewer, UploadTray } from "./attachments";
+import { useUploads } from "./use-uploads";
+import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -150,6 +156,9 @@ interface NoteActions {
 function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActions; onEditText: () => void }) {
   const link = note.link;
   const item = "min-h-11 gap-2";
+  // A note with attachments stays a plain note, and Copy copies text only.
+  const convertible = !link && !note.attachments?.length;
+  const copyable = !!link || note.text !== "";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -158,7 +167,7 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {!link && (
+        {convertible && (
           <>
             <DropdownMenuItem className={item} onSelect={actions.makeReminder}>
               <BellRing className="h-4 w-4" aria-hidden />
@@ -171,14 +180,16 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem className={item} onSelect={actions.copy}>
-          <Copy className="h-4 w-4" aria-hidden />
-          Copy
-        </DropdownMenuItem>
+        {copyable && (
+          <DropdownMenuItem className={item} onSelect={actions.copy}>
+            <Copy className="h-4 w-4" aria-hidden />
+            Copy
+          </DropdownMenuItem>
+        )}
         {!link && (
           <DropdownMenuItem className={item} onSelect={onEditText}>
             <Pencil className="h-4 w-4" aria-hidden />
-            Edit text
+            {note.attachments?.length ? "Edit caption" : "Edit text"}
           </DropdownMenuItem>
         )}
         {link && !link.deleted && (
@@ -230,6 +241,8 @@ function LiveNote({
   categoryName: CategoryName;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  const captioned = (note.attachments?.length ?? 0) > 0;
   const save = () => {
     if (draft === null || saving) return;
     if (draft.trim() === note.text) return setDraft(null);
@@ -244,7 +257,7 @@ function LiveNote({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           {...keys}
-          aria-label="Note text"
+          aria-label={captioned ? "Caption" : "Note text"}
           className="min-h-11 [field-sizing:content] max-h-60"
           autoFocus
         />
@@ -252,7 +265,7 @@ function LiveNote({
           <Button variant="ghost" className="min-h-11" onClick={() => setDraft(null)}>
             Cancel
           </Button>
-          <Button className="min-h-11" onClick={save} disabled={saving || !draft.trim()}>
+          <Button className="min-h-11" onClick={save} disabled={saving || (!captioned && !draft.trim())}>
             Save
           </Button>
         </div>
@@ -276,10 +289,21 @@ function LiveNote({
           </button>
         )
       ) : (
-        <div className={bubble}>
-          <NoteText text={note.text} />
-          <NoteTime note={note} className="text-right" />
+        <div className={cn(bubble, note.attachments?.length && "w-full p-1.5 pb-2")}>
+          {note.attachments?.length ? (
+            <AttachmentGrid attachments={note.attachments} onOpen={setViewing} />
+          ) : null}
+          {note.text && <NoteText text={note.text} className={cn(note.attachments?.length && "px-1.5 pt-1.5")} />}
+          <NoteTime note={note} className={cn("text-right", note.attachments?.length && "px-1.5")} />
         </div>
+      )}
+      {captioned && (
+        <AttachmentViewer
+          attachments={note.attachments!}
+          index={viewing}
+          onIndex={setViewing}
+          onClose={() => setViewing(null)}
+        />
       )}
       <NoteMenu note={note} actions={actions} onEditText={() => setDraft(note.text)} />
     </div>
@@ -302,7 +326,8 @@ function ArchivedNote({
   categoryName: CategoryName;
 }) {
   const [open, setOpen] = useState(false);
-  const preview = note.link ? linkSummary(note.link, new Date().getFullYear(), categoryName).title : note.text;
+  const [viewing, setViewing] = useState<number | null>(null);
+  const preview = notePreview(note, new Date().getFullYear(), categoryName);
   return (
     <div className="ml-auto w-full max-w-[85%] rounded-xl border border-dashed border-border">
       <button
@@ -321,7 +346,20 @@ function ArchivedNote({
           {note.link ? (
             <LinkLine link={note.link} categoryName={categoryName} className="text-muted-foreground" />
           ) : (
-            <NoteText text={note.text} className="text-muted-foreground" />
+            <>
+              {note.attachments?.length ? (
+                <>
+                  <AttachmentGrid attachments={note.attachments} onOpen={setViewing} />
+                  <AttachmentViewer
+                    attachments={note.attachments}
+                    index={viewing}
+                    onIndex={setViewing}
+                    onClose={() => setViewing(null)}
+                  />
+                </>
+              ) : null}
+              {note.text && <NoteText text={note.text} className="text-muted-foreground" />}
+            </>
           )}
           <NoteTime note={note} />
           <div className="mt-2 flex flex-wrap justify-end gap-2">
@@ -353,6 +391,9 @@ export default function FeedPage() {
   const scroller = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const { isGuest } = useAuth();
+  const uploads = useUploads(setActionError);
   // How far the view sat from the bottom before older notes loaded above
   // it, so it stays on the same note; null scrolls to the newest note.
   const keepFromBottom = useRef<number | null>(null);
@@ -429,9 +470,10 @@ export default function FeedPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, pageCount]);
 
   const postMutation = useMutation({
-    mutationFn: postNote,
-    onSuccess: (note) => {
+    mutationFn: (v: { text: string; attachments?: string[]; keys?: string[] }) => postNote(v),
+    onSuccess: (note, { keys }) => {
       setDraft("");
+      if (keys) uploads.posted(keys);
       toBottom.current = true;
       update((d) => appendNote(d, note));
     },
@@ -497,15 +539,19 @@ export default function FeedPage() {
     queryClient.invalidateQueries({ queryKey: budgetKeys.all });
   };
 
+  const pendingFiles = uploads.files.length > 0;
+  // A note with attachments posts once every one is up; its text is their
+  // caption and may be blank.
+  const canSend = !postMutation.isPending && (pendingFiles ? uploads.ready : draft.trim() !== "");
   const send = () => {
     const text = draft.trim();
-    if (!text || postMutation.isPending) return;
+    if (!canSend) return;
     if ([...text].length > MAX_NOTE_LENGTH) {
       setActionError(`A note holds at most ${MAX_NOTE_LENGTH} characters.`);
       return;
     }
     setActionError("");
-    postMutation.mutate(text);
+    postMutation.mutate({ text, attachments: uploads.sending?.ids, keys: uploads.sending?.keys });
     input.current?.focus();
   };
   const keys = useEnterToSend(send);
@@ -669,18 +715,56 @@ export default function FeedPage() {
             Budget
           </Button>
         </div>
+        <UploadTray
+          files={uploads.files}
+          onRemove={uploads.remove}
+          onRetry={uploads.retry}
+          locked={postMutation.isPending}
+        />
         <div className="flex items-end gap-2">
+          {!isGuest && (
+            <>
+              <input
+                ref={picker}
+                type="file"
+                accept={ATTACH_ACCEPT}
+                multiple
+                hidden
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  if (picked.length === 0) return;
+                  setActionError("");
+                  const dropped = uploads.add(picked);
+                  if (dropped > 0) {
+                    setActionError(`A note holds at most ${MAX_ATTACHMENTS} attachments; ${dropped} left out.`);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                aria-label="Attach images or videos"
+                disabled={uploads.files.length >= MAX_ATTACHMENTS}
+                onClick={() => picker.current?.click()}
+              >
+                <Paperclip className="h-4 w-4" aria-hidden />
+              </Button>
+            </>
+          )}
           <Textarea
             ref={input}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             {...keys}
             aria-label="New note"
-            placeholder="Write a note"
+            placeholder={pendingFiles ? "Add a caption" : "Write a note"}
             rows={1}
             className="min-h-11 max-h-40 resize-none [field-sizing:content]"
           />
-          <Button type="submit" className="min-h-11" disabled={!draft.trim() || postMutation.isPending}>
+          <Button type="submit" className="min-h-11 shrink-0" disabled={!canSend}>
             <SendHorizontal className="h-4 w-4" aria-hidden />
             Send
           </Button>
