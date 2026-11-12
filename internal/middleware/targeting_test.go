@@ -24,13 +24,13 @@ func (s stubKeys) ValidateKey(context.Context, string) (uuid.UUID, string, []str
 	return s.userID, s.keyID, s.scopes, s.err
 }
 
-func stubExists(known ...uuid.UUID) UserExistsFunc {
+func stubExists(known ...uuid.UUID) UserLookupFunc {
 	set := map[uuid.UUID]bool{}
 	for _, id := range known {
 		set[id] = true
 	}
-	return func(_ context.Context, id uuid.UUID) (bool, error) {
-		return set[id], nil
+	return func(_ context.Context, id uuid.UUID) (string, bool, error) {
+		return auth.RoleUser, set[id], nil
 	}
 }
 
@@ -175,8 +175,8 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 
 	t.Run("lookup failure is 500", func(t *testing.T) {
 		iss := testIssuer(t)
-		fail := UserExistsFunc(func(context.Context, uuid.UUID) (bool, error) {
-			return false, errors.New("db down")
+		fail := UserLookupFunc(func(context.Context, uuid.UUID) (string, bool, error) {
+			return "", false, errors.New("db down")
 		})
 		h := EdgeIdentity("corefinance", iss, nil, fail)
 		req := requestAsAdmin(httptest.NewRequest(http.MethodGet, "/api/budget/remaining?user_id="+otherID.String(), nil), adminID)

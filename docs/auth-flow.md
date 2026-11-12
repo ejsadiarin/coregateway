@@ -67,8 +67,9 @@ downstream (corefinance :6969 · coredraw :6971 · coreban :6972)
    (`internal/auth/middleware.go`), which loads the session into the
    request context. It never rejects, it only populates.
 
-3. On `/api/budget/*` routes, `middleware.EdgeIdentity` (`internal/middleware/edge_identity.go`) runs:
+3. On every proxied route (`/api/budget/*`, `/api/coredraw/*`, `/api/coreban/*`), `middleware.EdgeIdentity` (`internal/middleware/edge_identity.go`) runs:
    - valid session → mint an internal JWT with `sub` = user ID, `azp` = `session`, and `scope` = `admin` if the user's role is admin, `guest` for the demo guest (so a service can refuse it, e.g. coreban attachment uploads), and no scope for a normal user.
+   - valid API key → `azp` = `api-key:<id>` and `scope` = the key's scopes. The edge looks up the key's owner: a key whose owner no longer exists is `401`, and a key owned by the demo guest also carries `guest`, so the restriction holds on both paths. A key never gains `admin` from its owner. The demo guest can't create keys at all (`403`).
     - no session and no key → `401 {"error":"Authentication required"}`.
 
 4. The reverse proxy forwards the request downstream with

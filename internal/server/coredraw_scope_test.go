@@ -40,6 +40,8 @@ func coredrawScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownst
 		TokenIssuer:    iss,
 		CoredrawClient: coredraw.New(downstream.URL),
 		KeysService:    auth.NewKeysService(q),
+		// The edge looks up a key's owner for their restrictions.
+		AuthService: auth.NewService(q),
 	}
 	return s, q, fake
 }

@@ -228,6 +228,67 @@ func (s stubValidator) ValidateKey(_ context.Context, _ string) (uuid.UUID, stri
 	return s.userID, s.keyID, s.scopes, s.err
 }
 
+// A key carries its owner's restrictions: one owned by the demo guest
+// (minted before guests were refused keys) still carries guest. It never
+// gains admin from its owner, so a leaked admin key stays within its
+// scopes.
+func TestEdgeIdentityKeyCarriesItsOwnersGuestScope(t *testing.T) {
+	iss := testIssuer(t)
+	for role, want := range map[string]string{
+		auth.RoleGuest: "coreban:write guest",
+		auth.RoleAdmin: "coreban:write",
+		auth.RoleUser:  "coreban:write",
+	} {
+		t.Run(role, func(t *testing.T) {
+			owner := uuid.New()
+			keys := stubValidator{userID: owner, keyID: "key-1", scopes: []string{"coreban:write"}}
+			lookup := func(_ context.Context, id uuid.UUID) (string, bool, error) { return role, id == owner, nil }
+			var gotAuth string
+			var gotKeyScopes []string
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+				gotKeyScopes, _ = auth.KeyScopesFromContext(r)
+			})
+			req := httptest.NewRequest(http.MethodPost, "/api/coreban/attachments", nil)
+			req.Header.Set("Authorization", "Bearer key-material")
+			EdgeIdentity("corefinance", iss, keys, lookup)(next).ServeHTTP(httptest.NewRecorder(), req)
+
+			presented, ok := bearerToken(mustRequest(t, gotAuth))
+			if !ok {
+				t.Fatalf("not proxied with a token (Authorization %q)", gotAuth)
+			}
+			var claims token.Claims
+			if _, err := jwt.ParseWithClaims(presented, &claims, func(t *jwt.Token) (any, error) {
+				return iss.Keys()[0].Public, nil
+			}); err != nil {
+				t.Fatalf("minted token does not verify: %v", err)
+			}
+			if claims.Scope != want {
+				t.Errorf("%s-owned key: scope = %q, want %q", role, claims.Scope, want)
+			}
+			// The gateway's own key gates still see only the key's scopes.
+			if len(gotKeyScopes) != 1 || gotKeyScopes[0] != "coreban:write" {
+				t.Errorf("key scopes in context = %v, want the key's own", gotKeyScopes)
+			}
+		})
+	}
+}
+
+func TestEdgeIdentityKeyOfAVanishedOwnerIsRejected(t *testing.T) {
+	iss := testIssuer(t)
+	keys := stubValidator{userID: uuid.New(), keyID: "key-1", scopes: []string{"coreban:write"}}
+	lookup := func(context.Context, uuid.UUID) (string, bool, error) { return "", false, nil }
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
+	req := httptest.NewRequest(http.MethodGet, "/api/coreban/notes", nil)
+	req.Header.Set("Authorization", "Bearer key-material")
+	rec := httptest.NewRecorder()
+	EdgeIdentity("corefinance", iss, keys, lookup)(next).ServeHTTP(rec, req)
+	if called || rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, proxied = %v; want 401, not proxied", rec.Code, called)
+	}
+}
+
 func TestEdgeIdentityValidKey(t *testing.T) {
 	iss := testIssuer(t)
 	userID := uuid.New()
@@ -242,7 +303,7 @@ func TestEdgeIdentityValidKey(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
 	req.Header.Set("Authorization", "Bearer user-key-material")
-	EdgeIdentity("corefinance", iss, keys, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity("corefinance", iss, keys, stubExists(keys.userID))(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	presented, ok := bearerToken(mustRequest(t, gotAuth))
 	if !ok {
@@ -274,7 +335,7 @@ func TestEdgeIdentityInvalidKeyRejected(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/budget/expenses/", nil)
 	req.Header.Set("Authorization", "Bearer bad-key")
 	rec := httptest.NewRecorder()
-	EdgeIdentity("corefinance", iss, keys, nil)(next).ServeHTTP(rec, req)
+	EdgeIdentity("corefinance", iss, keys, stubExists(keys.userID))(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rec.Code)

@@ -40,6 +40,8 @@ func corebanScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstr
 		TokenIssuer:   iss,
 		CorebanClient: coreban.New(downstream.URL),
 		KeysService:   auth.NewKeysService(q),
+		// The edge looks up a key's owner for their restrictions.
+		AuthService: auth.NewService(q),
 	}
 	return s, q, fake, iss
 }

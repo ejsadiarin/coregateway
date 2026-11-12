@@ -256,6 +256,17 @@ func TestSelfServiceMintMatrix(t *testing.T) {
 		}
 	})
 
+	t.Run("demo guest session cannot mint any key", func(t *testing.T) {
+		h, q, _, userID := keyAuthTestSetup(t)
+		rec := doSessionRequest(t, h, userID, auth.RoleGuest, http.MethodPost, "/api/auth/keys", `{"label":"x","scopes":["coreban:write"]}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+		if len(q.keysCreated) != 0 {
+			t.Errorf("keysCreated = %d, want 0", len(q.keysCreated))
+		}
+	})
+
 	t.Run("non-admin session cannot mint admin scope", func(t *testing.T) {
 		h, q, _, userID := keyAuthTestSetup(t)
 		rec := doSessionRequest(t, h, userID, auth.RoleUser, http.MethodPost, "/api/auth/keys", `{"label":"evil","scopes":["admin"]}`)

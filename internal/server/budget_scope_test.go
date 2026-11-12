@@ -17,7 +17,7 @@ import (
 
 // budgetScopeSetup wires a Server with a real issuer, a fake downstream,
 // and the shared stub querier (admin/read/write keys). Queries stays nil:
-// these tests never send ?user_id=, so the userExists closure never fires.
+// these tests never send ?user_id=; the user lookup only finds key owners.
 func budgetScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstream) {
 	t.Helper()
 	_, q, _, _ := keyAuthTestSetup(t)
@@ -39,6 +39,8 @@ func budgetScopeSetup(t *testing.T) (*Server, *keyAuthStubQuerier, *fakeDownstre
 		TokenIssuer:       iss,
 		CorefinanceClient: corefinance.New(downstream.URL),
 		KeysService:       auth.NewKeysService(q),
+		// The edge looks up a key's owner for their restrictions.
+		AuthService: auth.NewService(q),
 	}
 	return s, q, fake
 }

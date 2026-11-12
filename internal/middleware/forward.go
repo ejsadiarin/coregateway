@@ -14,7 +14,7 @@ import (
 // Use this on route groups that proxy to microservices:
 //
 //	r.Route("/api/budget", func(r chi.Router) {
-//	    r.Use(middleware.EdgeIdentity("corefinance", issuer, keys, userExists))
+//	    r.Use(middleware.EdgeIdentity("corefinance", issuer, keys, users))
 //	    r.Use(middleware.ForwardHeaders())
 //	    r.Handle("/*", corefinanceClient.Proxy())
 //	})

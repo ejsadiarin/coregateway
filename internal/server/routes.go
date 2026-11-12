@@ -60,9 +60,9 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Post("/api/auth/demo", s.AuthHandler.LoginAsDemo)
 	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/auth/me", s.AuthHandler.Me)
 
-	// API key management: any authenticated caller may mint (owner is
-	// always the caller); the handler rejects `admin`-scope requests from
-	// non-admin-role callers. Plaintext appears in the create response
+	// API key management: any authenticated caller but the demo guest may
+	// mint (owner is always the caller); the handler rejects `admin`-scope
+	// requests from non-admin-role callers. Plaintext appears in the create response
 	// exactly once. List/revoke stay admin-only; key-authed callers
 	// additionally need the admin scope for list/revoke.
 	r.Route("/api/auth/keys", func(r chi.Router) {
@@ -105,18 +105,18 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 
-	// Existence check for ?user_id= targeting (user authority stays
-	// in the gateway; downstream never looks up users). Shared by the
-	// budget and boards proxies.
-	userExists := func(ctx context.Context, id uuid.UUID) (bool, error) {
-		_, err := s.Queries.GetUser(ctx, id)
+	// A user's role and existence, for ?user_id= targeting and for the
+	// restrictions a key carries from its owner (user authority stays in
+	// the gateway; downstream never looks up users). Shared by every proxy.
+	userLookup := func(ctx context.Context, id uuid.UUID) (string, bool, error) {
+		u, err := s.AuthService.GetUser(ctx, id)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return false, nil
+				return "", false, nil
 			}
-			return false, err
+			return "", false, err
 		}
-		return true, nil
+		return u.Role, true, nil
 	}
 
 	// budget — authenticated at the edge, streamed to corefinance-api.
@@ -124,7 +124,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// chi prefers the static /admin segment over the /* catch-all, so
 	// admin calls pass the scope gate before proxying.
 	r.Route("/api/budget", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity("corefinance", s.TokenIssuer, s.KeysService, userExists))
+		r.Use(middleware.EdgeIdentity("corefinance", s.TokenIssuer, s.KeysService, userLookup))
 		// Key-authed callers need service cover (read for GET/HEAD, write
 		// otherwise); sessions pass through to downstream role checks.
 		r.Use(auth.RequireServiceKeyScope("corefinance"))
@@ -141,7 +141,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// key scopes at the edge (coredraw:read for GET/HEAD, coredraw:write
 	// otherwise), sessions pass through to downstream checks.
 	r.Route("/api/coredraw", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity("coredraw", s.TokenIssuer, s.KeysService, userExists))
+		r.Use(middleware.EdgeIdentity("coredraw", s.TokenIssuer, s.KeysService, userLookup))
 		r.Use(auth.RequireServiceKeyScope("coredraw"))
 		r.Use(middleware.ForwardHeaders())
 		r.Handle("/*", s.CoredrawClient.Proxy())
@@ -151,7 +151,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// (audience coreban), coreban:read for GET/HEAD and coreban:write
 	// otherwise for key callers; sessions pass through to downstream checks.
 	r.Route("/api/coreban", func(r chi.Router) {
-		r.Use(middleware.EdgeIdentity("coreban", s.TokenIssuer, s.KeysService, userExists))
+		r.Use(middleware.EdgeIdentity("coreban", s.TokenIssuer, s.KeysService, userLookup))
 		r.Use(auth.RequireServiceKeyScope("coreban"))
 		r.Use(middleware.ForwardHeaders())
 		r.Handle("/*", s.CorebanClient.Proxy())

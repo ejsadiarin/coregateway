@@ -47,6 +47,12 @@ func (h *KeysHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	caller := GetUserFromContext(r)
+	// The demo guest is shared by anyone who can reach the login page; a
+	// key would outlive its session and dodge nothing it can't already do.
+	if caller != nil && caller.Role == RoleGuest {
+		helper.RespondErrorJSON(w, http.StatusForbidden, "demo accounts can't create API keys")
+		return
+	}
 	if strings.TrimSpace(req.Label) == "" {
 		helper.RespondErrorJSON(w, http.StatusBadRequest, "label is required")
 		return

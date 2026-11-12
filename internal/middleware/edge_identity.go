@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
@@ -19,9 +21,10 @@ type APIKeyValidator interface {
 	ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error)
 }
 
-// UserExistsFunc reports whether a user id exists. It backs ?user_id=
-// validation at the edge, keeping user authority in the gateway.
-type UserExistsFunc func(ctx context.Context, id uuid.UUID) (bool, error)
+// UserLookupFunc reports a user's role, and whether the user exists. It
+// backs ?user_id= validation and gives a key its owner's restrictions,
+// keeping user authority in the gateway.
+type UserLookupFunc func(ctx context.Context, id uuid.UUID) (role string, found bool, err error)
 
 // EdgeIdentity authenticates proxied requests once at the edge and creates
 // the short-lived internal JWT that downstream services verify. It accepts
@@ -38,7 +41,7 @@ type UserExistsFunc func(ctx context.Context, id uuid.UUID) (bool, error)
 // target (malformed → 400, other-target without admin scope → 403,
 // unknown user → 404) and mints a signed act_as claim, stripping the raw
 // param. Non-GET/HEAD requests ignore the param entirely.
-func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator, userExists UserExistsFunc) func(http.Handler) http.Handler {
+func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator, users UserLookupFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var userID uuid.UUID
@@ -63,7 +66,22 @@ func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator,
 					// key scopes in context so downstream scope gates can tell
 					// key callers from sessions (sessions never carry them).
 					if err == nil {
-						userID, azp, scopes = id, "api-key:"+keyID, keyScopes
+						// The key carries its owner's restrictions, never
+						// their privileges: a demo guest's key is still a
+						// guest's, but an admin's key gains no admin scope.
+						role, found, err := lookup(r.Context(), users, id)
+						if err != nil {
+							helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to verify the key's owner")
+							return
+						}
+						if !found {
+							helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
+							return
+						}
+						userID, azp, scopes = id, "api-key:"+keyID, slices.Clone(keyScopes)
+						if role == auth.RoleGuest {
+							scopes = append(scopes, "guest")
+						}
 						r = r.WithContext(auth.ContextWithKeyScopes(r.Context(), keyScopes))
 					}
 				}
@@ -72,7 +90,7 @@ func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator,
 				helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
 				return
 			}
-			actAs, ok := targeting(w, r, userID, scopes, userExists)
+			actAs, ok := targeting(w, r, userID, scopes, users)
 			if !ok {
 				return // targeting already responded
 			}
@@ -84,7 +102,7 @@ func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator,
 // targeting validates ?user_id= on reads and returns the act_as target
 // (uuid.Nil for self/untargeted). It strips the raw param in all cases and
 // responds directly on rejection, returning ok=false.
-func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes []string, userExists UserExistsFunc) (actAs uuid.UUID, ok bool) {
+func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes []string, users UserLookupFunc) (actAs uuid.UUID, ok bool) {
 	raw := r.URL.Query().Get("user_id")
 	strip := func() {
 		q := r.URL.Query()
@@ -119,11 +137,7 @@ func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes 
 		helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
 		return uuid.Nil, false
 	}
-	if userExists == nil {
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to validate target user")
-		return uuid.Nil, false
-	}
-	exists, err := userExists(r.Context(), target)
+	_, exists, err := lookup(r.Context(), users, target)
 	if err != nil {
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to validate target user")
 		return uuid.Nil, false
@@ -133,6 +147,15 @@ func targeting(w http.ResponseWriter, r *http.Request, caller uuid.UUID, scopes 
 		return uuid.Nil, false
 	}
 	return target, true
+}
+
+// lookup asks users about id. Without a lookup nothing can be verified,
+// so it fails rather than guess.
+func lookup(ctx context.Context, users UserLookupFunc, id uuid.UUID) (string, bool, error) {
+	if users == nil {
+		return "", false, errors.New("edge identity: no user lookup configured")
+	}
+	return users(ctx, id)
 }
 
 func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, downstream string, userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) {
