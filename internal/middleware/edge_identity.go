@@ -45,11 +45,15 @@ func EdgeIdentity(downstream string, issuer *token.Issuer, keys APIKeyValidator,
 			var azp string
 			var scopes []string
 			if user := auth.GetUserFromContext(r); user != nil {
-				// The edge knows the user's role; downstream does not. Grant
-				// the admin scope here so admin endpoints can authorize
-				// locally from the verified scope claim.
-				if user.Role == auth.RoleAdmin {
+				// The edge knows the user's role; downstream does not. Carry
+				// it as a scope so services authorize locally from the
+				// verified claim: admin for admin endpoints, guest so a
+				// service can refuse the demo guest (e.g. coreban uploads).
+				switch user.Role {
+				case auth.RoleAdmin:
 					scopes = []string{"admin"}
+				case auth.RoleGuest:
+					scopes = []string{"guest"}
 				}
 				userID, azp = user.ID, "session"
 			} else if keys != nil {

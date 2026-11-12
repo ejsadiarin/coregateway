@@ -115,6 +115,44 @@ func TestEdgeIdentityAdminSessionGrantsAdminScope(t *testing.T) {
 	}
 }
 
+// A session's role reaches downstream services only as a scope: admin for
+// admins, guest for the demo guest (so a service can refuse it, e.g.
+// coreban uploads), and none for a normal user.
+func TestEdgeIdentitySessionScopeFollowsRole(t *testing.T) {
+	iss := testIssuer(t)
+	for role, want := range map[string]string{
+		auth.RoleAdmin: "admin",
+		auth.RoleGuest: "guest",
+		auth.RoleUser:  "",
+	} {
+		t.Run(role, func(t *testing.T) {
+			var gotAuth string
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+			})
+			req := httptest.NewRequest(http.MethodGet, "/api/budget/remaining", nil)
+			req = req.WithContext(auth.ContextWithUser(req.Context(), &auth.UserContext{
+				ID: uuid.New(), Email: role + "@example.com", Role: role,
+			}))
+			EdgeIdentity("corefinance", iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+
+			presented, ok := bearerToken(mustRequest(t, gotAuth))
+			if !ok {
+				t.Fatalf("Authorization header is not a bearer token: %q", gotAuth)
+			}
+			var claims token.Claims
+			if _, err := jwt.ParseWithClaims(presented, &claims, func(t *jwt.Token) (any, error) {
+				return iss.Keys()[0].Public, nil
+			}); err != nil {
+				t.Fatalf("minted token does not verify: %v", err)
+			}
+			if claims.Scope != want {
+				t.Errorf("%s session: scope = %q, want %q", role, claims.Scope, want)
+			}
+		})
+	}
+}
+
 func mustRequest(t *testing.T, authHeader string) *http.Request {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
