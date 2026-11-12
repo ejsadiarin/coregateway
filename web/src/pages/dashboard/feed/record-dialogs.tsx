@@ -13,9 +13,22 @@ import {
   type FeedNote,
 } from "@/lib/kanban";
 import type { KanbanReminder } from "@/types/kanban";
+import type {
+  CreateExpenseRequest,
+  CreateIncomeRequest,
+  Expense,
+  Income,
+  UpdateExpenseRequest,
+  UpdateIncomeRequest,
+} from "@/types/api";
+import type { BudgetKind } from "@/types/feed";
+import { createExpense, createIncome, updateExpense, updateIncome } from "@/lib/api";
+import { postBudgetNote } from "@/lib/feed";
+import { ExpenseForm } from "@/components/budget/expense-form";
+import { IncomeForm } from "@/components/budget/income-form";
 import { ReminderForm } from "@/pages/dashboard/kanban/reminders";
-import { reminderEdit } from "@/pages/dashboard/kanban/schedule";
-import { columnOption } from "@/pages/dashboard/kanban/columns";
+import { reminderEdit } from "@/lib/kanban-schedule";
+import { columnOption } from "@/lib/kanban-columns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -217,5 +230,131 @@ function CardForm({ state, onCancel, onSaved }: { state: CardDialogState; onCanc
         </Button>
       </div>
     </form>
+  );
+}
+
+// What the budget dialog is doing: capturing a new expense or income from
+// the Feed (its description pre-filled with text), or editing a linked one.
+export type BudgetDialogState =
+  | { mode: "new"; text: string }
+  | { mode: "edit"; kind: "expense"; record: Expense }
+  | { mode: "edit"; kind: "income"; record: Income };
+
+// BudgetDialog shows corefinance's own expense and income forms. A new
+// record is created in corefinance first, then its note in coreban; if the
+// note fails, the record stays and onSaved gets a warning to show.
+export function BudgetDialog({
+  state,
+  onClose,
+  onSaved,
+}: {
+  state: BudgetDialogState | null;
+  onClose: () => void;
+  onSaved: (warning?: string) => void;
+}) {
+  const [kind, setKind] = useState<BudgetKind>("expense");
+  const [error, setError] = useState("");
+  const shownKind = state?.mode === "edit" ? state.kind : kind;
+
+  const close = () => {
+    setKind("expense");
+    setError("");
+    onClose();
+  };
+
+  const save = async (create: () => Promise<{ id: string }>, k: BudgetKind) => {
+    setError("");
+    let record: { id: string };
+    try {
+      record = await create();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Couldn't save this ${k}.`);
+      return;
+    }
+    setKind("expense");
+    try {
+      await postBudgetNote(k, record.id);
+      onSaved();
+    } catch (err) {
+      onSaved(`The ${k} was saved, but its note wasn't added to the Feed: ${err instanceof Error ? err.message : err}`);
+    }
+  };
+
+  const update = async (run: () => Promise<unknown>) => {
+    setError("");
+    try {
+      await run();
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Couldn't save this ${shownKind}.`);
+    }
+  };
+
+  return (
+    <Dialog open={state !== null} onOpenChange={(open) => !open && close()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{state?.mode === "edit" ? `Edit ${shownKind}` : `New ${shownKind}`}</DialogTitle>
+          <DialogDescription>
+            {state?.mode === "edit"
+              ? `Changes show on the ${shownKind === "expense" ? "Expenses" : "Incomes"} page too.`
+              : "Saved to your budget, with a note in the Feed that shows it."}
+          </DialogDescription>
+        </DialogHeader>
+        {state?.mode === "new" && (
+          <div role="radiogroup" aria-label="Record kind" className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1">
+            {(["expense", "income"] as const).map((k) => (
+              <Button
+                key={k}
+                type="button"
+                role="radio"
+                aria-checked={kind === k}
+                variant={kind === k ? "secondary" : "ghost"}
+                className="min-h-11 capitalize"
+                onClick={() => {
+                  setError("");
+                  setKind(k);
+                }}
+              >
+                {k}
+              </Button>
+            ))}
+          </div>
+        )}
+        {state?.mode === "new" && kind === "expense" && (
+          <ExpenseForm
+            key="new-expense"
+            initialData={{ description: state.text }}
+            onCancel={close}
+            onSubmit={(data) => save(() => createExpense(data as CreateExpenseRequest), "expense")}
+          />
+        )}
+        {state?.mode === "new" && kind === "income" && (
+          <IncomeForm
+            key="new-income"
+            initialData={{ description: state.text }}
+            onCancel={close}
+            onSubmit={(data) => save(() => createIncome(data as CreateIncomeRequest), "income")}
+          />
+        )}
+        {state?.mode === "edit" && state.kind === "expense" && (
+          <ExpenseForm
+            key={state.record.id}
+            initialData={state.record}
+            onCancel={close}
+            onSubmit={(data) => update(() => updateExpense(state.record.id, data as UpdateExpenseRequest))}
+          />
+        )}
+        {state?.mode === "edit" && state.kind === "income" && (
+          <IncomeForm
+            key={state.record.id}
+            initialData={state.record}
+            onCancel={close}
+            onSubmit={(data) => update(() => updateIncome(state.record.id, data as UpdateIncomeRequest))}
+          />
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+      </DialogContent>
+    </Dialog>
   );
 }

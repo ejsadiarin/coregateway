@@ -16,7 +16,7 @@ import {
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { columnOption, statusLabel } from "./columns";
+import { columnOption, statusLabel } from "@/lib/kanban-columns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { Archive, ArrowLeft, MoreHorizontal, Plus, Tag, Trash2 } from "lucide-react";
@@ -59,7 +59,7 @@ import {
   isOverdue,
   reminderStatus,
   toInputValue,
-} from "@/pages/dashboard/kanban/schedule";
+} from "@/lib/kanban-schedule";
 import { ReminderForm } from "@/pages/dashboard/kanban/reminders";
 import { dropIndex, moveCard } from "@/pages/dashboard/kanban/drop";
 import { cn } from "@/lib/utils";

@@ -26,6 +26,11 @@ export const test = base.extend<{ consoleErrors: string[] }>({
 });
 export { expect };
 
+// The gateway the web calls, for requests a test makes "elsewhere" with the
+// page's own session. scripts/e2e-up.sh serves it on :18080 beside the web.
+export const API_URL =
+  process.env.E2E_API_URL ?? (process.env.E2E_BASE_URL ?? "http://localhost:3001").replace(/:3001$/, ":18080");
+
 export async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(ADMIN.email);

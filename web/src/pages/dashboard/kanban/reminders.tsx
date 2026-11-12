@@ -22,7 +22,7 @@ import {
   type ReminderStatus,
   type ScheduleField,
   type ScheduleFields,
-} from "@/pages/dashboard/kanban/schedule";
+} from "@/lib/kanban-schedule";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

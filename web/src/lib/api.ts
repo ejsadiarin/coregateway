@@ -439,6 +439,28 @@ export async function fetchExpenses(
   return wrapPaginated(data, params.page, params.page_size);
 }
 
+// The most ids corefinance's batch read takes at once.
+const BATCH_IDS = 100;
+
+// fetchByIds reads the caller's records among ids, a hundred at a time.
+// An id corefinance leaves out was deleted (or isn't the caller's).
+async function fetchByIds<T>(path: string, ids: string[]): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < ids.length; i += BATCH_IDS) {
+    const chunk = ids.slice(i, i + BATCH_IDS).map(encodeURIComponent).join(',');
+    const res = await fetch(url + `/api/budget/${path}?ids=${chunk}`, { credentials: 'include' });
+    if (!res.ok) {
+      throw new Error(`Error fetching ${path}: ${res.status}`);
+    }
+    out.push(...((await res.json()) ?? []));
+  }
+  return out;
+}
+
+export const fetchExpensesByIds = (ids: string[]) => fetchByIds<Expense>('expenses', ids);
+
+export const fetchIncomesByIds = (ids: string[]) => fetchByIds<Income>('incomes', ids);
+
 export async function fetchExpense(id: string): Promise<Expense> {
   const res = await fetch(url + `/api/budget/expenses/${id}`, {
     credentials: 'include'

@@ -13,6 +13,7 @@ import {
 } from "./feed";
 import type { FeedPage, Note, NoteCard, NoteLink } from "@/types/feed";
 import type { KanbanReminder } from "@/types/kanban";
+import type { Expense, Income } from "@/types/api";
 
 const note = (id: string, text = id): Note => ({
   id,
@@ -175,14 +176,19 @@ describe("linkSummary", () => {
     expect(linkSummary({ kind: "reminder", deleted: false, reminder: daily }, 2026).detail).toBe("Daily at 07:00");
   });
 
-  it("names a card with its board and column", () => {
+  it("names a card with its board, column, and status", () => {
     expect(linkSummary({ kind: "card", deleted: false, card }, 2026)).toEqual({
       title: "fix NAS backup",
-      detail: "Homelab · Doing",
+      detail: "Homelab · Doing · In progress",
     });
     expect(linkSummary({ kind: "card", deleted: false, card: { ...card, archived_at: "2026-11-12T00:00:00Z" } }, 2026).detail).toBe(
-      "Homelab · Doing · archived",
+      "Homelab · Doing · In progress · archived",
     );
+  });
+
+  it("says a card's status once when its column is named after it", () => {
+    const todo = { ...card, column_name: "Todo", status: "todo" as const };
+    expect(linkSummary({ kind: "card", deleted: false, card: todo }, 2026).detail).toBe("Homelab · Todo");
   });
 
   it("marks a deleted record, even one that left nothing behind", () => {
@@ -214,6 +220,78 @@ describe("archivePrompt", () => {
 describe("noteCopyText", () => {
   it("copies a plain note's text, and a linked note's summary", () => {
     expect(noteCopyText(note("a", "buy milk"), 2026)).toBe("buy milk");
-    expect(noteCopyText(linked({ kind: "card", deleted: false, card }), 2026)).toBe("fix NAS backup · Homelab · Doing");
+    expect(noteCopyText(linked({ kind: "card", deleted: false, card }), 2026)).toBe("fix NAS backup · Homelab · Doing · In progress");
+  });
+});
+
+const lunch: Expense = {
+  id: "e1",
+  description: "Lunch",
+  amount: 250,
+  currency: "PHP",
+  category_id: "food",
+  expense_date: "2026-11-12",
+  recurring_type: "one-time",
+  priority: "need",
+  status: "posted",
+  is_debt: false,
+  created_at: "2026-11-12T04:00:00Z",
+  updated_at: "2026-11-12T04:00:00Z",
+};
+
+const salary: Income = {
+  id: "i1",
+  description: "Salary",
+  amount: "20000.00" as unknown as number,
+  currency: "PHP",
+  date: "2026-11-15",
+  recurring_type: "monthly",
+  priority: "need",
+  status: "posted",
+  created_at: "2026-11-12T04:00:00Z",
+  updated_at: "2026-11-12T04:00:00Z",
+};
+
+const expenseNote = (id: string, recordId: string, deleted = false, expense?: Expense): Note =>
+  linked({ kind: "expense", deleted, record_id: recordId, expense });
+
+const category = (id: string) => (id === "food" ? "Food" : undefined);
+
+describe("linkSummary for budget records", () => {
+  it("shows an expense's amount and description, then its category and day", () => {
+    expect(linkSummary({ kind: "expense", deleted: false, record_id: "e1", expense: lunch }, 2026, category)).toEqual({
+      title: "₱250.00 · Lunch",
+      detail: "Food · Thu 12 Nov",
+    });
+  });
+
+  it("shows how a recurring income repeats, and amounts corefinance sends as text", () => {
+    expect(linkSummary({ kind: "income", deleted: false, record_id: "i1", income: salary }, 2026)).toEqual({
+      title: "₱20,000.00 · Salary",
+      detail: "Sun 15 Nov · monthly",
+    });
+  });
+
+  it("names the kind until the record loads, and marks a deleted one", () => {
+    expect(linkSummary({ kind: "expense", deleted: false, record_id: "e1" }, 2026)).toEqual({ title: "Expense", detail: "" });
+    expect(linkSummary({ kind: "income", deleted: true, record_id: "i1" }, 2026).title).toBe("Income (deleted)");
+    expect(linkSummary({ kind: "expense", deleted: true, record_id: "e1", expense: lunch }, 2026).title).toBe(
+      "₱250.00 · Lunch (deleted)",
+    );
+  });
+});
+
+
+
+
+describe("archivePrompt for budget records", () => {
+  it("names the expense or income that archiving its note deletes for good", () => {
+    expect(archivePrompt(expenseNote("n", "e1", false, lunch))).toBe(
+      "Archive this note and delete its expense “Lunch” (₱250.00)? The expense can't be brought back.",
+    );
+    expect(archivePrompt(linked({ kind: "income", deleted: false, record_id: "i1" }))).toBe(
+      "Archive this note and delete its income? The income can't be brought back.",
+    );
+    expect(archivePrompt(expenseNote("n", "e1", true, lunch))).toBeNull();
   });
 });

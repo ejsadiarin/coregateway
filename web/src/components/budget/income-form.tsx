@@ -15,11 +15,16 @@ interface IncomeFormProps {
 
 export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: IncomeFormProps) {
   const [formData, setFormData] = useState<CreateIncomeRequest>({
-    amount: initialData?.amount || 0,
+    // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
+    amount: Number(initialData?.amount) || 0,
     currency: initialData?.currency || "PHP",
     date: initialData?.date || new Date().toISOString().split('T')[0],
     description: initialData?.description || "",
     recurring_type: initialData?.recurring_type || "one-time",
+    // corefinance requires both; the form doesn't ask, so keep what an
+    // edited income has, as the expense form does.
+    priority: initialData?.priority || "need",
+    status: initialData?.status || "posted",
     start_date: initialData?.start_date || undefined,
     end_date: initialData?.end_date || undefined,
   });

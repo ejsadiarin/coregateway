@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  BanknoteArrowUp,
   BellRing,
   ChevronDown,
   Copy,
@@ -10,9 +11,11 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  ReceiptText,
   SendHorizontal,
   SquareKanban,
   Trash2,
+  Wallet,
 } from "lucide-react";
 import {
   appendNote,
@@ -22,6 +25,7 @@ import {
   editNoteText,
   feedNotes,
   fetchFeed,
+  linkKindName,
   linkSummary,
   MAX_NOTE_LENGTH,
   noteCopyText,
@@ -33,7 +37,10 @@ import {
   splitLinks,
   type FeedData,
 } from "@/lib/feed";
+import { budgetRecordOf, deleteBudgetRecord, isBudgetLink } from "@/lib/feed-records";
+import { budgetKeys } from "@/hooks/use-budget";
 import type { Note, NoteLink } from "@/types/feed";
+import { useBudgetRecords, type CategoryName } from "./use-budget-records";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,7 +61,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CardDialog, ReminderDialog, type CardDialogState, type ReminderDialogState } from "./record-dialogs";
+import {
+  BudgetDialog,
+  CardDialog,
+  ReminderDialog,
+  type BudgetDialogState,
+  type CardDialogState,
+  type ReminderDialogState,
+} from "./record-dialogs";
 
 const feedKey = ["coreban", "feed"];
 
@@ -82,16 +96,16 @@ function NoteText({ text, className }: { text: string; className?: string }) {
   );
 }
 
-const linkIcon = (link: NoteLink) => (link.kind === "reminder" ? BellRing : SquareKanban);
+const linkIcons = { reminder: BellRing, card: SquareKanban, expense: ReceiptText, income: BanknoteArrowUp };
 
 // A linked note's record on one line: its icon, what it is, and when or
 // where. A deleted record is muted and marked "(deleted)".
-function LinkLine({ link, className }: { link: NoteLink; className?: string }) {
-  const { title, detail } = linkSummary(link, new Date().getFullYear());
-  const Icon = linkIcon(link);
+function LinkLine({ link, categoryName, className }: { link: NoteLink; categoryName?: CategoryName; className?: string }) {
+  const { title, detail } = linkSummary(link, new Date().getFullYear(), categoryName);
+  const Icon = linkIcons[link.kind];
   return (
     <span className={cn("flex min-w-0 items-start gap-2 text-left text-sm leading-relaxed", className)}>
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-label={link.kind === "reminder" ? "Reminder" : "Card"} />
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-label={linkKindName[link.kind]} />
       <span className="min-w-0">
         <span className={cn("block break-words", link.deleted && "text-muted-foreground")}>{title}</span>
         {detail && (
@@ -159,7 +173,7 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
         {link && !link.deleted && (
           <DropdownMenuItem className={item} onSelect={actions.openRecord}>
             <Pencil className="h-4 w-4" aria-hidden />
-            {link.kind === "reminder" ? "Edit reminder" : "Edit card"}
+            Edit {link.kind}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem className={item} onSelect={actions.archive}>
@@ -193,7 +207,17 @@ function NoteTime({ note, className }: { note: Note; className?: string }) {
   );
 }
 
-function LiveNote({ note, actions, saving }: { note: Note; actions: NoteActions; saving: boolean }) {
+function LiveNote({
+  note,
+  actions,
+  saving,
+  categoryName,
+}: {
+  note: Note;
+  actions: NoteActions;
+  saving: boolean;
+  categoryName: CategoryName;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const save = () => {
     if (draft === null || saving) return;
@@ -233,12 +257,12 @@ function LiveNote({ note, actions, saving }: { note: Note; actions: NoteActions;
       {link ? (
         link.deleted ? (
           <div className={bubble}>
-            <LinkLine link={link} />
+            <LinkLine link={link} categoryName={categoryName} />
             <NoteTime note={note} className="text-right" />
           </div>
         ) : (
           <button type="button" onClick={actions.openRecord} className={cn(bubble, "hover:border-primary/40")}>
-            <LinkLine link={link} />
+            <LinkLine link={link} categoryName={categoryName} />
             <NoteTime note={note} className="text-right" />
           </button>
         )
@@ -260,14 +284,16 @@ function ArchivedNote({
   onRestore,
   onDelete,
   restoring,
+  categoryName,
 }: {
   note: Note;
   onRestore: () => void;
   onDelete: () => void;
   restoring: boolean;
+  categoryName: CategoryName;
 }) {
   const [open, setOpen] = useState(false);
-  const preview = note.link ? linkSummary(note.link, new Date().getFullYear()).title : note.text;
+  const preview = note.link ? linkSummary(note.link, new Date().getFullYear(), categoryName).title : note.text;
   return (
     <div className="ml-auto w-full max-w-[85%] rounded-xl border border-dashed border-border">
       <button
@@ -284,7 +310,7 @@ function ArchivedNote({
       {open && (
         <div className="border-t border-border px-3 pb-2 pt-2">
           {note.link ? (
-            <LinkLine link={note.link} className="text-muted-foreground" />
+            <LinkLine link={note.link} categoryName={categoryName} className="text-muted-foreground" />
           ) : (
             <NoteText text={note.text} className="text-muted-foreground" />
           )}
@@ -314,6 +340,7 @@ export default function FeedPage() {
   const [archiving, setArchiving] = useState<{ note: Note; prompt: string } | null>(null);
   const [reminderDialog, setReminderDialog] = useState<ReminderDialogState | null>(null);
   const [cardDialog, setCardDialog] = useState<CardDialogState | null>(null);
+  const [budgetDialog, setBudgetDialog] = useState<BudgetDialogState | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -328,12 +355,15 @@ export default function FeedPage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
-  const notes = feedNotes(feedQuery.data);
+  const feed = feedNotes(feedQuery.data);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
   const pageCount = feedQuery.data?.pages.length ?? 0;
 
   const update = (f: (data: FeedData | undefined) => FeedData | undefined) =>
     queryClient.setQueryData<FeedData>(feedKey, f);
+
+  const { notes, categoryName } = useBudgetRecords(feed, feedKey, (saved) => update((d) => replaceNote(d, saved)));
+
   const fail = (fallback: string) => (err: unknown) =>
     setActionError(err instanceof Error ? err.message : fallback);
 
@@ -396,13 +426,25 @@ export default function FeedPage() {
     onError: fail("Couldn't edit this note"),
   });
 
+  // Archiving a live expense or income note deletes the record in
+  // corefinance first, then archives the note with what it last showed.
+  // Never the other way round: if the second step fails, the next load
+  // finds the record gone and the note reads deleted.
   const archiveMutation = useMutation({
-    mutationFn: ({ id, archived }: { id: string; archived: boolean }) => setNoteArchived(id, archived),
+    mutationFn: async ({ note, archived }: { note: Note; archived: boolean }) => {
+      const link = note.link;
+      if (archived && isBudgetLink(link) && !link.deleted) {
+        await deleteBudgetRecord(link.kind, link.record_id);
+        return setNoteArchived(note.id, true, budgetRecordOf(link));
+      }
+      return setNoteArchived(note.id, archived);
+    },
     onSuccess: (note) => {
       update((d) => replaceNote(d, note));
       // Archiving or restoring may have archived, restored, or deleted the
       // note's record: let its own pages read it afresh.
-      if (note.link) queryClient.invalidateQueries({ queryKey: ["kanban"] });
+      if (isBudgetLink(note.link)) queryClient.invalidateQueries({ queryKey: budgetKeys.all });
+      else if (note.link) queryClient.invalidateQueries({ queryKey: ["kanban"] });
     },
     onError: fail("Couldn't change this note"),
   });
@@ -424,12 +466,14 @@ export default function FeedPage() {
   const recordSaved = (captured: boolean) => {
     setReminderDialog(null);
     setCardDialog(null);
+    setBudgetDialog(null);
     if (captured) {
       setDraft("");
       toBottom.current = true;
     }
     queryClient.invalidateQueries({ queryKey: feedKey });
     queryClient.invalidateQueries({ queryKey: ["kanban"] });
+    queryClient.invalidateQueries({ queryKey: budgetKeys.all });
   };
 
   const send = () => {
@@ -452,7 +496,7 @@ export default function FeedPage() {
 
   const actionsFor = (note: Note): NoteActions => ({
     copy: () =>
-      copyText(noteCopyText(note, new Date().getFullYear())).then(
+      copyText(noteCopyText(note, new Date().getFullYear(), categoryName)).then(
         () => setStatus("Copied."),
         fail("Couldn't copy this note"),
       ),
@@ -471,11 +515,13 @@ export default function FeedPage() {
         const c = link.card;
         navigate(`/dashboard/kanban/${c.board_id}${c.archived_at ? "" : `?card=${c.id}`}`);
       }
+      if (link.kind === "expense" && link.expense) setBudgetDialog({ mode: "edit", kind: "expense", record: link.expense });
+      if (link.kind === "income" && link.income) setBudgetDialog({ mode: "edit", kind: "income", record: link.income });
     },
     archive: () => {
       const prompt = archivePrompt(note);
       if (prompt) setArchiving({ note, prompt });
-      else archiveMutation.mutate({ id: note.id, archived: true });
+      else archiveMutation.mutate({ note, archived: true });
     },
     erase: () => setDeleting(note),
   });
@@ -542,11 +588,17 @@ export default function FeedPage() {
                   <ArchivedNote
                     note={note}
                     restoring={archiveMutation.isPending}
-                    onRestore={() => archiveMutation.mutate({ id: note.id, archived: false })}
+                    onRestore={() => archiveMutation.mutate({ note, archived: false })}
                     onDelete={() => setDeleting(note)}
+                    categoryName={categoryName}
                   />
                 ) : (
-                  <LiveNote note={note} saving={editMutation.isPending} actions={actionsFor(note)} />
+                  <LiveNote
+                    note={note}
+                    saving={editMutation.isPending}
+                    actions={actionsFor(note)}
+                    categoryName={categoryName}
+                  />
                 )}
               </li>
             ))}
@@ -585,6 +637,15 @@ export default function FeedPage() {
             <Plus className="h-4 w-4" aria-hidden />
             Card
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            onClick={() => setBudgetDialog({ mode: "new", text: captureText })}
+          >
+            <Wallet className="h-4 w-4" aria-hidden />
+            Budget
+          </Button>
         </div>
         <div className="flex items-end gap-2">
           <Textarea
@@ -614,6 +675,14 @@ export default function FeedPage() {
         onClose={() => setCardDialog(null)}
         onSaved={() => recordSaved(cardDialog?.note === "new")}
       />
+      <BudgetDialog
+        state={budgetDialog}
+        onClose={() => setBudgetDialog(null)}
+        onSaved={(warning) => {
+          recordSaved(budgetDialog?.mode === "new");
+          if (warning) setActionError(warning);
+        }}
+      />
 
       <AlertDialog open={archiving !== null} onOpenChange={(open) => !open && setArchiving(null)}>
         <AlertDialogContent>
@@ -625,7 +694,7 @@ export default function FeedPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (archiving) archiveMutation.mutate({ id: archiving.note.id, archived: true });
+                if (archiving) archiveMutation.mutate({ note: archiving.note, archived: true });
                 setArchiving(null);
               }}
             >

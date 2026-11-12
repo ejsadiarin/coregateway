@@ -44,6 +44,8 @@ export function EditIncomeDialog({
             date: income.date,
             description: income.description,
             recurring_type: income.recurring_type,
+            priority: income.priority,
+            status: income.status,
             start_date: income.start_date,
             end_date: income.end_date,
           }}

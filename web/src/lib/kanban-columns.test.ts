@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnOption } from "./columns";
+import { columnOption } from "@/lib/kanban-columns";
 
 describe("columnOption", () => {
   it("adds the status when the column's name differs from it", () => {

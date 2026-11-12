@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BellOff, BellRing } from "lucide-react";
 import { fetchKanbanSettings, saveKanbanSettings, KanbanRequestError } from "@/lib/kanban";
 import type { KanbanSettings } from "@/types/kanban";
-import { zoneLabel } from "@/pages/dashboard/kanban/schedule";
+import { zoneLabel } from "@/lib/kanban-schedule";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

@@ -19,7 +19,8 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
 
   const [formData, setFormData] = useState<CreateExpenseRequest>({
     description: initialData?.description || "",
-    amount: initialData?.amount || 0,
+    // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
+    amount: Number(initialData?.amount) || 0,
     currency: initialData?.currency || "PHP",
     category_id: initialData?.category_id,
     expense_date: initialData?.expense_date || new Date().toISOString().split('T')[0],

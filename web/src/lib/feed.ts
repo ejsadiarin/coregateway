@@ -1,7 +1,11 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import { format, isSameDay, isSameYear } from "date-fns";
-import type { FeedPage, Note, NoteLink } from "@/types/feed";
-import { describeSchedule, formatWall } from "@/pages/dashboard/kanban/schedule";
+import type { BudgetKind, FeedPage, Note, NoteLink } from "@/types/feed";
+import type { Expense, Income } from "@/types/api";
+import { budgetRecordOf, isBudgetLink } from "@/lib/feed-records";
+import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
+import { columnOption } from "@/lib/kanban-columns";
+import { formatPeso } from "@/lib/format";
 import { apiBaseUrl } from "@/lib/api";
 
 const notesUrl = `${apiBaseUrl}/api/coreban/notes`;
@@ -52,8 +56,26 @@ export const postNote = (text: string) => send("POST", notesUrl, { text }, "post
 export const editNoteText = (id: string, text: string) =>
   send("PATCH", `${notesUrl}/${id}`, { text }, "edit this note");
 
-export const setNoteArchived = (id: string, archived: boolean) =>
-  send("PATCH", `${notesUrl}/${id}`, { archived }, archived ? "archive this note" : "restore this note");
+// setNoteArchived archives or restores a note. Archiving an expense or
+// income note sends the content it last showed as its snapshot: the record
+// was deleted in corefinance just before.
+export const setNoteArchived = (id: string, archived: boolean, snapshot?: Expense | Income) =>
+  send(
+    "PATCH",
+    `${notesUrl}/${id}`,
+    snapshot ? { archived, snapshot } : { archived },
+    archived ? "archive this note" : "restore this note",
+  );
+
+// postBudgetNote adds a note to the end of the Feed for an expense or
+// income just created in corefinance.
+export const postBudgetNote = (kind: BudgetKind, recordId: string) =>
+  send("POST", notesUrl, { link: { kind, id: recordId } }, `add this ${kind}'s note`);
+
+// saveSnapshot keeps what the Feed last showed of a record it found gone.
+// coreban keeps only the first one any device sends.
+export const saveSnapshot = (id: string, snapshot: Expense | Income) =>
+  send("PATCH", `${notesUrl}/${id}`, { snapshot }, "save this note's last content");
 
 export async function deleteNote(id: string): Promise<void> {
   const res = await fetch(`${notesUrl}/${id}`, { method: "DELETE", credentials: "include" });
@@ -171,13 +193,50 @@ export async function copyText(text: string): Promise<void> {
   if (!ok) throw new Error("Couldn't copy this note");
 }
 
+// budgetDay shows the calendar day corefinance stores ("2026-11-12" or
+// a midnight timestamp) without shifting it into another timezone.
+function budgetDay(date: string, currentYear: number): string {
+  const [y, m, d] = date.slice(0, 10).split("-").map(Number);
+  const day = new Date(y, m - 1, d);
+  if (Number.isNaN(day.getTime())) return "";
+  return format(day, y === currentYear ? "EEE d MMM" : "EEE d MMM yyyy");
+}
+
+// linkKindName names each kind of linked record as the owner reads it.
+export const linkKindName: Record<NoteLink["kind"], string> = {
+  reminder: "Reminder",
+  card: "Card",
+  expense: "Expense",
+  income: "Income",
+};
+
 // linkSummary is the one line a linked note shows about its record: what
-// it is, and when (a reminder's next send) or where (a card's board and
-// column). Times are the owner's wall clock, as coreban renders them.
-export function linkSummary(link: NoteLink, currentYear: number): { title: string; detail: string } {
+// it is, and when (a reminder's next send, a budget record's day) or where
+// (a card's board, column, and status; a budget record's category). Times
+// are the owner's wall clock, as coreban renders them; a budget record's
+// day is the calendar day corefinance stores.
+export function linkSummary(
+  link: NoteLink,
+  currentYear: number,
+  categoryName: (id: string) => string | undefined = () => undefined,
+): { title: string; detail: string } {
   let title: string;
   let detail = "";
-  if (link.kind === "reminder") {
+  if (isBudgetLink(link)) {
+    const r = budgetRecordOf(link);
+    title = linkKindName[link.kind];
+    if (r) {
+      title = [formatPeso(r.amount, r.currency), r.description].filter(Boolean).join(" · ");
+      const day = "expense_date" in r ? r.expense_date : r.date;
+      detail = [
+        r.category_id && categoryName(r.category_id),
+        day && budgetDay(day, currentYear),
+        r.recurring_type !== "one-time" && r.recurring_type,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    }
+  } else if (link.kind === "reminder") {
     const r = link.reminder;
     title = r?.message ?? "Reminder";
     if (r) {
@@ -187,7 +246,10 @@ export function linkSummary(link: NoteLink, currentYear: number): { title: strin
   } else {
     const c = link.card;
     title = c?.title ?? "Card";
-    if (c) detail = `${c.board_name} · ${c.column_name}${c.archived_at ? " · archived" : ""}`;
+    if (c) {
+      const where = columnOption({ name: c.column_name, status: c.status });
+      detail = `${c.board_name} · ${where}${c.archived_at ? " · archived" : ""}`;
+    }
   }
   return { title: link.deleted ? `${title} (deleted)` : title, detail };
 }
@@ -204,13 +266,24 @@ export function archivePrompt(note: Note): string | null {
   if (link.kind === "card" && link.card && !link.card.archived_at) {
     return `Archive this note and archive its card \u201c${link.card.title}\u201d? Restore the note to bring the card back.`;
   }
+  if (isBudgetLink(link)) {
+    const r = budgetRecordOf(link);
+    const what = r
+      ? ` \u201c${r.description || linkKindName[link.kind]}\u201d (${formatPeso(r.amount, r.currency)})`
+      : "";
+    return `Archive this note and delete its ${link.kind}${what}? The ${link.kind} can't be brought back.`;
+  }
   return null;
 }
 
 // noteCopyText is what Copy puts on the clipboard: a plain note's text, or
 // a linked note's one-line summary.
-export function noteCopyText(note: Note, currentYear: number): string {
+export function noteCopyText(
+  note: Note,
+  currentYear: number,
+  categoryName?: (id: string) => string | undefined,
+): string {
   if (!note.link) return note.text;
-  const { title, detail } = linkSummary(note.link, currentYear);
+  const { title, detail } = linkSummary(note.link, currentYear, categoryName);
   return detail ? `${title} · ${detail}` : title;
 }

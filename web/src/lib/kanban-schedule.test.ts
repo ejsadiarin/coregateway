@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderEdit, reminderStatus, toInputValue, zoneLabel } from "@/pages/dashboard/kanban/schedule";
+import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderEdit, reminderStatus, toInputValue, zoneLabel } from "@/lib/kanban-schedule";
 import type { KanbanReminder, KanbanSchedule } from "@/types/kanban";
 
 // coreban renders reminder times in the owner's timezone, so the wall

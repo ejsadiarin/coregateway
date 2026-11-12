@@ -2,7 +2,7 @@
 # scripts/e2e-up.sh — start a disposable local stack for browser e2e runs.
 #
 # Never touches the databases in .env: Postgres and ntfy run as throwaway
-# Docker containers, and the gateway, coreban, and the web dev server run
+# Docker containers, and the gateway, coreban, corefinance, and the web run
 # natively against them with fixed test credentials. Every run starts from
 # an empty database. Stop it with scripts/e2e-down.sh.
 #
@@ -12,6 +12,7 @@
 #                                user "owner" reads coreban-e2e
 #   gateway   127.0.0.1:18080   COREBAN_URL -> :16972
 #   coreban   127.0.0.1:16972   REMINDER_CAP=5 (low, so the cap is testable)
+#   corefinance 127.0.0.1:16969 (the Feed's expense and income notes)
 #   web       http://localhost:3001  (VITE_API_URL -> :18080)
 #
 # These are the native-run offsets, so the stack can coexist with
@@ -51,16 +52,17 @@ for cmd in docker goose go pnpm curl openssl; do
   command -v "$cmd" >/dev/null || die "missing $cmd"
 done
 [ -f "$E2E/pids" ] && die "a stack is already up; run scripts/e2e-down.sh first"
-for port in 55432 18090 18080 16972 3001; do
+for port in 55432 18090 18080 16972 16969 3001; do
   ss -ltn "sport = :$port" | grep -q LISTEN && die "port $port is in use"
 done
 
 mkdir -p "$E2E/bin"
 : > "$E2E/pids"
 
-log "building gateway and coreban"
+log "building gateway, coreban, and corefinance"
 (cd "$ROOT" && go build -o "$E2E/bin/coregateway" ./cmd/coregateway)
 (cd "$ROOT/services/coreban" && go build -o "$E2E/bin/coreban" ./cmd/coreban)
+(cd "$ROOT/services/corefinance" && go build -o "$E2E/bin/corefinance" ./cmd/api)
 
 log "starting Postgres and ntfy"
 docker rm -f "$PG" "$NTFY" >/dev/null 2>&1 || true
@@ -85,6 +87,14 @@ sed 's/REPLACE_ME/gwpw/' "$ROOT/internal/db/bootstrap.sql" | psql -q
 sed 's/REPLACE_ME/cbpw/' "$ROOT/services/coreban/internal/db/bootstrap.sql" | psql -q
 MIGRATION_URL="$OWNER_URL&options=-c%20search_path%3Dcoreban" DATABASE_URL=unused JWT_JWKS_URL=unused \
   "$E2E/bin/coreban" migrate >/dev/null
+# corefinance's baseline calls uuid_generate_v7(), which the gateway's
+# migrations installed in the coregateway schema; column defaults keep the
+# function itself, so only the migration needs it on its search_path. Its own
+# version table keeps goose from reading the gateway's through that path.
+psql -qc 'CREATE SCHEMA IF NOT EXISTS corefinance'
+goose -table corefinance.goose_db_version -dir "$ROOT/services/corefinance/internal/db/migrations" postgres \
+  "$OWNER_URL&options=-c%20search_path%3Dcorefinance,coregateway" up >/dev/null
+sed 's/REPLACE_ME/cfpw/' "$ROOT/services/corefinance/internal/db/bootstrap.sql" | psql -q
 
 wait_for ntfy 30 curl -sf http://localhost:18090/v1/health
 docker exec -e NTFY_PASSWORD=corebanpw "$NTFY" ntfy user add coreban >/dev/null
@@ -123,6 +133,15 @@ ENV
 env -i PATH="$PATH" HOME="$HOME" $(cat "$E2E/coreban.env") "$E2E/bin/coreban" > "$E2E/coreban.log" 2>&1 &
 echo "coreban $!" >> "$E2E/pids"
 wait_for coreban 30 curl -sf http://localhost:16972/health
+
+log "starting corefinance :16969"
+env -i PATH="$PATH" HOME="$HOME" PORT=16969 ENV=development \
+  DATABASE_URL="postgresql://corefinance_role:cfpw@localhost:55432/coredb?sslmode=disable" \
+  JWT_ISSUER=https://gateway.internal JWT_AUDIENCE=corefinance \
+  JWT_JWKS_URL=http://localhost:18080/.well-known/jwks.json \
+  "$E2E/bin/corefinance" > "$E2E/corefinance.log" 2>&1 &
+echo "corefinance $!" >> "$E2E/pids"
+wait_for corefinance 30 curl -sf http://localhost:16969/health
 
 if [ -n "${E2E_HOST:-}" ]; then
   log "building web for $HOST"
