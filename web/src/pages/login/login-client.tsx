@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Terminal, Lock, Mail, AlertCircle, Eye, EyeOff, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
+import { safeReturnPath } from "@/lib/share";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,6 +18,9 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { login, demoLogin } = useAuth();
   const navigate = useNavigate();
+  // Back to the page that sent the reader here (a share, say), else the
+  // dashboard; it takes login's place, so Back never returns to the form.
+  const next = safeReturnPath((useLocation().state as { from?: unknown } | null)?.from);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +29,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password, rememberMe);
-      navigate("/dashboard");
+      navigate(next, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid credentials. Please try again.");
     } finally {
@@ -39,7 +43,7 @@ export default function LoginPage() {
 
     try {
       await demoLogin();
-      navigate("/dashboard");
+      navigate(next, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo login failed. Please try again.");
     } finally {

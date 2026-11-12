@@ -10,6 +10,9 @@ import { apiBaseUrl } from "@/lib/api";
 
 const notesUrl = `${apiBaseUrl}/api/coreban/notes`;
 
+// The Feed's query key.
+export const feedKey = ["coreban", "feed"];
+
 // The most characters a note's text may hold (coreban's cap).
 export const MAX_NOTE_LENGTH = 4000;
 
@@ -22,7 +25,17 @@ export class NoteRequestError extends Error {
   }
 }
 
+// Thrown when coreban answers 401: the session ended, so signing in again
+// is the only way forward.
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Your session has ended; sign in again");
+    this.name = "SessionExpiredError";
+  }
+}
+
 async function throwIfError(res: Response, op: string): Promise<void> {
+  if (res.status === 401) throw new SessionExpiredError();
   if (res.status === 404) throw new Error("Note not found — it may have been deleted on another device");
   if (res.status === 400 || res.status === 409) {
     const body = await res.json().catch(() => null);

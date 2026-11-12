@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -30,6 +30,7 @@ import {
   MAX_NOTE_LENGTH,
   noteCopyText,
   noteTime,
+  feedKey,
   postNote,
   removeNote,
   replaceNote,
@@ -70,7 +71,6 @@ import {
   type ReminderDialogState,
 } from "./record-dialogs";
 
-const feedKey = ["coreban", "feed"];
 
 // A note's text with its links tappable. Links open in a new tab and are
 // never fetched to preview them.
@@ -387,6 +387,18 @@ export default function FeedPage() {
     }
   });
 
+  // A note just shared from another app (the share route passes its id):
+  // once it shows, it is scrolled into view, even if a cached Feed opened
+  // first and the note only arrived with the refetch.
+  // The id is then dropped from history, so a reload opens as usual.
+  const location = useLocation();
+  const shared = (location.state as { shared?: string } | null)?.shared;
+  useEffect(() => {
+    if (!shared || !notes.some((n) => n.id === shared)) return;
+    scroller.current?.querySelector(`[data-note-id="${CSS.escape(shared)}"]`)?.scrollIntoView({ block: "end" });
+    navigate(location.pathname, { replace: true, state: null });
+  }, [shared, notes, navigate, location.pathname]);
+
   // Loads the page before the oldest one shown once the reader scrolls up
   // to it. Re-observing after each page fires again if the top is still in
   // view, so a short Feed keeps filling the screen.
@@ -583,7 +595,7 @@ export default function FeedPage() {
         {notes.length > 0 && (
           <ol className="grid grid-cols-1 gap-3">
             {notes.map((note) => (
-              <li key={note.id}>
+              <li key={note.id} data-note-id={note.id}>
                 {note.archived_at ? (
                   <ArchivedNote
                     note={note}

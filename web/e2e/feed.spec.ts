@@ -68,6 +68,8 @@ test("an archived note stays in place, collapsed, and can be restored or erased"
 
   // Still before the newer note after a reload.
   await page.reload();
+  // allTextContents doesn't wait: let the Feed load first.
+  await expect(noteItem(page, after)).toBeVisible();
   const items = await feed(page).getByRole("listitem").allTextContents();
   const at = items.findIndex((t) => t.includes(text));
   expect(at).toBeGreaterThanOrEqual(0);

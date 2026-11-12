@@ -1,10 +1,11 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { Navigate } from "react-router-dom";
 
 function ProtectedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -20,7 +21,8 @@ function ProtectedLayout() {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // Login brings the reader back to this page.
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
 
   return (

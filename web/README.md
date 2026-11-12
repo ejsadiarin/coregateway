@@ -1,5 +1,25 @@
 (convert to pure react web - react 18 or tanstack)
 
+## Share to the Feed (Android)
+
+The manifest registers the app as a **share target**: once installed, it
+appears in Android's share sheet, and sharing a link or text from any app
+(Chrome, YouTube, …) posts it to coreban's Feed as one plain note. The
+share opens `/share?title=…&text=…&url=…`; signed out, it goes through
+login first and posts afterwards.
+
+Android only offers share targets for an app **installed over HTTPS** (the
+homelab domain). Installed from the plain-HTTP tailnet IP, the app never
+shows up in the share sheet. To check it on a phone:
+
+1. Open the dashboard at its HTTPS address in Chrome, then menu → *Add to
+   home screen* → *Install*.
+2. In Chrome, open any page → *Share* → **CORE**.
+3. The Feed opens with the page's title and link as its newest note.
+
+The browser suite (`e2e/feed-share.spec.ts`) covers everything after the
+share sheet; only the share sheet listing the app needs the phone.
+
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
