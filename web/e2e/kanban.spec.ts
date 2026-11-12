@@ -100,7 +100,7 @@ test("column guards keep one column per status and never drop cards", async ({ p
 
   // A column holding a card can't be deleted.
   await page.getByRole("combobox", { name: "Column for the new card" }).click();
-  await page.getByRole("option", { name: "Done · Done" }).click();
+  await page.getByRole("option", { name: "Done", exact: true }).click();
   await addCard(page, "Shipped already");
   await columnAction(page, "Done", "Delete column");
   await expect(main).toContainText("Done still holds cards");
