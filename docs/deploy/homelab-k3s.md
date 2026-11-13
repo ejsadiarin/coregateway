@@ -6,6 +6,9 @@ services, and the self-hosted apps moving out of Docker Compose.
 - Cluster manifests live in the **`core-infra`** repo (Flux tree). This repo
   only produces images and holds this guide.
 - Immich has its own guide: [`immich-migration.md`](./immich-migration.md).
+- coreban's attachment storage (Cloudflare R2) has its own runbook,
+  [`coreban-attachments.md`](./coreban-attachments.md), called from
+  section 15.2.
 - Gateway signing-key wiring and rotation: [`deploy/README.md`](../../deploy/README.md)
   (Source B, sops + age) and [`docs/runbooks/jwt-key-rotation.md`](../runbooks/jwt-key-rotation.md).
 
@@ -127,7 +130,7 @@ Install on the laptop: `kubectl`, `helm`, `flux`, `cilium` (cilium-cli),
 | Cloudflare API token `cert-manager-dns01` | Cloudflare → My Profile → API Tokens | `Zone / DNS / Edit` and `Zone / Zone / Read`, limited to the `ejsadiarin.com` zone |
 | B2 bucket `<B2_CLUSTER_BUCKET>` | Backblaze | Private, default encryption on |
 | B2 application key `homelab-cluster` | Backblaze | Read and write, restricted to that bucket only. It must not reach the restic bucket |
-| R2 bucket `coreban-attachments` and its API token | Cloudflare → R2 | Section 15.2: private bucket, token with Object Read & Write on that bucket only |
+| R2 bucket `coreban-attachments` and its API token | Cloudflare → R2 | Private bucket; token with Object Read & Write on that bucket only. [`coreban-attachments.md`](./coreban-attachments.md) sections 2–4 |
 | Tailscale OAuth client `k8s-operator` | Tailscale admin → Settings → OAuth clients | Section 13.1 |
 | GitHub fine-grained token for bootstrap | GitHub → Developer settings | `core-infra` only: Administration (read/write, to add the deploy key) and Contents (read/write). Delete it after bootstrap |
 
@@ -1531,26 +1534,10 @@ shred -u /tmp/new.pem
 Generate a **new** key for the cluster. Do not reuse `jwt_ed25519.pem` from
 the dev checkout.
 
-coreban's Secret also carries the attachment bucket (coreban ADR-0004).
-Attachments live in a private Cloudflare R2 bucket and are reached only
-through signed links, so the phone uploads and downloads straight from R2:
-
-1. Cloudflare → R2 → **Create bucket** `coreban-attachments`, location
-   Automatic (not a jurisdiction: that changes the endpoint). Leave public
-   access off and attach no custom domain; signed links work only on R2's S3
-   endpoint.
-2. Bucket → Settings → **CORS policy**:
-
-   ```json
-   [{"AllowedOrigins": ["https://core.ejsadiarin.com"],
-     "AllowedMethods": ["GET", "PUT", "HEAD"],
-     "AllowedHeaders": ["content-type"],
-     "MaxAgeSeconds": 3600}]
-   ```
-
-3. R2 → **Manage API tokens** → Create: Object Read & Write, specific
-   bucket `coreban-attachments` only. Copy the access key ID, the secret
-   (shown once) and the S3 endpoint.
+coreban's Secret also carries the attachment bucket, so images and videos
+in the Feed work (coreban ADR-0004). Create the bucket, its CORS policy and
+its token first: [`coreban-attachments.md`](./coreban-attachments.md)
+sections 2–4. Then:
 
 ```yaml
 # apps/coregateway/coreban-api.sops.yaml
@@ -1569,11 +1556,9 @@ stringData:
   S3_REGION: auto
 ```
 
-Leave `S3_PUBLIC_ENDPOINT` unset: it is only for a store coreban reaches on a
-different address than the phone does (the local e2e stack).
-`ATTACHMENT_QUOTA` defaults to `5GB` per user. Without `S3_ENDPOINT`, coreban
-starts with attachments off and logs `S3_ENDPOINT is not set; attachments
-are off`.
+Leave `S3_PUBLIC_ENDPOINT` unset. Without `S3_ENDPOINT`, coreban still
+starts, with attachments off. The runbook's section 5 explains every
+variable.
 
 ### 15.3 The gateway
 
@@ -1808,9 +1793,10 @@ accepts ingress only from the gateway. Three things it needs in this cluster:
          - ports: [{port: "5432", protocol: TCP}]
    ```
 
-4. coreban's egress also needs ntfy and R2. The cleaner and the upload check
-   call R2 from the pod; the phone's own uploads do not pass through the
-   cluster:
+4. coreban's egress also needs ntfy and R2
+   ([`coreban-attachments.md`](./coreban-attachments.md) section 6). The
+   cleaner and the upload check call R2 from the pod; the phone's own
+   uploads do not pass through the cluster:
 
    ```yaml
      - toFQDNs:
@@ -1838,7 +1824,7 @@ curl -sI https://core.ejsadiarin.com | head -1     # 200
 curl -s https://core.ejsadiarin.com/.well-known/jwks.json | head -c 15   # HTML, not JSON
 # Browser: log in, open the budget page, check the cookie is Secure and HttpOnly
 # Deny test from deploy/README.md section 3: a debug pod curling corefinance directly must time out
-# Attachments, from the phone over HTTPS: attach a photo in the Feed, Send, open it, Download
+# Attachments: coreban-attachments.md section 8 (log line, private bucket, CORS, phone check)
 ```
 
 ---
@@ -2062,6 +2048,7 @@ watch the cluster from outside it.
 | Longhorn volumes | `RecurringJob nightly-b2` | `…/longhorn` | Nightly, keep 14 |
 | Immich database | CloudNativePG + Barman Cloud plugin | `…/cnpg/immich` | Continuous WAL, daily base |
 | Immich media | Existing restic job on `core-2` | Existing restic bucket | As today |
+| coreban attachments | None yet: R2 holds the only copy | R2 `coreban-attachments` | [`coreban-attachments.md`](./coreban-attachments.md) section 10 |
 | `coredb` | Neon's own history; periodic `pg_dump` from the laptop | Neon, local | Manual |
 | Keys that unlock everything | Vaultwarden and paper | Off-cluster | On change |
 
