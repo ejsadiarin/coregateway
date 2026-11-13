@@ -36,7 +36,7 @@ authorize locally:
 
 See [`jwt-key-rotation.md`](jwt-key-rotation.md) — policy, the two-phase
 invariant (publish both, drain 15 min, retire the old), manual run, and
-the Vault/sops automation backends. Summary: new key becomes current,
+the sops + age automation in k3s. Summary: new key becomes current,
 old key moves to `JWT_PREV_*`, redeploy, wait, clear `PREV`, redeploy.
 
 ## Rollback

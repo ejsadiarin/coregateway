@@ -2,11 +2,11 @@
 
 Rotates the gateway's Ed25519 signing key and the `kid` that names it. The
 mechanics are identical in every environment; only delivery differs
-(compose file → Secret volume, Vault, or sops).
+(a key file on the compose host, or a sops-encrypted Secret in k3s).
 
 Related: `docs/auth-flow.md` (claims, JWKS, why a PEM key),
-`docs/runbooks/vault-rotation.md` (Vault implementation),
-`deploy/vault-rotation-cronjob.yaml` (automated executor).
+`docs/deploy/homelab-k3s.md` (the cluster), `deploy/README.md` (apply
+order), `deploy/sops-rotation-cronjob.yaml` (automated executor).
 
 ## What rotates
 
@@ -22,8 +22,8 @@ Related: `docs/auth-flow.md` (claims, JWKS, why a PEM key),
 ## Policy
 
 - **Scheduled:** every 90 days. 30 days if more than one person can read the
-  key material. The automated executor enforces 90 days
-  (`deploy/vault-rotation-cronjob.yaml`).
+  key material. The automated executor opens a rotation every quarter
+  (`deploy/sops-rotation-cronjob.yaml`).
 - **Immediately, off-cycle:** suspected or proven exposure (backup, synced
   folder, shell history, committed `.pem`, `docker inspect`, crash dump),
   a machine that held the key is lost/sold, offboarding someone with access,
@@ -72,7 +72,7 @@ mv jwt_ed25519_next.pem jwt_ed25519.pem
 # 3. Roll the gateway.
 docker compose up -d --force-recreate coregateway-api
 # k3s: update the Secret producer, then
-#   kubectl -n coregateway rollout restart deploy/gateway
+#   kubectl -n coregateway rollout restart deploy/coregateway-api
 
 # 4. Verify overlap, then wait 15 minutes (never less).
 curl -s localhost:8080/.well-known/jwks.json | jq -r '.keys[].kid'   # BOTH kids
@@ -82,25 +82,7 @@ curl -s localhost:8080/.well-known/jwks.json | jq -r '.keys[].kid'   # BOTH kids
 
 Do not delete the old key file until step 5 verifies — it is the rollback.
 
-## Automated: Vault (current design)
-
-`deploy/vault-rotation-cronjob.yaml` runs monthly, no-ops while the key is younger
-than 90 days, and otherwise performs phase 1 → JWKS poll → drain wait →
-phase 2 (with KV version destroy) in a single Job. Delivery is
-external-secrets (`refreshInterval: 1m`) into the `gateway-jwt-keys`
-Secret; Reloader rolls the Deployment on each phase.
-
-Incident rotation uses the same code path, never a hand Vault write:
-
-```bash
-kubectl create job --from=cronjob/jwt-rotation-manual incident-YYYY-MM-DD -n coregateway
-kubectl logs -f job/incident-YYYY-MM-DD -n coregateway
-```
-
-Full detail, verification commands, backup/restore and troubleshooting:
-`docs/runbooks/vault-rotation.md`.
-
-## Semi-automated: sops + age under Flux
+## Automated: sops + age under Flux (k3s)
 
 sops encrypts the Secret manifest in git; Flux's kustomize-controller
 decrypts it at reconcile time with the age key held in the cluster. sops
@@ -108,15 +90,15 @@ does **not** generate or rotate anything — it only makes it safe to commit
 the material. Rotation therefore stays a Git change, automated up to (not
 including) the merge.
 
-Ready-to-copy manifests: `deploy/examples/sops-*.yaml` (`.sops.yaml` rule,
-Flux Kustomization stanza, age Secret shape, encrypted-Secret template,
-rotation image) and `deploy/sops-rotation-cronjob.yaml` (the automated jobs).
-`deploy/README.md` has the step-by-step apply order.
+The cluster setup (two age recipients, `.sops.yaml`, the Flux
+Kustomizations) is `docs/deploy/homelab-k3s.md` sections 7 and 8. The
+templates are `deploy/examples/sops-*` and `deploy/sops-rotation-cronjob.yaml`;
+`deploy/README.md` has the apply order.
 
 ### Prerequisites
 
 ```yaml
-# The Kustomization that owns the app must declare decryption:
+# The `apps` Kustomization (homelab guide 8.3) declares decryption:
 spec:
   decryption:
     provider: sops
@@ -125,14 +107,17 @@ spec:
 ```
 
 ```yaml
-# .sops.yaml at the repo root
+# core-infra/.sops.yaml
 creation_rules:
-  - path_regex: clusters/.*/secrets/.*\.ya?ml$
+  - path_regex: .*\.sops\.ya?ml$
     encrypted_regex: ^(data|stringData)$
-    age: age1...               # the cluster's age recipient
+    age: >-
+      age1cluster…,
+      age1personal…
 ```
 
-The encrypted manifest (values only; the shape is a normal Secret):
+The encrypted manifest, `core-infra/apps/coregateway/gateway-jwt-keys.sops.yaml`
+(values only; the shape is a normal Secret):
 
 ```yaml
 apiVersion: v1
@@ -164,13 +149,16 @@ openssl genpkey -algorithm ed25519 -out jwt_next.pem
 # sops opens the decrypted file in $EDITOR and re-encrypts on save:
 #   private_pem <- new PEM, kid <- new kid
 #   prev_private_pem <- old PEM, prev_kid <- old kid
-sops clusters/<cluster>/secrets/gateway-jwt-keys.enc.yaml
+# Run from inside core-infra, with your personal key:
+sops apps/coregateway/gateway-jwt-keys.sops.yaml
 
 git commit -am "chore(jwt): rotate signing key (phase 1)" && git push
-flux reconcile kustomization coregateway --with-source
-kubectl -n coregateway rollout restart deploy/gateway   # unless Reloader
+flux reconcile kustomization apps --with-source
+# Reloader rolls coregateway-api; without it:
+#   kubectl -n coregateway rollout restart deploy/coregateway-api
 
-curl -s http://gateway.coregateway.svc:8080/.well-known/jwks.json | jq -r '.keys[].kid'
+kubectl -n coregateway run jwks --rm -it --image=curlimages/curl --restart=Never -- \
+  curl -s http://coregateway-api:8080/.well-known/jwks.json      # both kids
 
 # 15 minutes later — phase 2:
 #   delete prev_private_pem / prev_kid, sops re-encrypt, commit, reconcile, restart
@@ -203,19 +191,14 @@ is open.
 | The 15-minute phase boundary | yes — the retire sweeper |
 | Reviewing and merging both PRs | **no — human gate, by design** |
 
-If you want the generation step automated too, the defensible shape is a
-CronJob that runs the `openssl` + `sops set` + branch/PR sequence with a
-repo-scoped token. It means a pod can mint signing keys and push to the
-GitOps repo — acceptable only if that blast radius is understood. For a
-homelab, a calendar reminder plus a `make rotate-jwt` helper that produces
-the phase-1 diff is the better trade.
-
 ### sops-specific cautions
 
 - **The age private key is the real root secret.** Anyone holding it can
-  decrypt every rotation ever committed. Keep it only in the cluster
-  (`sops-age`), back it up offline, and rotate *it* (new recipient →
-  `sops updatekeys` → update the Flux Secret) if it leaks.
+  decrypt every rotation ever committed. The cluster key lives in the
+  cluster (`sops-age` in `flux-system`, and the copy in `coregateway` the
+  rotation jobs use), in Vaultwarden and on paper; your personal key stays
+  on the laptop. If either leaks, rotate *it*: new recipient in
+  `.sops.yaml` → `sops updatekeys` on every file → update the Secrets.
 - **Git history keeps ciphertext.** Removing a leaked PEM from the working
   tree does not remove it from history; it stays decryptable by the age key.
 - **Do not hand-edit the live Secret.** Flux re-applies on every reconcile,
@@ -223,12 +206,8 @@ the phase-1 diff is the better trade.
 - **The gateway reads the key at boot.** A mounted Secret updates within
   about a minute, but the process ignores it — restart (or Reloader) is
   required for both phases.
-- Keep `defaultMode: 0400` on the volume; the container only needs read.
-
-Switching from Vault to sops changes only the producer: both write the same
-`gateway-jwt-keys` Secret with the same keys, so
-`deploy/gateway-deployment-patch.yaml` (file mount + `JWT_PRIVATE_KEY_FILE`)
-is unchanged.
+- Keep the volume read-only (`defaultMode: 0440` with the pod's `fsGroup`,
+  homelab guide 15.3); the container only needs read.
 
 ## Verification
 
@@ -243,7 +222,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -H "If-None-Match: $etag" \
 
 # Which source the key came from (file vs inline PEM), never the material:
 docker compose logs coregateway-api | grep 'internal JWT identity ready'
-kubectl -n coregateway logs deploy/gateway | grep 'internal JWT identity ready'
+kubectl -n coregateway logs deploy/coregateway-api | grep 'internal JWT identity ready'
 
 # End to end: login, then one proxied read -> 200.
 ```
@@ -269,8 +248,9 @@ fix the `kid` before the next rotation.
 | Symptom | Likely cause → action |
 |---|---|
 | Fleet-wide `401` right after phase 1 | Overlap never published (PREV not set, or the gateway did not roll) → check JWKS shows both kids; fix delivery, re-run phase 1 |
-| JWKS still shows one key | new Secret not synced (ESO/Flux) or mapping wrong → `kubectl describe externalsecret` / `flux reconcile`, then check the Secret's keys |
+| JWKS still shows one key | the PR is not merged, Flux has not reconciled, or the gateway did not roll → `flux get kustomizations`, `flux reconcile kustomization apps --with-source`, then check the Secret's keys and the pod age |
 | `401` at a single downstream only | it cached the old key under a reused `kid` → restart it, and fix the naming |
 | `401` everywhere ~15 min after phase 2 | tokens minted with the old key are still alive → wait out the TTL; should not happen if the drain window was respected |
 | Gateway exits at boot: `JWT_PRIVATE_KEY_FILE: no such file` | the Secret volume/key changed name, or `prev_*` is missing from the Secret → keep all four keys present (empty `prev_*` is valid) |
-| Rotation Job times out polling JWKS | delivery or restart chain broken; overlap is in place, nothing is broken → fix ESO/Reloader/Flux and re-run |
+| Retire job keeps saying the JWKS lacks a kid | the phase-1 PR is merged but not live: Flux or Reloader is stuck; the overlap is safe meanwhile → fix the reconcile or restart, and the next run opens the retire PR |
+| Flux says `decryption failed` | a file was encrypted without the cluster recipient → `sops updatekeys <file>` from inside core-infra |

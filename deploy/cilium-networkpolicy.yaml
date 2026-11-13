@@ -1,26 +1,30 @@
 # Outer ring: downstreams accept ingress ONLY from the gateway identity.
 # The internal JWT stays the second (user-delegation) layer.
-# Adjust pod labels / namespace / ports to your manifests. Apply with
-# `kubectl apply --dry-run=server` first, then for real; verify a direct
-# pod-to-corefinance curl drops while gateway traffic flows.
+# Labels and ports match docs/deploy/homelab-k3s.md section 15; copy once
+# per downstream (corefinance-api 6969, coredraw-api 6971, coreban-api 6972)
+# with its own endpointSelector. Apply with `kubectl apply --dry-run=server`
+# first; verify a direct pod-to-corefinance curl drops while gateway traffic
+# flows (deploy/README.md section 3). Section 15.7 of the homelab guide has
+# the policy the gateway and web pods need once any policy selects them.
 apiVersion: "cilium.io/v2"
 kind: CiliumNetworkPolicy
 metadata:
-  name: corefinance-ingress
+  name: corefinance-api
   namespace: coregateway
 spec:
   endpointSelector:
     matchLabels:
-      app: corefinance # TODO: downstream pod label
+      app: corefinance-api
   ingress:
     - fromEndpoints:
         - matchLabels:
-            app: gateway # TODO: gateway pod label
+            app: coregateway-api
       toPorts:
         - ports:
-            - port: "6969" # TODO: downstream port
+            - port: "6969"
               protocol: TCP
   egress:
+    # DNS, with the proxy that lets toFQDNs learn addresses.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -29,18 +33,24 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
-    # TODO: allow the downstream's database. Example for in-cluster Postgres:
-    # - toEndpoints:
-    #     - matchLabels:
-    #         app: postgres
-    #   toPorts:
-    #     - ports:
-    #         - port: "5432"
-    #           protocol: TCP
-    # For managed/external DBs, use toCIDR with the DB address instead.
-    # Do NOT leave a broad toCIDR: 0.0.0.0/0 here — DNS + DB only.
----
-# Copy the pattern per downstream (corereminder, ...): same shape,
-# own endpointSelector. Gateway pods themselves need no ingress policy
-# here (they serve the outside world); add one later if you want to
-# restrict ingress to your ingress controller's identity.
+          rules:
+            dns:
+              - matchPattern: "*"
+    # The gateway's JWKS, fetched at boot and on an unknown kid.
+    - toEndpoints:
+        - matchLabels:
+            app: coregateway-api
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Neon, by name rather than by address.
+    - toFQDNs:
+        - matchPattern: "*.neon.tech"
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Do NOT add a broad toCIDR: 0.0.0.0/0 here. A downstream that calls
+    # something else (coreban: ntfy, and the attachment bucket on R2) gets
+    # one rule per destination; see homelab guide 15.7.

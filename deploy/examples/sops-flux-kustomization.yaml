@@ -1,32 +1,30 @@
-# Flux Kustomization that owns the coregateway app and decrypts
-# sops-encrypted Secrets at reconcile time. Merge these fields into the
-# Kustomization you already have; don't apply this file as-is.
-#
-# ArgoCD alternative: ArgoCD has no native sops support — use the
-# `argocd-vault-plugin`/kustomize-sops plugin, or move this app to Flux.
+# The Flux Kustomization that applies core-infra/apps (including
+# apps/coregateway) and decrypts its `*.sops.yaml` Secrets at reconcile
+# time. docs/deploy/homelab-k3s.md section 8.3 defines it, alongside the
+# two infrastructure Kustomizations, which decrypt the same way. Shown here
+# for the decryption stanza; don't apply this file as-is.
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: coregateway
+  name: apps
   namespace: flux-system
 spec:
+  dependsOn: [{name: infra-configs}]
   interval: 10m
+  retryInterval: 2m
   prune: true
-  # TODO: path in the GitOps repo holding the app manifests + encrypted
-  # Secret. Flux's `directory`/kustomize sources are non-recursive, so a
-  # sibling examples/ directory is never applied.
-  path: ./clusters/homelab/coregateway
+  path: ./apps
   sourceRef:
     kind: GitRepository
     name: flux-system
-  # Decrypt *.yaml (or *.enc.yaml) Secrets listed by .sops.yaml at the
-  # GitOps repo root, using the age identity in Secret `sops-age`.
+  # Decrypt the files matched by .sops.yaml at the repo root, using the
+  # cluster age key in Secret `sops-age`.
   decryption:
     provider: sops
     secretRef:
       name: sops-age
-  # Reloader is not configured here: it is the Deployment annotation
+  # Restarts are not configured here: Reloader rolls any Deployment with
   #   reloader.stakater.com/auto: "true"
-  # Without it, a changed Secret still requires a manual
-  #   kubectl -n coregateway rollout restart deploy/gateway
+  # Without it, a changed Secret needs a manual
+  #   kubectl -n coregateway rollout restart deploy/coregateway-api
   # because the gateway reads the key file at boot.

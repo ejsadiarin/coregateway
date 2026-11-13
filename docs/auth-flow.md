@@ -219,23 +219,24 @@ pair locally publishes both kids in JWKS — local rotation parity.
 
 ### k3s deployment
 
-Target state (templates in `deploy/`, applied by the operator; procedure
-in `docs/runbooks/jwt-key-rotation.md`, Vault specifics in
-`docs/runbooks/vault-rotation.md`):
+Target state (the cluster is `docs/deploy/homelab-k3s.md`; templates in
+`deploy/`; procedure in `docs/runbooks/jwt-key-rotation.md`):
 
-- PEM material lives in Vault KV v2 (`secret/coregateway/jwt`), synced
-  by external-secrets to the `gateway-jwt-keys` Secret and mounted as a
-  read-only file (`JWT_PRIVATE_KEY_FILE`), not injected as env. Nothing
-  secret is committed or hand-edited.
-- A monthly CronJob enforces the 90-day key-age policy and executes both
-  rotation phases in one run (phase-1 overlap → poll JWKS → drain wait →
-  phase-2 clear with KV version destroy), with gateway restarts via
-  Reloader. Incident rotation is a manual Job from the suspended
-  `jwt-rotation-manual` template — never a hand Vault write.
+- PEM material lives in `core-infra` as a sops + age encrypted Secret
+  (`apps/coregateway/gateway-jwt-keys.sops.yaml`). Flux decrypts it into
+  the `gateway-jwt-keys` Secret, mounted as a read-only file
+  (`JWT_PRIVATE_KEY_FILE`), not injected as env. No plaintext key is
+  committed, and the live Secret is never hand-edited.
+- Rotation CronJobs open each phase as a pull request: a quarterly job
+  generates the new key (phase-1 overlap), and a 15-minute sweeper opens
+  the phase-2 retire PR once the drain window has passed and JWKS serves
+  both kids. Merging is the human gate; Reloader restarts the gateway on
+  each phase. Incident rotation is a manual Job from the suspended
+  `sops-jwt-rotation-manual` template, never a hand edit.
 - A CiliumNetworkPolicy restricts downstream ingress to the gateway
-  identity; the JWT stays the user-delegation layer on top of mesh mTLS.
-- Vault itself is snapshotted nightly by the `vault-backup` CronJob.
-  Losing Vault stops rotations, not traffic.
+  identity; the JWT stays the user-delegation layer on top of it.
+- The cluster age key is kept in Vaultwarden and on paper. Losing it
+  stops rotations, not traffic.
 
 ---
 

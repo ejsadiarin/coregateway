@@ -16,11 +16,11 @@ hand-off). Everywhere else it is a **string value with real newlines**:
 - **Root `.env`:** possible (double-quoted literal multiline), but
   fragile — one broken newline or an accidental commit and nothing
   parses. Prefer export.
-- **Vault KV v2 (k3s target):** also a string value —
-  `vault kv put secret/coregateway/jwt private_pem="$(cat key.pem)" …`.
-  JSON escaping is transparent; what comes back out is byte-identical.
-  ESO → K8s Secret → env preserves it end to end (K8s base64 is just
-  transport encoding, decoded on injection).
+- **sops-encrypted Secret (k3s target):** a YAML block scalar under
+  `stringData` (`private_pem: |`), as in
+  `deploy/examples/sops-gateway-jwt-keys-secret.yaml`. sops and Flux
+  preserve it byte for byte, and the gateway reads it as a mounted file
+  (K8s base64 is just transport encoding).
 - **Never:** single-line with literal `\n` text (Go sees backslash-n,
   not newlines — parse fails), and never commit any of it.
 
@@ -158,6 +158,6 @@ unset JWT_PRIVATE_KEY_PEM JWT_PREV_PRIVATE_KEY_PEM JWT_KID JWT_PREV_KID ADMIN_EM
 docker compose down
 ```
 
-Out of scope locally: the CronJob chain (needs Vault/ESO/Reloader) and
+Out of scope locally: the rotation CronJobs (need Flux, sops and Reloader) and
 multi-replica JWKS flap (needs k3s). Everything above covers what the
 `auth-hardening-vault-k3s` change shipped.

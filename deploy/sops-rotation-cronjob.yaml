@@ -12,17 +12,16 @@
 # Flux cannot delay between reconciles, so the 15-minute gap has to live
 # somewhere: it lives in this sweeper.
 #
-# Prereqs:
-#   - GitOps repo with .sops.yaml at its root and the encrypted Secret from
-#     deploy/examples/sops-gateway-jwt-keys.yaml
+# Prereqs (deploy/README.md section 2):
+#   - core-infra with .sops.yaml at its root and the encrypted Secret
+#     apps/coregateway/gateway-jwt-keys.sops.yaml (from
+#     deploy/examples/sops-gateway-jwt-keys-secret.yaml)
 #   - Secret `jwt-rotation-git` (key `token`) holding a fine-grained PAT with
-#     contents:write + pull-requests:write on that repo
-#   - Flux Kustomization with `decryption.provider: sops` (see
-#     deploy/examples/sops-flux-kustomization.yaml)
+#     contents:write + pull-requests:write on core-infra
+#   - Secret `sops-age` in `coregateway`: a copy of the cluster age key
 #   - the image built from deploy/examples/sops-rotation-image.Dockerfile
 #
-# Apply this only if you chose sops; deploy/vault-rotation-cronjob.yaml is the
-# Vault equivalent and the two must not both run.
+# Commit it as apps/coregateway/sops-rotation-cronjob.yaml in core-infra.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -81,8 +80,9 @@ data:
       .metadata.annotations."coregateway.io/rotated-at" = strenv(NOW)
     ' "$work/plain.yaml"
 
-    # Re-encrypt using the age recipient from .sops.yaml at the repo root.
-    sops -e --input-type yaml "$work/plain.yaml" > "$SECRET_FILE.new"
+    # Re-encrypt for the recipients in .sops.yaml at the repo root. The
+    # creation rule matches on the file name, so name the real file.
+    sops -e --filename-override "$SECRET_FILE" "$work/plain.yaml" > "$SECRET_FILE.new"
     mv "$SECRET_FILE.new" "$SECRET_FILE"
 
     git checkout -q -b "$branch"
@@ -131,7 +131,7 @@ data:
     fi
 
     yq -i '.stringData.prev_private_pem = "" | .stringData.prev_kid = ""' "$work/plain.yaml"
-    sops -e --input-type yaml "$work/plain.yaml" > "$SECRET_FILE.new"
+    sops -e --filename-override "$SECRET_FILE" "$work/plain.yaml" > "$SECRET_FILE.new"
     mv "$SECRET_FILE.new" "$SECRET_FILE"
 
     branch="jwt-rotation-retire/$(date -u +%Y%m%d%H%M)"
@@ -165,17 +165,17 @@ spec:
           containers:
             - name: rotate
               # TODO: pin by digest; built from deploy/examples/sops-rotation-image.Dockerfile
-              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0
+              image: ghcr.io/ejsadiarin/jwt-rotation:0.1.0
               command: ["/bin/sh", "/scripts/rotate.sh"]
               env:
                 - name: GITOPS_REPO
-                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                  value: "https://github.com/ejsadiarin/core-infra.git"
                 - name: BASE_BRANCH
                   value: "main"
                 - name: SECRET_FILE
-                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                  value: "apps/coregateway/gateway-jwt-keys.sops.yaml"
                 - name: JWKS_URL
-                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                  value: "http://coregateway-api.coregateway.svc:8080/.well-known/jwks.json"
                 - name: GIT_AUTHOR_NAME
                   value: "jwt-rotation"
                 - name: GIT_AUTHOR_EMAIL
@@ -225,17 +225,17 @@ spec:
           restartPolicy: Never
           containers:
             - name: retire
-              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0 # TODO: same pinned image
+              image: ghcr.io/ejsadiarin/jwt-rotation:0.1.0 # TODO: same pinned image
               command: ["/bin/sh", "/scripts/retire.sh"]
               env:
                 - name: GITOPS_REPO
-                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                  value: "https://github.com/ejsadiarin/core-infra.git"
                 - name: BASE_BRANCH
                   value: "main"
                 - name: SECRET_FILE
-                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                  value: "apps/coregateway/gateway-jwt-keys.sops.yaml"
                 - name: JWKS_URL
-                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                  value: "http://coregateway-api.coregateway.svc:8080/.well-known/jwks.json"
                 - name: GIT_AUTHOR_NAME
                   value: "jwt-rotation"
                 - name: GIT_AUTHOR_EMAIL
@@ -287,17 +287,17 @@ spec:
           restartPolicy: Never
           containers:
             - name: rotate
-              image: ghcr.io/CHANGEME/jwt-rotation:0.1.0 # TODO: same pinned image
+              image: ghcr.io/ejsadiarin/jwt-rotation:0.1.0 # TODO: same pinned image
               command: ["/bin/sh", "/scripts/rotate.sh"]
               env:
                 - name: GITOPS_REPO
-                  value: "https://github.com/CHANGEME/gitops.git" # TODO
+                  value: "https://github.com/ejsadiarin/core-infra.git"
                 - name: BASE_BRANCH
                   value: "main"
                 - name: SECRET_FILE
-                  value: "clusters/homelab/coregateway/secrets/gateway-jwt-keys.yaml" # TODO
+                  value: "apps/coregateway/gateway-jwt-keys.sops.yaml"
                 - name: JWKS_URL
-                  value: "http://gateway.coregateway.svc:8080/.well-known/jwks.json" # TODO
+                  value: "http://coregateway-api.coregateway.svc:8080/.well-known/jwks.json"
                 - name: GIT_AUTHOR_NAME
                   value: "jwt-rotation"
                 - name: GIT_AUTHOR_EMAIL

@@ -268,16 +268,16 @@ instead of its own name.
 
 ## Production (k3s + Flux)
 
-Infra is a separate repo; this repo only produces the gateway image. For a new
-downstream, the infra repo (Flux `Kustomization` + `ExternalSecret`) must
-provide:
+Infra is a separate repo (`core-infra`, built by `docs/deploy/homelab-k3s.md`);
+this repo only produces the gateway image. For a new downstream,
+`core-infra/apps/coregateway/` must provide:
 
 | Where | Value |
 |---|---|
 | `coregateway-api` Deployment env | `COREBAN_URL=http://coreban-api.<ns>.svc.cluster.local:6972`, `JWT_AUDIENCE=corefinance,coredraw,coreban` |
 | `coreban-api` Deployment env | `JWT_ISSUER`, `JWT_AUDIENCE=coreban`, `JWT_JWKS_URL=http://coregateway-api.<ns>.svc.cluster.local:8080/.well-known/jwks.json` |
 | NetworkPolicy | `coreban-api` ingress allowed **only** from `coregateway-api` (see `deploy/cilium-networkpolicy.yaml`) |
-| Secrets | DB URL and any service keys via `ExternalSecret`/Vault (`deploy/vault-kv-layout.md`); never in the image or compose file |
+| Secrets | DB URL and any service keys in a sops-encrypted `<service>.sops.yaml` Secret (homelab guide 15.2); never in the image or compose file |
 
 Do not add a JWT `JWT_AUDIENCE` entry per environment in code — the list is
 already env-driven. Nothing in this repo needs to know about namespaces,

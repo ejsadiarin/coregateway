@@ -48,7 +48,7 @@ import (
 //     iss, aud, exp-TTL, kid, alg) — edge-hygiene: no X-User-ID, no Cookie
 //   - sub-less tokens are rejected (no service-token shape exists anymore)
 //   - rotation overlap: prev-kid tokens still verify while both kids are
-//     published (vault-rotation two-phase, jwks-resilience rotation)
+//     published (two-phase rotation, jwks-resilience rotation)
 //   - forged-kid and wrong iss/aud tokens are rejected
 //
 // The verifier-owned behaviors — negative-kid cache, singleflight fetch
@@ -228,7 +228,7 @@ func TestInternalJWTFlowUserTokenVerifiesViaJWKS(t *testing.T) {
 // a token minted before rotation (kid A) still verifies once the gateway
 // publishes both kids, and a fresh token carries the new kid. This is the
 // gateway half of the jwks-resilience "Rotation still propagates" scenario
-// and the vault-rotation two-phase JWKS shape.
+// and the two-phase rotation JWKS shape.
 func TestInternalJWTFlowRotationPrevKidStillVerifies(t *testing.T) {
 	oldPub, oldPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

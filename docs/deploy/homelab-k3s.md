@@ -127,6 +127,7 @@ Install on the laptop: `kubectl`, `helm`, `flux`, `cilium` (cilium-cli),
 | Cloudflare API token `cert-manager-dns01` | Cloudflare → My Profile → API Tokens | `Zone / DNS / Edit` and `Zone / Zone / Read`, limited to the `ejsadiarin.com` zone |
 | B2 bucket `<B2_CLUSTER_BUCKET>` | Backblaze | Private, default encryption on |
 | B2 application key `homelab-cluster` | Backblaze | Read and write, restricted to that bucket only. It must not reach the restic bucket |
+| R2 bucket `coreban-attachments` and its API token | Cloudflare → R2 | Section 15.2: private bucket, token with Object Read & Write on that bucket only |
 | Tailscale OAuth client `k8s-operator` | Tailscale admin → Settings → OAuth clients | Section 13.1 |
 | GitHub fine-grained token for bootstrap | GitHub → Developer settings | `core-infra` only: Administration (read/write, to add the deploy key) and Contents (read/write). Delete it after bootstrap |
 
@@ -1419,8 +1420,8 @@ Six workloads in one namespace, as plain manifests under
 
 Service names are part of a contract: the `web` image's `nginx.conf` proxies
 to `coregateway-api:8080` and nginx refuses to start if that name does not
-resolve. Keep the Service named `coregateway-api`. The older templates in
-`deploy/` use the placeholder name `gateway`; rename when folding them in.
+resolve. Keep the Service named `coregateway-api`. The templates in `deploy/`
+use the same names.
 
 ### 15.1 Build and push images
 
@@ -1529,6 +1530,50 @@ shred -u /tmp/new.pem
 
 Generate a **new** key for the cluster. Do not reuse `jwt_ed25519.pem` from
 the dev checkout.
+
+coreban's Secret also carries the attachment bucket (coreban ADR-0004).
+Attachments live in a private Cloudflare R2 bucket and are reached only
+through signed links, so the phone uploads and downloads straight from R2:
+
+1. Cloudflare → R2 → **Create bucket** `coreban-attachments`, location
+   Automatic (not a jurisdiction: that changes the endpoint). Leave public
+   access off and attach no custom domain; signed links work only on R2's S3
+   endpoint.
+2. Bucket → Settings → **CORS policy**:
+
+   ```json
+   [{"AllowedOrigins": ["https://core.ejsadiarin.com"],
+     "AllowedMethods": ["GET", "PUT", "HEAD"],
+     "AllowedHeaders": ["content-type"],
+     "MaxAgeSeconds": 3600}]
+   ```
+
+3. R2 → **Manage API tokens** → Create: Object Read & Write, specific
+   bucket `coreban-attachments` only. Copy the access key ID, the secret
+   (shown once) and the S3 endpoint.
+
+```yaml
+# apps/coregateway/coreban-api.sops.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: coreban-api
+  namespace: coregateway
+stringData:
+  DATABASE_URL: postgresql://coreban_role:…@<pooler-host>/coredb?sslmode=require
+  NTFY_TOKEN: …
+  S3_ENDPOINT: https://<account-id>.r2.cloudflarestorage.com
+  S3_BUCKET: coreban-attachments
+  S3_ACCESS_KEY_ID: …
+  S3_SECRET_ACCESS_KEY: …
+  S3_REGION: auto
+```
+
+Leave `S3_PUBLIC_ENDPOINT` unset: it is only for a store coreban reaches on a
+different address than the phone does (the local e2e stack).
+`ATTACHMENT_QUOTA` defaults to `5GB` per user. Without `S3_ENDPOINT`, coreban
+starts with attachments off and logs `S3_ENDPOINT is not set; attachments
+are off`.
 
 ### 15.3 The gateway
 
@@ -1642,7 +1687,10 @@ its pods restart until the gateway is ready. That is expected and settles in
 under a minute.
 
 coreban also takes `NTFY_URL` and `NTFY_TOKEN`; point `NTFY_URL` at
-`http://ntfy.ntfy.svc.cluster.local` once section 16 is done.
+`http://ntfy.ntfy.svc.cluster.local` once section 16 is done. Its
+attachment cleaner runs inside `coreban-api` and deletes files of deleted
+notes from R2; it is safe on several replicas (each queued file is leased to
+one at a time).
 
 The worker:
 
@@ -1760,6 +1808,22 @@ accepts ingress only from the gateway. Three things it needs in this cluster:
          - ports: [{port: "5432", protocol: TCP}]
    ```
 
+4. coreban's egress also needs ntfy and R2. The cleaner and the upload check
+   call R2 from the pod; the phone's own uploads do not pass through the
+   cluster:
+
+   ```yaml
+     - toFQDNs:
+         - matchPattern: "*.r2.cloudflarestorage.com"
+       toPorts:
+         - ports: [{port: "443", protocol: TCP}]
+     - toEndpoints:
+         - matchLabels:
+             k8s:io.kubernetes.pod.namespace: ntfy
+       toPorts:
+         - ports: [{port: "80", protocol: TCP}]
+   ```
+
 Apply policies last, one at a time, and watch for drops with
 `hubble observe -n coregateway --verdict DROPPED`.
 
@@ -1773,7 +1837,8 @@ curl -sI https://core.ejsadiarin.com | head -1     # 200
 # fall through to the web pod, so they are not published:
 curl -s https://core.ejsadiarin.com/.well-known/jwks.json | head -c 15   # HTML, not JSON
 # Browser: log in, open the budget page, check the cookie is Secure and HttpOnly
-# Deny test from deploy/README.md section C: a debug pod curling corefinance directly must time out
+# Deny test from deploy/README.md section 3: a debug pod curling corefinance directly must time out
+# Attachments, from the phone over HTTPS: attach a photo in the Feed, Send, open it, Download
 ```
 
 ---
@@ -2133,7 +2198,7 @@ three, and consider 3 Longhorn replicas. Two servers is worse than one: etcd
 needs a majority, so go from one straight to three.
 
 **Signing-key rotation.** The PR-based rotation jobs are ready in
-`deploy/sops-rotation-cronjob.yaml`. Follow `deploy/README.md` section B2 once
+`deploy/sops-rotation-cronjob.yaml`. Follow `deploy/README.md` section 2 once
 the platform has been stable for a few weeks.
 
 **Login in front of open dashboards.** Cilium's Gateway API has no

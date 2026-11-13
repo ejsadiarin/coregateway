@@ -1,27 +1,30 @@
-# Patch/snippet: wire the ESO-synced Secret into the gateway Deployment.
-# Apply as a strategic-merge patch or fold into your Deployment manifest.
-# No PEM material in git — only the Secret *name*.
+# Patch/snippet: wire the sops-encrypted `gateway-jwt-keys` Secret into the
+# gateway Deployment. docs/deploy/homelab-k3s.md section 15.3 has this
+# folded into the full manifest; use this file when building it elsewhere.
+# No PEM material in Git except the encrypted `*.sops.yaml` Secret.
 #
 # The key is mounted as a read-only file rather than injected as an env
 # var: process environment is readable via `kubectl exec ... /proc/1/environ`
 # and shows up in crash dumps. `JWT_PRIVATE_KEY_FILE` wins over the inline
 # `JWT_PRIVATE_KEY_PEM` fallback, so the env path stops being used here.
 #
-# The ExternalSecret materialises all four keys (empty `prev_*` outside a
-# rotation), so both files always exist; an empty previous key is treated
-# as "no rotation in progress".
+# The Secret always holds all four keys (empty `prev_*` outside a
+# rotation), so both files always exist; an empty previous key means
+# "no rotation in progress".
 #
-# Reloader: set the annotation below (or on the ExternalSecret's template)
-# so the gateway rolls automatically on every Secret change (i.e. each
-# rotation phase). The gateway reads the key at boot, so a new Secret
-# value alone does not take effect. TODO: uncomment once Reloader is installed.
+# Reloader rolls the gateway on every Secret change (each rotation phase).
+# The gateway reads the key at boot, so a new Secret value alone does not
+# take effect.
+#
+# defaultMode 0440 with the pod's fsGroup (homelab guide 15.3): the image
+# runs as a non-root user that must be able to read the file.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gateway
+  name: coregateway-api
   namespace: coregateway
-  # annotations:
-  #   reloader.stakater.com/auto: "true"
+  annotations:
+    reloader.stakater.com/auto: "true"
 spec:
   template:
     spec:
@@ -29,9 +32,9 @@ spec:
         - name: jwt-keys
           secret:
             secretName: gateway-jwt-keys
-            defaultMode: 0400
+            defaultMode: 0440
       containers:
-        - name: gateway
+        - name: coregateway-api
           volumeMounts:
             - name: jwt-keys
               mountPath: /etc/coregateway/jwt
@@ -51,5 +54,5 @@ spec:
                 secretKeyRef:
                   name: gateway-jwt-keys
                   key: prev_kid
-            # JWT_ISSUER / JWT_AUDIENCE / JWT_TTL_SECONDS keep their
-            # defaults or come from plain (non-secret) env/config.
+            # JWT_ISSUER / JWT_AUDIENCE / JWT_TTL_SECONDS are plain env
+            # (homelab guide 15.3).
