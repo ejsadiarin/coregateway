@@ -8,8 +8,11 @@ import { sharedFrom, sharedNoteText } from "@/lib/share";
 import { Button } from "@/components/ui/button";
 
 // The manifest's share_target: another app shares a title, text or link
-// here, and it is posted to the Feed as one plain note. Signed out, it goes
-// through login and comes back with the share still in the URL.
+// here, and it is posted to the Feed as one plain note. Shared images and
+// videos (files=<id>, kept by the service worker) instead open the Feed
+// with them in the chat box and the text as their caption, waiting for
+// Send. Signed out, it goes through login and comes back with the share
+// still in the URL.
 export default function SharePage() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
@@ -17,13 +20,24 @@ export default function SharePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const text = sharedNoteText(sharedFrom(params));
+  const files = params.get("files");
+  // Why the service worker couldn't take a share, if it couldn't.
+  const failed = params.get("failed");
+  // The text of a share whose files were lost posts only when asked.
+  const [textOnly, setTextOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   // Posts once per attempt, even when StrictMode runs the effect twice.
   const posted = useRef(-1);
 
+  // Files wait in the chat box: the Feed takes them from here.
   useEffect(() => {
-    if (!isAuthenticated || text === null || posted.current === attempt) return;
+    if (!isAuthenticated || !files) return;
+    navigate("/dashboard/feed", { replace: true, state: { sharedFiles: files, caption: text ?? "" } });
+  }, [isAuthenticated, files, text, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated || files || text === null || (failed && !textOnly) || posted.current === attempt) return;
     posted.current = attempt;
     setError(null);
     postNote({ text })
@@ -38,7 +52,7 @@ export default function SharePage() {
         if (err instanceof SessionExpiredError) navigate("/login", { replace: true, state: { from: here } });
         else setError(err instanceof Error ? err.message : "Couldn't reach coreban");
       });
-  }, [isAuthenticated, text, attempt, navigate, here]);
+  }, [isAuthenticated, files, failed, textOnly, text, attempt, navigate, here]);
 
   if (!isLoading && !isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: here }} />;
@@ -51,7 +65,31 @@ export default function SharePage() {
         Share to the Feed
       </h1>
 
-      {text === null ? (
+      {failed && !textOnly ? (
+        <>
+          <p role="alert" className="flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>{failureMessage(failed)}</span>
+          </p>
+          {text !== null && (
+            <p className="max-h-60 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-card p-3 text-sm">
+              {text}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {text !== null && (
+              <Button className="min-h-11" onClick={() => setTextOnly(true)}>
+                Post the text only
+              </Button>
+            )}
+            <OpenFeed />
+          </div>
+        </>
+      ) : files ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Opening the Feed…
+        </p>
+      ) : text === null ? (
         <>
           <p className="text-sm text-muted-foreground">Nothing was shared: the app sent no title, text or link.</p>
           <OpenFeed />
@@ -85,6 +123,17 @@ export default function SharePage() {
       )}
     </main>
   );
+}
+
+function failureMessage(reason: string): string {
+  switch (reason) {
+    case "files":
+      return "The shared images or videos couldn't be kept on this phone (its storage may be full). Free some space and share them again.";
+    case "no-worker":
+      return "CORE wasn't ready to take a share yet. Open the app once, then share again.";
+    default:
+      return "Couldn't take what was shared; try sharing it again.";
+  }
 }
 
 function OpenFeed() {

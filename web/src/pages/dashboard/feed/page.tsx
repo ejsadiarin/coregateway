@@ -50,6 +50,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { AttachmentGrid, AttachmentViewer, UploadTray } from "./attachments";
 import { useUploads } from "./use-uploads";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
+import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -442,7 +443,44 @@ export default function FeedPage() {
   // first and the note only arrived with the refetch.
   // The id is then dropped from history, so a reload opens as usual.
   const location = useLocation();
-  const shared = (location.state as { shared?: string } | null)?.shared;
+  // What opened the Feed: a note just shared (its id), or shared files
+  // waiting with their caption.
+  const opened = (location.state ?? {}) as { shared?: string; sharedFiles?: string; caption?: string };
+  const shared = opened.shared;
+
+  // Images and videos shared from another app (the share route passes
+  // where the service worker keeps them): they wait in the chat box as if
+  // picked here, with the shared text as their caption. Taken once; the
+  // state is then dropped, so a reload doesn't bring them back.
+  const sharedFiles = opened.sharedFiles;
+  const sharedCaption = opened.caption ?? "";
+  const takenShare = useRef<string | null>(null);
+  const addShared = useRef<(files: File[]) => void>(() => {});
+  // Whether the Feed is still open: shared files read after it closed are
+  // never uploaded.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!sharedFiles || takenShare.current === sharedFiles) return;
+    takenShare.current = sharedFiles;
+    navigate(location.pathname, { replace: true, state: null });
+    if (sharedCaption) setDraft(sharedCaption);
+    const lost = "Couldn't open the shared images or videos; share them again.";
+    takeSharedFiles(sharedFiles).then(
+      (files) => {
+        if (!open.current) return;
+        if (files.length === 0) return setActionError(lost);
+        if (isGuest) return setActionError("Demo accounts can't attach images or videos.");
+        addShared.current(files);
+      },
+      () => open.current && setActionError(lost),
+    );
+  }, [sharedFiles, sharedCaption, navigate, location.pathname, isGuest]);
   useEffect(() => {
     if (!shared || !notes.some((n) => n.id === shared)) return;
     scroller.current?.querySelector(`[data-note-id="${CSS.escape(shared)}"]`)?.scrollIntoView({ block: "end" });
@@ -538,6 +576,16 @@ export default function FeedPage() {
     queryClient.invalidateQueries({ queryKey: ["kanban"] });
     queryClient.invalidateQueries({ queryKey: budgetKeys.all });
   };
+
+  // addFiles takes picked or shared files into the chat box, up to the
+  // note's limit, saying how many it left out.
+  const addFiles = (picked: File[]) => {
+    if (picked.length === 0) return;
+    setActionError("");
+    const dropped = uploads.add(picked);
+    if (dropped > 0) setActionError(`A note holds at most ${MAX_ATTACHMENTS} attachments; ${dropped} left out.`);
+  };
+  addShared.current = addFiles;
 
   const pendingFiles = uploads.files.length > 0;
   // A note with attachments posts once every one is up; its text is their
@@ -733,12 +781,7 @@ export default function FeedPage() {
                 onChange={(e) => {
                   const picked = Array.from(e.target.files ?? []);
                   e.target.value = "";
-                  if (picked.length === 0) return;
-                  setActionError("");
-                  const dropped = uploads.add(picked);
-                  if (dropped > 0) {
-                    setActionError(`A note holds at most ${MAX_ATTACHMENTS} attachments; ${dropped} left out.`);
-                  }
+                  addFiles(picked);
                 }}
               />
               <Button

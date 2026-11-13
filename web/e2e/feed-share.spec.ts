@@ -2,10 +2,11 @@ import type { Page } from "@playwright/test";
 
 import { ADMIN, API_URL, expect, login, test } from "./fixtures";
 
-// Sharing from another app (coreban#17). Android opens the manifest's
-// share_target as a GET to /share with the shared title, text and url, so
-// these tests open that URL the way the share sheet would. Only the share
-// sheet listing the installed app is left to a check on a real phone.
+// Sharing text from another app (coreban#17). The service worker turns
+// the share sheet's POST into a GET to /share with the shared title, text
+// and url (feed-share-files.spec.ts), so these tests open that URL. Only
+// the share sheet listing the installed app is left to a check on a real
+// phone.
 
 const unique = (prefix: string) => `${prefix} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -13,18 +14,6 @@ const feed = (page: Page) => page.getByRole("log", { name: "Feed" });
 const noteItem = (page: Page, text: string) => feed(page).getByRole("listitem").filter({ hasText: text });
 
 const shareUrl = (shared: Record<string, string>) => `/share?${new URLSearchParams(shared)}`;
-
-test("the manifest offers the app as a share target for titles, text and links", async ({ page }) => {
-  const res = await page.request.get("/manifest.webmanifest");
-  expect(res.ok()).toBe(true);
-  const manifest = await res.json();
-  expect(manifest.share_target).toEqual({
-    action: "/share",
-    method: "GET",
-    params: { title: "title", text: "text", url: "url" },
-  });
-  expect(manifest.share_target.action.startsWith(manifest.scope)).toBe(true);
-});
 
 test("a page shared from Chrome lands in the Feed as one plain note, in view", async ({ page }) => {
   await login(page);
