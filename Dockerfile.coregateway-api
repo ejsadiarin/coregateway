@@ -11,7 +11,11 @@ FROM alpine:latest AS runner
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /server .
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Fixed IDs, so the signing key can be shared with this user by group on any
+# host: compose bind-mounts the key with its host owner and mode, so the host
+# file must be group 10001 and mode 0640 (see compose.yml). k3s sets the same
+# IDs as runAsUser/fsGroup.
+RUN addgroup -S -g 10001 appgroup && adduser -S -u 10001 -G appgroup appuser
 USER appuser
 EXPOSE 8080
 

@@ -3,6 +3,9 @@ secrets:
   # Signing key mounted as a file: process environment is readable via
   # `docker inspect` and /proc, so the PEM never travels as an env var.
   # Generate with: openssl genpkey -algorithm ed25519 -out jwt_ed25519.pem
+  # Compose mounts the file with its host owner and mode, and the gateway runs
+  # as UID/GID 10001 (Dockerfile.coregateway-api), so let that group read it:
+  #   sudo chgrp 10001 jwt_ed25519.pem && chmod 640 jwt_ed25519.pem
   jwt_private_key:
     file: ./jwt_ed25519.pem
 

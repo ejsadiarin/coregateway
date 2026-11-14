@@ -58,6 +58,8 @@ unavailable. Steps are the same in k3s — swap the delivery mechanism.
 ```bash
 # 1. New key. kid = date + letter, e.g. 2027-01-a.
 openssl genpkey -algorithm ed25519 -out jwt_ed25519_next.pem
+#    Compose: the gateway runs as GID 10001 and must be able to read it.
+sudo chgrp 10001 jwt_ed25519_next.pem && chmod 640 jwt_ed25519_next.pem
 
 # 2. Build phase 1: new key current, old key previous.
 mv jwt_ed25519.pem jwt_ed25519_prev.pem

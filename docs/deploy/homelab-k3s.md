@@ -1627,8 +1627,8 @@ spec:
           secret: {secretName: gateway-jwt-keys, defaultMode: 0440}
       securityContext:
         runAsNonRoot: true
-        runAsUser: 100
-        fsGroup: 101
+        runAsUser: 10001
+        fsGroup: 10001
 ---
 apiVersion: v1
 kind: Service
@@ -1640,9 +1640,9 @@ spec:
   ports: [{port: 8080, targetPort: 8080}]
 ```
 
-The image runs as a non-root user created by `adduser -S`; confirm its numeric
-ID with `docker run --rm <image> id` and set `runAsUser`/`fsGroup` to match, or
-the key file will be unreadable and the gateway will refuse to start.
+The image runs as a non-root user with fixed IDs, UID and GID 10001
+(`Dockerfile.coregateway-api`); `runAsUser`/`fsGroup` must match them, or the
+key file will be unreadable and the gateway will refuse to start.
 
 Two replicas are safe only if sessions live in Postgres, which they do
 (a stored session record). Rate limits or caches held in process memory would
