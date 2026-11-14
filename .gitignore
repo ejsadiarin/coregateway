@@ -63,3 +63,10 @@ main
 
 # scripts/e2e-up.sh state: keys, logs, PIDs, binaries
 .e2e/
+
+# Local-only files (copy between machines by hand)
+/dump
+/Screenshot_*.jpg
+/PROMPT_TEST.md
+/.agents/
+/skills-lock.json
