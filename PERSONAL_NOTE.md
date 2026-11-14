@@ -4,7 +4,7 @@
 - budget tracker application
     - record expenses everyday
     - also record gains (from allowance, salary, revenue, assets etc.)
-- reminder tool
+- reminder tool (coreban)
     - daily quests as todos (workout, programming)
     - anime/manga/manhwa/manhua updates
     - tech/dev daily news
