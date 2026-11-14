@@ -28,6 +28,14 @@ metadata:
 spec:
   template:
     spec:
+      # Must match the image's fixed IDs (Dockerfile.coregateway-api). fsGroup
+      # makes the mounted key group 10001, so defaultMode 0440 is readable by
+      # the gateway; without it the files are root:root and unreadable.
+      # docs/deploy/gateway-signing-key.md
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
       volumes:
         - name: jwt-keys
           secret:
