@@ -29,8 +29,8 @@ func stubExists(known ...uuid.UUID) UserLookupFunc {
 	for _, id := range known {
 		set[id] = true
 	}
-	return func(_ context.Context, id uuid.UUID) (string, bool, error) {
-		return auth.RoleUser, set[id], nil
+	return func(_ context.Context, id uuid.UUID) (UserRecord, bool, error) {
+		return UserRecord{Role: auth.RoleUser, Timezone: "UTC"}, set[id], nil
 	}
 }
 
@@ -78,7 +78,7 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 	userID := uuid.New()
 	otherID := uuid.New()
 	edge := func(iss *token.Issuer) func(http.Handler) http.Handler {
-		return EdgeIdentity("corefinance", iss, nil, stubExists(otherID))
+		return EdgeIdentity("corefinance", iss, nil, stubExists(otherID, adminID, userID))
 	}
 
 	t.Run("admin targeting other mints act_as and strips param", func(t *testing.T) {
@@ -134,10 +134,10 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("own ID needs no lookup and sets no claim", func(t *testing.T) {
+	t.Run("own ID is not a targeted read and sets no claim", func(t *testing.T) {
 		iss := testIssuer(t)
-		// exists stub knows NOBODY here: own ID must pass regardless.
-		h := EdgeIdentity("corefinance", iss, nil, stubExists())
+		// the stub knows only the caller: own ID is never looked up as a target.
+		h := EdgeIdentity("corefinance", iss, nil, stubExists(userID))
 		req := requestAsUser(httptest.NewRequest(http.MethodGet, "/api/budget/remaining?user_id="+userID.String(), nil), userID)
 		claims, _, code := parseProxiedClaims(t, iss, h, req)
 		if code != http.StatusOK {
@@ -175,8 +175,8 @@ func TestEdgeTargetingMatrix(t *testing.T) {
 
 	t.Run("lookup failure is 500", func(t *testing.T) {
 		iss := testIssuer(t)
-		fail := UserLookupFunc(func(context.Context, uuid.UUID) (string, bool, error) {
-			return "", false, errors.New("db down")
+		fail := UserLookupFunc(func(context.Context, uuid.UUID) (UserRecord, bool, error) {
+			return UserRecord{}, false, errors.New("db down")
 		})
 		h := EdgeIdentity("corefinance", iss, nil, fail)
 		req := requestAsAdmin(httptest.NewRequest(http.MethodGet, "/api/budget/remaining?user_id="+otherID.String(), nil), adminID)

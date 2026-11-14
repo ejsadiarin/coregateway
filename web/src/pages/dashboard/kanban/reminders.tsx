@@ -11,6 +11,7 @@ import {
   KanbanRequestError,
 } from "@/lib/kanban";
 import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import {
   describeSchedule,
   fieldsOf,
@@ -71,7 +72,8 @@ export default function KanbanRemindersPage() {
     },
   });
 
-  const timezone = settingsQuery.data?.timezone;
+  // Reminder times read in the timezone the gateway keeps (ADR-0005).
+  const timezone = useUserTimezone().data?.timezone;
   const noTarget = settingsQuery.data !== undefined && settingsQuery.data.ntfy_topic === null;
   const reminders = remindersQuery.data;
   const year = new Date().getFullYear();
@@ -300,7 +302,7 @@ export function ReminderForm({
   const messageError = field === "message" ? plain : "";
   const otherError =
     mutation.error && !field ? detail || (onCancel ? "Couldn't save this reminder." : "Couldn't add this reminder.") : "";
-  const zoneNote = timezone ? `In ${zoneLabel(timezone)}, your Kanban timezone.` : "In your Kanban timezone.";
+  const zoneNote = timezone ? `In ${zoneLabel(timezone)}, your timezone.` : "In your timezone.";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -64,4 +64,5 @@ type CoregatewayUser struct {
 	Role         string           `json:"role"`
 	CreatedAt    pgtype.Timestamp `json:"created_at"`
 	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
+	Timezone     pgtype.Text      `json:"timezone"`
 }

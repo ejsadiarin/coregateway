@@ -2,21 +2,15 @@ import { Outlet, useLocation } from "react-router-dom";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { Navigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { fetchBudgetSettings } from "@/lib/budget-settings";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 
 function ProtectedLayout() {
-  const { isAuthenticated, isLoading, isGuest } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
-  // Once per session: a user who never saved a budget timezone starts on this
-  // device's, so rule entries land on their date, not UTC's (corefinance #9).
-  useQuery({
-    queryKey: ["budget", "settings"],
-    queryFn: fetchBudgetSettings,
-    enabled: isAuthenticated && !isGuest,
-    staleTime: Infinity,
-    retry: false,
-  });
+  // Once per session: a user who never saved a timezone starts on this
+  // device's, saved at the gateway, so every service dates their "today"
+  // and reads their schedules there rather than in UTC (ADR-0005).
+  useUserTimezone();
 
   if (isLoading) {
     return (

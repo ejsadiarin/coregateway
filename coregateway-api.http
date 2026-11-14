@@ -115,6 +115,24 @@ Content-Type: application/json
   "password": "newpassword123"
 }
 
+### Get My Timezone (self; 200 {"user_id","timezone","saved"}; unset is UTC, saved false)
+
+GET {{host}}/api/users/{{user_id}}/timezone
+
+### Set My Timezone (self only; IANA zone, else 400)
+
+PUT {{host}}/api/users/{{user_id}}/timezone
+Content-Type: application/json
+
+{
+  "timezone": "Asia/Manila"
+}
+
+### Look Up a User's Timezone as a background job (admin-owned key with `<downstream>:admin`, e.g. corefinance:admin)
+
+GET {{host}}/api/users/{{user_id}}/timezone
+Authorization: Bearer cgw_live_PASTE_WORKER_KEY_HERE
+
 ### Delete User (admin session; cannot delete self or demo@example.com; 204)
 
 DELETE {{host}}/api/users/{{user_id}}

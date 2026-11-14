@@ -81,8 +81,8 @@ func TestCoredrawKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("user session GET unaffected", func(t *testing.T) {
-		s, _, fake := coredrawScopeSetup(t)
-		_, _, _, userID := keyAuthTestSetup(t)
+		s, q, fake := coredrawScopeSetup(t)
+		userID := q.idOf(auth.RoleUser)
 		rec := httptest.NewRecorder()
 		proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/coredraw/boards", nil))
 		if rec.Code != http.StatusOK {

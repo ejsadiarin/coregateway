@@ -18,12 +18,16 @@ import (
 
 // Claims is the internal JWT envelope. Scope is a space-delimited list
 // (OAuth2 style) and is omitted when empty. Subject always carries the
-// user identity: every token is a user token.
+// user identity: every token is a user token. TZ is the IANA timezone of
+// the user the request is about (act_as when set, else sub); it is part of
+// the shared contract in ADR-0005. The edge always sets it (CreateTargetedToken);
+// CreateUserToken mints none.
 type Claims struct {
 	jwt.RegisteredClaims
 	Azp   string `json:"azp"`
 	Scope string `json:"scope,omitempty"`
 	ActAs string `json:"act_as,omitempty"`
+	TZ    string `json:"tz,omitempty"`
 }
 
 // Key is one Ed25519 signing key with its public identifier.
@@ -140,7 +144,7 @@ func (i *Issuer) Keys() []Key {
 // sign mints a token scoped to exactly one downstream. audiences is an
 // allow-list, never the minted value: a downstream outside it is a
 // programming error (route misconfigured), not a recoverable condition.
-func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUID, downstream string) (string, error) {
+func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUID, tz, downstream string) (string, error) {
 	if !slices.Contains(i.audiences, downstream) {
 		return "", fmt.Errorf("token: downstream %q is not in JWT_AUDIENCE", downstream)
 	}
@@ -155,6 +159,7 @@ func (i *Issuer) sign(sub uuid.UUID, azp string, scopes []string, actAs uuid.UUI
 			Subject:   sub.String(),
 		},
 		Azp: azp,
+		TZ:  tz,
 	}
 	if len(scopes) > 0 {
 		claims.Scope = strings.Join(scopes, " ")
@@ -176,18 +181,19 @@ func (i *Issuer) CreateUserToken(userID uuid.UUID, azp string, scopes []string, 
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, azp, scopes, uuid.Nil, downstream)
+	return i.sign(userID, azp, scopes, uuid.Nil, "", downstream)
 }
 
 // CreateTargetedToken is CreateUserToken with a signed act_as claim: the
-// edge asserts the caller (sub) may act as actAs. An Nil actAs behaves
-// exactly like CreateUserToken.
-func (i *Issuer) CreateTargetedToken(userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID, downstream string) (string, error) {
+// edge asserts the caller (sub) may act as actAs. A Nil actAs mints no
+// act_as. tz is the timezone of the user the request is about (actAs when
+// set, else userID) and travels as the tz claim (ADR-0005).
+func (i *Issuer) CreateTargetedToken(userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID, tz, downstream string) (string, error) {
 	if userID == uuid.Nil {
 		return "", fmt.Errorf("token: user id is required")
 	}
 	if azp == "" {
 		return "", fmt.Errorf("token: azp is required")
 	}
-	return i.sign(userID, azp, scopes, actAs, downstream)
+	return i.sign(userID, azp, scopes, actAs, tz, downstream)
 }

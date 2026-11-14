@@ -89,8 +89,8 @@ func TestCorebanKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("user session GET unaffected", func(t *testing.T) {
-		s, _, fake, _ := corebanScopeSetup(t)
-		_, _, _, userID := keyAuthTestSetup(t)
+		s, q, fake, _ := corebanScopeSetup(t)
+		userID := q.idOf(auth.RoleUser)
 		rec := httptest.NewRecorder()
 		proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/coreban/tasks", nil))
 		if rec.Code != http.StatusOK {

@@ -252,11 +252,63 @@ Claims (5 minutes lifetime):
   "sub": "<user-uuid>",   // always present — sub-less tokens are rejected
   "azp": "session",       // "session" | "api-key:<keyID>"
   "scope": "admin",       // space-separated; absent if none
+  "act_as": "<user-uuid>",// targeted reads only (see above)
+  "tz": "Asia/Manila",    // IANA zone of the user the request is about
   "jti": "<uuid>",        // unique per mint; joins gateway and downstream logs
   "iat": 1758883200,
   "exp": 1758883500
 }
 ```
+
+`tz` is the timezone of the user the request is about (ADR-0005): the
+target user in a targeted read (the `act_as` user), otherwise the caller.
+It is always an IANA zone name and is `UTC` for a user who hasn't set one,
+so a downstream never has to pick a default. The edge looks it up per
+mint; when the lookup fails the request is a `500` and is never proxied
+with a guessed zone. A change reaches requests on the next mint (within
+the token TTL). Treat a token without `tz` (minted before this claim
+shipped) as UTC.
+
+### A user's timezone (`/api/users/{id}/timezone`)
+
+The gateway stores each user's timezone (`coregateway.users.timezone`,
+migration `004_user_timezone.sql`; `NULL` = not set = UTC). Handlers:
+`internal/user/timezone.go`. Validation: an IANA zone that Go's
+`time.LoadLocation` loads; `""`, `"Local"` and anything else are `400`.
+
+| Call | Who | Result |
+|---|---|---|
+| `GET /api/users/{id}/timezone` | the user themself (session or any of their keys) | `200` |
+| `GET /api/users/{id}/timezone` for another user | an admin session, or a key **owned by an admin** holding `admin` or a `<downstream>:admin` scope (e.g. `corefinance:admin`) | `200` |
+| `PUT /api/users/{id}/timezone` `{"timezone":"Asia/Manila"}` | the user themself only (admins can't set others') | `200`, same body as `GET` |
+
+Response body (both methods):
+
+```json
+{ "user_id": "<uuid>", "timezone": "Asia/Manila", "saved": true }
+```
+
+A user who hasn't set one is **not an error**: `200` with
+`{"timezone":"UTC","saved":false}`. Every other outcome is a failed
+lookup, with a JSON `{"error": "..."}` body:
+
+| Status | Meaning |
+|---|---|
+| `400` | malformed `{id}`, or (PUT) a value that isn't an IANA zone |
+| `401` | no credential, or an unknown/revoked/expired key |
+| `403` | not the user, and not an admin with a covering key scope |
+| `404` | no such user |
+| `5xx` | the gateway couldn't read the store |
+
+**Background jobs** (corefinance's worker, coreban's reminder dispatcher)
+have no internal token, so they call this lookup with an API key
+(`Authorization: Bearer cgw_live_...`). Mint it from an admin session with
+the job's own downstream admin scope, e.g. `{"label":"corefinance-worker",
+"scopes":["corefinance:admin"]}`, rather than `admin`: a `<downstream>:admin`
+key can't manage users, keys or monitored services, and isn't an admin
+scope at the edge (no targeted reads). A job must fail closed on anything
+but `200` (skip the pass and retry; ADR-0002, ADR-0005), and use
+`timezone` as is, `UTC` included, on `200`.
 
 `jti` is informational: verifiers do not read it, but it makes one proxied
 request greppable across the gateway log and every downstream log, where
