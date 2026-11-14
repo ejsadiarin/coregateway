@@ -1421,10 +1421,13 @@ Six workloads in one namespace, as plain manifests under
 | `coreban-api` | Deployment | `ghcr.io/ejsadiarin/coreban-api` | 6972 |
 | `corefinance-worker` | CronJob (`--once`) | `ghcr.io/ejsadiarin/corefinance-cron-worker` | none |
 
-Service names are part of a contract: the `web` image's `nginx.conf` proxies
-to `coregateway-api:8080` and nginx refuses to start if that name does not
-resolve. Keep the Service named `coregateway-api`. The templates in `deploy/`
-use the same names.
+Service names are part of a contract: keep the Service named
+`coregateway-api`. The templates in `deploy/` use the same names. The `web`
+image's `nginx.conf.template` proxies `/api/` to `GATEWAY_UPSTREAM` (default
+`coregateway-api:8080`), resolved per request, so nginx starts whether or not
+that name resolves. nginx's resolver ignores resolv.conf search domains, so if
+`/api` ever does go through nginx here, set `GATEWAY_UPSTREAM` to
+`coregateway-api.coregateway.svc.cluster.local:8080`.
 
 ### 15.1 Build and push images
 
@@ -1729,8 +1732,8 @@ spec:
 ```
 
 API calls go straight from the Gateway to `coregateway-api`. The `/api` block
-in `web/nginx.conf` is no longer on the request path; it can stay in the image
-as long as the Service name resolves.
+in `web/nginx.conf.template` is no longer on the request path; it can stay in
+the image, and nginx starts without that name resolving.
 
 ### 15.6 Database migrations
 

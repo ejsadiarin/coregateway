@@ -1,0 +1,10 @@
+# Build context for web/Dockerfile. The image installs its own dependencies,
+# so the host's node_modules (and build/test output) must not be copied over
+# them by `COPY . .`.
+node_modules
+dist
+coverage
+test-results
+playwright-report
+*.tsbuildinfo
+.env*

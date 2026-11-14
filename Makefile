@@ -65,6 +65,15 @@ help:
 	@echo "  make run              Run in development mode"
 	@echo "  make dev              Run with live reload (requires air)"
 	@echo ""
+	@echo -e "${GREEN}Local Stack (compose.local.yml: own Postgres + S3, every service)${NC}"
+	@echo "  make local-up         Check submodules, build and start the whole stack"
+	@echo "  make local-down       Stop the stack (keeps data)"
+	@echo "  make local-reset      Stop the stack and delete its volumes"
+	@echo "  make local-logs       Follow logs (S=<service> for one)"
+	@echo "  make local-ps         List the stack's containers"
+	@echo "  make local-migrate    Rerun schemas, roles and migrations"
+	@echo "  make local-check      Only check submodules, Dockerfiles and compose file"
+	@echo ""
 	@echo -e "${GREEN}Building${NC}"
 	@echo "  make build            Build binary to $(BUILD_DIR)/$(BINARY_NAME)"
 	@echo "  make build-docker     Build Docker image"
@@ -143,6 +152,31 @@ dev:
 		echo -e "${RED}air not found. Run: go install github.com/air-verse/air@latest${NC}"; \
 		ENV=$(ENV) PORT=$(PORT) go run ./cmd/coregateway; \
 	fi
+
+# ==============================================================================
+# Local Stack (all services in Docker; see scripts/local.sh)
+# ==============================================================================
+
+local-up:
+	@./scripts/local.sh up $(S)
+
+local-down:
+	@./scripts/local.sh down
+
+local-reset:
+	@./scripts/local.sh reset
+
+local-logs:
+	@./scripts/local.sh logs $(S)
+
+local-ps:
+	@./scripts/local.sh ps
+
+local-migrate:
+	@./scripts/local.sh migrate
+
+local-check:
+	@./scripts/local.sh check
 
 # ==============================================================================
 # Building
@@ -391,6 +425,7 @@ env-check:
 
 # Phony targets
 .PHONY: help run dev build build-docker start run-background \
+        local-up local-down local-reset local-logs local-ps local-migrate local-check \
         migrate-up migrate-down migrate-redo migrate-status \
         migrate-create migrate-baseline migrate-fix \
         sqlc sqlc-check swagger generate \

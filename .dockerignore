@@ -1,0 +1,20 @@
+# Build context for Dockerfile.coregateway-api (context: .). The gateway builds
+# from its own go.mod in module mode, so the workspace and everything that
+# isn't the gateway's Go source stays out: without this, any submodule or web
+# change invalidated the gateway's `COPY . .` and rebuilt it.
+.git
+go.work
+go.work.sum
+services/
+web/
+.e2e/
+.local/
+.scratch/
+.playwright-mcp/
+.claude/
+logs/
+bin/
+planning-docs/
+*.pem
+.env
+.env.*

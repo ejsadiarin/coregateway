@@ -70,3 +70,5 @@ main
 /PROMPT_TEST.md
 /.agents/
 /skills-lock.json
+# scripts/local.sh state: the dev signing key
+.local/

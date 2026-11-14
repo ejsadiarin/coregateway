@@ -1,3 +1,16 @@
+# Rendered at container start by the nginx image's envsubst step (see
+# web/Dockerfile). Only variables defined in the environment are replaced,
+# so nginx's own lowercase $variables pass through untouched.
+#
+# The gateway is looked up per request (re-resolved every 10s), not once at
+# startup: a recreated gateway container gets a new IP, and a startup-only
+# lookup kept proxying to the old one (502) until nginx restarted. It also
+# means nginx starts even when the gateway name doesn't resolve yet.
+# NGINX_LOCAL_RESOLVERS comes from /etc/resolv.conf. nginx's resolver skips
+# resolv.conf search domains, so GATEWAY_UPSTREAM must be resolvable as
+# written: fine for a compose service name; in k3s use the Service's FQDN.
+resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+
 server {
     listen 80;
     server_name _;
@@ -8,7 +21,10 @@ server {
     # Everything (incl. /api/budget/) → coregateway: only it can mint the
     # internal JWT corefinance requires, so budget calls must NOT bypass it.
     location /api/ {
-        proxy_pass http://coregateway-api:8080;
+        # A variable makes nginx resolve at request time. With no URI part,
+        # the original request URI is passed through unchanged.
+        set $gateway http://${GATEWAY_UPSTREAM};
+        proxy_pass $gateway;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
