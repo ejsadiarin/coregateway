@@ -20,8 +20,8 @@ import (
 // (OAuth2 style) and is omitted when empty. Subject always carries the
 // user identity: every token is a user token. TZ is the IANA timezone of
 // the user the request is about (act_as when set, else sub); it is part of
-// the shared contract in ADR-0005 and omitted only by tokens that assert
-// no request (e.g. tests minting a bare user token).
+// the shared contract in ADR-0005. The edge always sets it (CreateTargetedToken);
+// CreateUserToken mints none.
 type Claims struct {
 	jwt.RegisteredClaims
 	Azp   string `json:"azp"`
