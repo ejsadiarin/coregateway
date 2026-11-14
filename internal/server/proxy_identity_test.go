@@ -74,6 +74,8 @@ func proxyTestSetup(t *testing.T) (*Server, *fakeDownstream, *token.Issuer) {
 	s := &Server{
 		TokenIssuer:       iss,
 		CorefinanceClient: corefinance.New(downstream.URL),
+		// The edge looks the caller up for the token's tz claim.
+		AuthService: auth.NewService(anyUserQuerier{}),
 	}
 	return s, fake, iss
 }

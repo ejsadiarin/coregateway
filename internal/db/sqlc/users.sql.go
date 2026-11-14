@@ -71,7 +71,7 @@ INSERT INTO coregateway.users (
 ) VALUES (
     $1, $2, $3
 )
-RETURNING id, email, password_hash, role, created_at, updated_at
+RETURNING id, email, password_hash, role, created_at, updated_at, timezone
 `
 
 type CreateUserParams struct {
@@ -91,6 +91,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (Coregat
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
@@ -179,7 +180,7 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, password_hash, role, created_at, updated_at FROM coregateway.users
+SELECT id, email, password_hash, role, created_at, updated_at, timezone FROM coregateway.users
 WHERE id = $1 LIMIT 1
 `
 
@@ -193,12 +194,13 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (CoregatewayUser, e
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, role, created_at, updated_at FROM coregateway.users
+SELECT id, email, password_hash, role, created_at, updated_at, timezone FROM coregateway.users
 WHERE email = $1 LIMIT 1
 `
 
@@ -212,12 +214,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (Coregateway
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Timezone,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, password_hash, role, created_at, updated_at FROM coregateway.users
+SELECT id, email, password_hash, role, created_at, updated_at, timezone FROM coregateway.users
 ORDER BY created_at DESC
 `
 
@@ -237,6 +240,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]CoregatewayUser, error) {
 			&i.Role,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Timezone,
 		); err != nil {
 			return nil, err
 		}
@@ -248,6 +252,25 @@ func (q *Queries) ListUsers(ctx context.Context) ([]CoregatewayUser, error) {
 	return items, nil
 }
 
+const setUserTimezone = `-- name: SetUserTimezone :one
+UPDATE coregateway.users
+SET timezone = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING timezone
+`
+
+type SetUserTimezoneParams struct {
+	ID       uuid.UUID   `json:"id"`
+	Timezone pgtype.Text `json:"timezone"`
+}
+
+func (q *Queries) SetUserTimezone(ctx context.Context, arg SetUserTimezoneParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, setUserTimezone, arg.ID, arg.Timezone)
+	var timezone pgtype.Text
+	err := row.Scan(&timezone)
+	return timezone, err
+}
+
 const updateUser = `-- name: UpdateUser :one
 UPDATE coregateway.users
 SET
@@ -256,7 +279,7 @@ SET
     role = COALESCE($4, role),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, email, password_hash, role, created_at, updated_at
+RETURNING id, email, password_hash, role, created_at, updated_at, timezone
 `
 
 type UpdateUserParams struct {
@@ -281,6 +304,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (Coregat
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Timezone,
 	)
 	return i, err
 }

@@ -80,8 +80,8 @@ func TestBudgetKeyScopeGate(t *testing.T) {
 	})
 
 	t.Run("user session GET unaffected", func(t *testing.T) {
-		s, _, fake := budgetScopeSetup(t)
-		_, _, _, userID := keyAuthTestSetup(t)
+		s, q, fake := budgetScopeSetup(t)
+		userID := q.idOf(auth.RoleUser)
 		rec := httptest.NewRecorder()
 		proxyRouter(s, auth.RoleUser, userID).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/budget/remaining", nil))
 		if rec.Code != http.StatusOK {

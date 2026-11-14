@@ -68,6 +68,9 @@ func (m *mockQuerier) CreateService(context.Context, sqlc.CreateServiceParams) (
 func (m *mockQuerier) DeleteService(context.Context, uuid.UUID) error   { return nil }
 func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error   { return nil }
 func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error      { return nil }
+func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
+	return arg.Timezone, nil
+}
 func (m *mockQuerier) DeleteUserSessions(context.Context, uuid.UUID) error { return nil }
 func (m *mockQuerier) GetAllServicesStats(context.Context) (sqlc.GetAllServicesStatsRow, error) {
 	return sqlc.GetAllServicesStatsRow{}, nil

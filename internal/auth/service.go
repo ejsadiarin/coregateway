@@ -11,6 +11,7 @@ import (
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 	usertypes "github.com/ejsadiarin/coregateway/internal/user/v1"
 	"github.com/ejsadiarin/coregateway/internal/session"
+	"github.com/ejsadiarin/coregateway/internal/timezone"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -136,6 +137,16 @@ func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.
 		Role:      user.Role,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// LookupUser reports a user's role and timezone (timezone.Default when
+// unset) for the edge. A missing user is pgx.ErrNoRows, wrapped.
+func (s *Service) LookupUser(ctx context.Context, id uuid.UUID) (role, tz string, err error) {
+	user, err := s.queries.GetUser(ctx, id)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to look up user: %w", err)
+	}
+	return user.Role, timezone.Effective(user.Timezone), nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*usertypes.User, error) {
