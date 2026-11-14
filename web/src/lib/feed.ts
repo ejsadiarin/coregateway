@@ -1,6 +1,6 @@
 import type { InfiniteData } from "@tanstack/react-query";
-import { format, isSameDay, isSameYear } from "date-fns";
-import type { BudgetKind, FeedPage, Note, NoteLink } from "@/types/feed";
+import { format, isSameDay, isSameYear, subDays } from "date-fns";
+import type { BudgetKind, FeedFilter, FeedPage, Note, NoteLink } from "@/types/feed";
 import type { Expense, Income } from "@/types/api";
 import { budgetRecordOf, isBudgetLink } from "@/lib/feed-records";
 import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
@@ -45,9 +45,12 @@ async function throwIfError(res: Response, op: string): Promise<void> {
 }
 
 // fetchFeed loads one page of the Feed: the newest notes, or with before,
-// the ones posted earlier than that cursor.
-export async function fetchFeed(before?: string): Promise<FeedPage> {
-  const url = before ? `${notesUrl}?before=${encodeURIComponent(before)}` : notesUrl;
+// the ones placed earlier than that cursor, narrowed by filter.
+export async function fetchFeed(before?: string, filter: FeedFilter = "all"): Promise<FeedPage> {
+  const q = new URLSearchParams();
+  if (before) q.set("before", before);
+  if (filter !== "all") q.set("only", filter);
+  const url = q.size ? `${notesUrl}?${q}` : notesUrl;
   const res = await fetch(url, { credentials: "include" });
   await throwIfError(res, "load the Feed");
   return res.json();
@@ -139,6 +142,54 @@ export function noteTime(iso: string, now: Date = new Date()): string {
   const at = new Date(iso);
   if (isSameDay(at, now)) return format(at, "HH:mm");
   return format(at, isSameYear(at, now) ? "EEE d MMM, HH:mm" : "EEE d MMM yyyy, HH:mm");
+}
+
+// noteClock is the time of day a note was posted; the day it belongs to
+// heads its group in the Feed (feedDays).
+export const noteClock = (iso: string) => format(new Date(iso), "HH:mm");
+
+// FeedDay is one day of the Feed: its notes in order, under a heading.
+export interface FeedDay {
+  key: string; // yyyy-MM-dd, local
+  label: string;
+  notes: Note[];
+}
+
+// dayLabel names a Feed day: Today, Yesterday, or the weekday and date,
+// with the year once it differs.
+export function dayLabel(at: Date, now: Date = new Date()): string {
+  if (isSameDay(at, now)) return "Today";
+  if (isSameDay(at, subDays(now, 1))) return "Yesterday";
+  return format(at, isSameYear(at, now) ? "EEE, MMM d" : "EEE, MMM d, yyyy");
+}
+
+// feedDays groups notes (oldest first) by the local day they sit on.
+export function feedDays(notes: Note[], now: Date = new Date()): FeedDay[] {
+  const days: FeedDay[] = [];
+  for (const n of notes) {
+    const at = new Date(n.posted_at);
+    const key = format(at, "yyyy-MM-dd");
+    const last = days[days.length - 1];
+    if (last?.key === key) last.notes.push(n);
+    else days.push({ key, label: dayLabel(at, now), notes: [n] });
+  }
+  return days;
+}
+
+// dayNet is a day's income less its spending, over the live, posted budget
+// records its notes show.
+export function dayNet(notes: Note[]): { net: number; any: boolean } {
+  let net = 0;
+  let any = false;
+  for (const n of notes) {
+    const l = n.link;
+    if (!isBudgetLink(l) || l.deleted) continue;
+    const r = budgetRecordOf(l);
+    if (!r || (r.status ?? "posted") !== "posted") continue;
+    any = true;
+    net += (l.kind === "income" ? 1 : -1) * Number(r.amount);
+  }
+  return { net, any };
 }
 
 // A piece of a note's text: plain, or a link to open (href set).

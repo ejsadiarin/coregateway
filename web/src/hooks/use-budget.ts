@@ -1,4 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { deleteBudgetNote, syncBudgetNotes, syncRecordOf } from '@/lib/budget-sync';
+import { feedKey } from '@/lib/feed';
+import type { BudgetKind } from '@/types/feed';
 import {
   fetchCategories,
   createCategory,
@@ -275,6 +278,22 @@ export function useExpense(id: string | null) {
   });
 }
 
+// Every budget record has a note in the Feed (coreban ADR-0005). A record
+// created or re-dated here gets its note placed at once; a record deleted
+// here takes its synced note with it. A failure only delays it: the Feed
+// syncs everything again when it opens.
+function syncNote(queryClient: QueryClient, kind: BudgetKind, record: Expense | Income) {
+  syncBudgetNotes([syncRecordOf(kind, record)])
+    .then(() => queryClient.invalidateQueries({ queryKey: feedKey }))
+    .catch(() => {});
+}
+
+function dropNote(queryClient: QueryClient, kind: BudgetKind, id: string) {
+  deleteBudgetNote(kind, id)
+    .then(() => queryClient.invalidateQueries({ queryKey: feedKey }))
+    .catch(() => {});
+}
+
 export function useCreateExpense() {
   const queryClient = useQueryClient();
   const { isGuest } = useAuth();
@@ -284,7 +303,8 @@ export function useCreateExpense() {
       if (isGuest) throw new GuestBlockedError();
       return createExpense(data);
     },
-    onSuccess: () => {
+    onSuccess: (record) => {
+      syncNote(queryClient, "expense", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
@@ -301,7 +321,8 @@ export function useUpdateExpense() {
       if (isGuest) throw new GuestBlockedError();
       return updateExpense(id, data);
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (record, variables) => {
+      syncNote(queryClient, "expense", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenseDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
@@ -319,7 +340,8 @@ export function useDeleteExpense() {
       if (isGuest) throw new GuestBlockedError();
       return deleteExpense(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      dropNote(queryClient, "expense", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
@@ -405,7 +427,8 @@ export function useCreateIncome() {
       if (isGuest) throw new GuestBlockedError();
       return createIncome(data);
     },
-    onSuccess: () => {
+    onSuccess: (record) => {
+      syncNote(queryClient, "income", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
@@ -423,7 +446,8 @@ export function useUpdateIncome() {
       if (isGuest) throw new GuestBlockedError();
       return updateIncome(id, data);
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (record, variables) => {
+      syncNote(queryClient, "income", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomeDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
@@ -442,7 +466,8 @@ export function useDeleteIncome() {
       if (isGuest) throw new GuestBlockedError();
       return deleteIncome(id);
     },
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      dropNote(queryClient, "income", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });

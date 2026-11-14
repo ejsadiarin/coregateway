@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchCategories } from "@/lib/api";
-import { saveSnapshot } from "@/lib/feed";
+import { fetchCategories, fetchIncomeCategories } from "@/lib/api";
+import { deleteNote, saveSnapshot } from "@/lib/feed";
 import {
   budgetRecordIds,
   fetchBudgetRecords,
@@ -22,10 +22,13 @@ export type CategoryName = (id: string) => string | undefined;
 // as deleted. What it shows is remembered on this device, so a record
 // deleted elsewhere still leaves its content on its note, and that content
 // is saved once as the note's snapshot (onSnapshot gets the saved note).
+// A note the sync made goes with its record instead (coreban ADR-0005):
+// it is deleted, and onRemoved gets its id.
 export function useBudgetRecords(
   feed: Note[],
   queryKey: readonly unknown[],
   onSnapshot: (note: Note) => void,
+  onRemoved: (id: string) => void,
 ): { notes: Note[]; categoryName: CategoryName } {
   const ids = budgetRecordIds(feed);
   const enabled = ids.expense.length + ids.income.length > 0;
@@ -41,7 +44,14 @@ export function useBudgetRecords(
     staleTime: 300000,
     enabled,
   });
-  const categoryName: CategoryName = (id) => categories.data?.find((c) => c.id === id)?.name;
+  const incomeCategories = useQuery({
+    queryKey: [...budgetKeys.categories(), "income"],
+    queryFn: fetchIncomeCategories,
+    staleTime: 300000,
+    enabled,
+  });
+  const categoryName: CategoryName = (id) =>
+    (categories.data?.find((c) => c.id === id) ?? incomeCategories.data?.find((c) => c.id === id))?.name;
 
   const [shown, setShown] = useState(loadShown);
   const shownNotes = feed.map((n) => showBudget(n, records.data, shown));
@@ -67,11 +77,18 @@ export function useBudgetRecords(
   const sent = useRef<{ batch: unknown; ids: Set<string> }>({ batch: undefined, ids: new Set() });
   useEffect(() => {
     if (sent.current.batch !== data) sent.current = { batch: data, ids: new Set() };
-    for (const { note, snapshot } of shownNotes) {
-      if (!snapshot || sent.current.ids.has(note.id)) continue;
+    shownNotes.forEach(({ note, snapshot }, i) => {
+      if (sent.current.ids.has(note.id)) return;
+      const gone = note.link?.deleted && !feed[i].link?.deleted;
+      if (gone && note.origin === "budget") {
+        sent.current.ids.add(note.id);
+        deleteNote(note.id).then(() => onRemoved(note.id), () => {});
+        return;
+      }
+      if (!snapshot) return;
       sent.current.ids.add(note.id);
       saveSnapshot(note.id, snapshot).then(onSnapshot, () => {});
-    }
+    });
   });
 
   return { notes: shownNotes.map((s) => s.note), categoryName };

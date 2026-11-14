@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { InfiniteData } from "@tanstack/react-query";
 import {
   appendNote,
+  dayLabel,
+  dayNet,
+  feedDays,
   archivePrompt,
   enterSends,
   feedNotes,
@@ -22,6 +25,8 @@ const note = (id: string, text = id): Note => ({
   text,
   link: null,
   archived_at: null,
+  posted_at: "2026-11-11T10:00:00Z",
+  origin: "feed",
   created_at: "2026-11-11T10:00:00Z",
   updated_at: "2026-11-11T10:00:00Z",
 });
@@ -349,5 +354,50 @@ describe("enterSends", () => {
 
   it("ignores every other key", () => {
     expect(enterSends({ ...enter, key: "a" }, false)).toBe(false);
+  });
+});
+
+describe("feedDays", () => {
+  const at = (id: string, posted_at: string, link: NoteLink | null = null): Note => ({
+    ...note(id),
+    link,
+    posted_at,
+    origin: link ? "budget" : "feed",
+  });
+  const now = new Date("2026-11-14T12:00:00");
+
+  it("groups notes by the local day they sit on, naming today and yesterday", () => {
+    const days = feedDays(
+      [
+        at("a", "2026-05-05T12:00:00"),
+        at("b", "2026-05-05T18:00:00"),
+        at("c", "2026-11-13T09:00:00"),
+        at("d", "2026-11-14T08:00:00"),
+      ],
+      now,
+    );
+    expect(days.map((d) => [d.label, d.notes.map((n) => n.id)])).toEqual([
+      ["Tue, May 5", ["a", "b"]],
+      ["Yesterday", ["c"]],
+      ["Today", ["d"]],
+    ]);
+  });
+
+  it("names the year of a day in another year", () => {
+    expect(dayLabel(new Date("2025-12-25T12:00:00"), now)).toBe("Thu, Dec 25, 2025");
+  });
+
+  it("nets a day's live, posted budget records", () => {
+    const exp = { amount: 150, status: "posted" } as unknown as Expense;
+    const inc = { amount: 500, status: "posted" } as unknown as Income;
+    const skipped = { amount: 500, status: "skipped" } as unknown as Income;
+    const notes = [
+      at("e", "2026-11-13T09:00:00", { kind: "expense", deleted: false, record_id: "e", expense: exp }),
+      at("i", "2026-11-13T09:00:00", { kind: "income", deleted: false, record_id: "i", income: inc }),
+      at("s", "2026-11-13T09:00:00", { kind: "income", deleted: false, record_id: "s", income: skipped }),
+      at("t", "2026-11-13T09:00:00"),
+    ];
+    expect(dayNet(notes)).toEqual({ net: 350, any: true });
+    expect(dayNet([at("t", "2026-11-13T09:00:00")])).toEqual({ net: 0, any: false });
   });
 });

@@ -16,9 +16,18 @@ export interface Note {
   // Set while the note is archived: collapsed in the Feed, kept, and still
   // in its place.
   archived_at: string | null;
+  // Where the note sits in the Feed: when it was posted, or for a budget
+  // record's note the record's date (coreban ADR-0005).
+  posted_at: string;
+  // "feed" for a note posted from the Feed, "budget" for one the sync made.
+  origin: "feed" | "budget";
   created_at: string;
   updated_at: string;
 }
+
+// FeedFilter narrows the Feed: every note, only plain/reminder/card
+// notes, or only expense and income notes.
+export type FeedFilter = "all" | "notes" | "budget";
 
 // FeedPage is one page of the Feed, oldest first. older is the cursor for
 // the page before it, null once the page reaches the first note.

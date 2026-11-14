@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   ReceiptText,
+  Repeat,
   SendHorizontal,
   SquareKanban,
   Trash2,
@@ -22,6 +23,8 @@ import {
   appendNote,
   archivePrompt,
   copyText,
+  dayNet,
+  feedDays,
   deleteNote,
   editNoteText,
   enterSends,
@@ -32,7 +35,7 @@ import {
   MAX_NOTE_LENGTH,
   noteCopyText,
   notePreview,
-  noteTime,
+  noteClock,
   feedKey,
   postNote,
   removeNote,
@@ -43,7 +46,9 @@ import {
 } from "@/lib/feed";
 import { budgetRecordOf, deleteBudgetRecord, isBudgetLink } from "@/lib/feed-records";
 import { budgetKeys } from "@/hooks/use-budget";
-import type { Note, NoteLink } from "@/types/feed";
+import type { FeedFilter, Note, NoteLink } from "@/types/feed";
+import { syncAllBudgetNotes } from "@/lib/budget-sync";
+import { formatPeso } from "@/lib/format";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
 import { useTouchDevice } from "@/hooks/use-touch-device";
 import { useAuth } from "@/contexts/auth-context";
@@ -121,6 +126,48 @@ function LinkLine({ link, categoryName, className }: { link: NoteLink; categoryN
           <span className="block font-mono text-[11px] tabular-nums tracking-wide text-muted-foreground">{detail}</span>
         )}
       </span>
+    </span>
+  );
+}
+
+// A live expense or income on its note: what it was, the signed amount,
+// and its category, whether a rule made it, and a status other than
+// posted.
+function BudgetLine({ link, categoryName }: { link: NoteLink; categoryName?: CategoryName }) {
+  const r = isBudgetLink(link) ? budgetRecordOf(link) : undefined;
+  if (!r) return <LinkLine link={link} categoryName={categoryName} />;
+  const income = link.kind === "income";
+  const Icon = linkIcons[link.kind];
+  const status = r.status ?? "posted";
+  const muted = status !== "posted";
+  const category = r.category_id ? categoryName?.(r.category_id) : undefined;
+  return (
+    <span className={cn("block min-w-0 text-left", muted && "opacity-60")}>
+      <span className="flex min-w-0 items-start gap-2 text-sm leading-relaxed">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label={linkKindName[link.kind]} />
+        <span className="min-w-0 break-words">{r.description || linkKindName[link.kind]}</span>
+        <span
+          className={cn(
+            "ml-auto shrink-0 pl-3 font-mono tabular-nums",
+            income ? "text-emerald-600 dark:text-emerald-400" : "text-foreground",
+            muted && "line-through",
+          )}
+        >
+          {income ? "+" : "−"}
+          {formatPeso(r.amount, r.currency)}
+        </span>
+      </span>
+      {(category || r.source_rule_id || muted) && (
+        <span className="mt-1 flex flex-wrap items-center justify-end gap-x-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {category && <span>{category}</span>}
+          {r.source_rule_id && (
+            <span className="inline-flex items-center gap-1">
+              <Repeat className="h-3 w-3" aria-hidden /> rule
+            </span>
+          )}
+          {muted && <span>{status}</span>}
+        </span>
+      )}
     </span>
   );
 }
@@ -219,13 +266,13 @@ const bubble =
 function NoteTime({ note, className }: { note: Note; className?: string }) {
   return (
     <time
-      dateTime={note.created_at}
+      dateTime={note.posted_at}
       className={cn(
         "mt-1 block font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground",
         className,
       )}
     >
-      {noteTime(note.created_at)}
+      {noteClock(note.posted_at)}
     </time>
   );
 }
@@ -285,8 +332,12 @@ function LiveNote({
           </div>
         ) : (
           <button type="button" onClick={actions.openRecord} className={cn(bubble, "hover:border-primary/40")}>
-            <LinkLine link={link} categoryName={categoryName} />
-            <NoteTime note={note} className="text-right" />
+            {isBudgetLink(link) ? (
+              <BudgetLine link={link} categoryName={categoryName} />
+            ) : (
+              <LinkLine link={link} categoryName={categoryName} />
+            )}
+            {note.origin !== "budget" && <NoteTime note={note} className="text-right" />}
           </button>
         )
       ) : (
@@ -400,9 +451,13 @@ export default function FeedPage() {
   const keepFromBottom = useRef<number | null>(null);
   const toBottom = useRef(true);
 
+  // All notes, only the owner's own (plain, reminder, card), or only the
+  // budget's; each keeps its own pages.
+  const [filter, setFilter] = useState<FeedFilter>("all");
+  const key = useMemo(() => [...feedKey, filter], [filter]);
   const feedQuery = useInfiniteQuery({
-    queryKey: feedKey,
-    queryFn: ({ pageParam }) => fetchFeed(pageParam),
+    queryKey: key,
+    queryFn: ({ pageParam }) => fetchFeed(pageParam, filter),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
@@ -411,9 +466,33 @@ export default function FeedPage() {
   const pageCount = feedQuery.data?.pages.length ?? 0;
 
   const update = (f: (data: FeedData | undefined) => FeedData | undefined) =>
-    queryClient.setQueryData<FeedData>(feedKey, f);
+    queryClient.setQueryData<FeedData>(key, f);
 
-  const { notes, categoryName } = useBudgetRecords(feed, feedKey, (saved) => update((d) => replaceNote(d, saved)));
+  const { notes, categoryName } = useBudgetRecords(
+    feed,
+    key,
+    (saved) => update((d) => replaceNote(d, saved)),
+    (id) => update((d) => removeNote(d, id)),
+  );
+  const days = feedDays(notes);
+
+  // Every budget record has a note on its own date (coreban ADR-0005):
+  // opening the Feed sends coreban what corefinance holds, and re-reads
+  // the Feed if that added or moved any.
+  useEffect(() => {
+    if (isGuest) return;
+    syncAllBudgetNotes().then(
+      (r) => {
+        if (r.created || r.moved) queryClient.invalidateQueries({ queryKey: feedKey });
+      },
+      () => {},
+    );
+  }, [isGuest, queryClient]);
+
+  const pickFilter = (f: FeedFilter) => {
+    toBottom.current = true;
+    setFilter(f);
+  };
 
   const fail = (fallback: string) => (err: unknown) =>
     setActionError(err instanceof Error ? err.message : fallback);
@@ -513,7 +592,9 @@ export default function FeedPage() {
       setDraft("");
       if (keys) uploads.posted(keys);
       toBottom.current = true;
-      update((d) => appendNote(d, note));
+      // A posted note isn't a budget note: the Budget view doesn't show it.
+      if (filter === "budget") queryClient.invalidateQueries({ queryKey: feedKey });
+      else update((d) => appendNote(d, note));
     },
     onError: fail("Couldn't post this note"),
   });
@@ -649,6 +730,27 @@ export default function FeedPage() {
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       <div className="px-4 pt-4 md:px-6 md:pt-6">
         <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Feed</h1>
+        <div role="group" aria-label="Show" className="mt-3 flex gap-2">
+          {(
+            [
+              ["all", "All"],
+              ["notes", "Notes"],
+              ["budget", "Budget"],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={filter === value ? "default" : "outline"}
+              aria-pressed={filter === value}
+              className="min-h-9 rounded-full px-4"
+              onClick={() => pickFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <div
@@ -697,28 +799,51 @@ export default function FeedPage() {
         )}
 
         {notes.length > 0 && (
-          <ol className="grid grid-cols-1 gap-3">
-            {notes.map((note) => (
-              <li key={note.id} data-note-id={note.id}>
-                {note.archived_at ? (
-                  <ArchivedNote
-                    note={note}
-                    restoring={archiveMutation.isPending}
-                    onRestore={() => archiveMutation.mutate({ note, archived: false })}
-                    onDelete={() => setDeleting(note)}
-                    categoryName={categoryName}
-                  />
-                ) : (
-                  <LiveNote
-                    note={note}
-                    saving={editMutation.isPending}
-                    actions={actionsFor(note)}
-                    categoryName={categoryName}
-                  />
-                )}
-              </li>
-            ))}
-          </ol>
+          <div className="grid grid-cols-1 gap-3">
+            {days.map((day) => {
+              const { net, any } = dayNet(day.notes);
+              return (
+                <section key={day.key} aria-label={day.label} className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-3 py-1">
+                    <span className="h-px flex-1 bg-border" />
+                    <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      {day.label}
+                      {any && (
+                        <span className="tabular-nums">
+                          {" "}
+                          · net {net < 0 ? "\u2212" : "+"}
+                          {formatPeso(Math.abs(net))}
+                        </span>
+                      )}
+                    </h2>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <ol className="grid grid-cols-1 gap-3">
+                    {day.notes.map((note) => (
+                      <li key={note.id} data-note-id={note.id}>
+                        {note.archived_at ? (
+                          <ArchivedNote
+                            note={note}
+                            restoring={archiveMutation.isPending}
+                            onRestore={() => archiveMutation.mutate({ note, archived: false })}
+                            onDelete={() => setDeleting(note)}
+                            categoryName={categoryName}
+                          />
+                        ) : (
+                          <LiveNote
+                            note={note}
+                            saving={editMutation.isPending}
+                            actions={actionsFor(note)}
+                            categoryName={categoryName}
+                          />
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              );
+            })}
+          </div>
         )}
       </div>
 

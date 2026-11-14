@@ -8,6 +8,8 @@ const note = (id: string, link: NoteLink | null = null): Note => ({
   text: link ? "" : id,
   link,
   archived_at: null,
+  posted_at: "2026-11-11T10:00:00Z",
+  origin: "feed",
   created_at: "2026-11-11T10:00:00Z",
   updated_at: "2026-11-11T10:00:00Z",
 });
