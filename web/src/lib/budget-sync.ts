@@ -78,7 +78,7 @@ export async function syncBudgetNotes(records: SyncRecord[]): Promise<SyncResult
 // reads page after page until a short one.
 const PAGE = 1000;
 
-async function readAll<T>(read: (page: number) => Promise<unknown>): Promise<T[]> {
+export async function readAll<T>(read: (page: number) => Promise<unknown>): Promise<T[]> {
   const out: T[] = [];
   for (let page = 1; ; page++) {
     const got = rows<T>(await read(page));

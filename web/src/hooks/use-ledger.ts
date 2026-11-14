@@ -1,0 +1,205 @@
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes } from "@/lib/api";
+import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
+import { feedKey } from "@/lib/feed";
+import { entryOf, ruleOf, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
+import { addTag, createRule, fetchRules, fetchTagLinks, removeTag, updateRule, type RuleInput } from "@/lib/ledger-api";
+import {
+  budgetKeys,
+  GuestBlockedError,
+  useCreateExpense,
+  useCreateIncome,
+  useDeleteExpense,
+  useDeleteIncome,
+  useUpdateExpense,
+  useUpdateIncome,
+} from "@/hooks/use-budget";
+import { useAuth } from "@/contexts/auth-context";
+import type { Category, Expense, Income, Tag } from "@/types/api";
+
+// The data behind the Expenses and Incomes pages: every entry of one kind,
+// its rules (paused ones too), its categories and the tags on each entry.
+
+const recordsKey = (kind: LedgerKind) => [...(kind === "expense" ? budgetKeys.expenses() : budgetKeys.incomes()), "all"] as const;
+const rulesKey = (kind: LedgerKind) =>
+  [...(kind === "expense" ? budgetKeys.recurringExpenses() : budgetKeys.recurringIncomes()), "withPaused"] as const;
+const tagLinksKey = [...budgetKeys.tags(), "links"] as const;
+const PAGE = 1000;
+
+export function useEntries(kind: LedgerKind) {
+  return useQuery<Entry[]>({
+    queryKey: recordsKey(kind),
+    queryFn: async () => {
+      const rows =
+        kind === "expense"
+          ? await readAll<Expense>((page) => fetchExpenses({ page, page_size: PAGE }))
+          : await readAll<Income>((page) => fetchIncomes({ page, page_size: PAGE }));
+      return rows.map((r) => entryOf(kind, r));
+    },
+    staleTime: 60000,
+  });
+}
+
+export function useRules(kind: LedgerKind) {
+  return useQuery<Rule[]>({
+    queryKey: rulesKey(kind),
+    queryFn: async () => (await fetchRules(kind)).map((r) => ruleOf(kind, r)),
+    staleTime: 60000,
+  });
+}
+
+export function useKindCategories(kind: LedgerKind) {
+  return useQuery<Category[]>({
+    queryKey: [...budgetKeys.categories(), kind],
+    queryFn: async () => (await (kind === "expense" ? fetchExpenseCategories() : fetchIncomeCategories())) ?? [],
+    // Each category gets a color of its own here, so every chip agrees.
+    select: withHues,
+    staleTime: 300000,
+  });
+}
+
+// useEntryTags maps each entry of a kind to the ids of its tags.
+export function useEntryTags(kind: LedgerKind) {
+  const q = useQuery({ queryKey: tagLinksKey, queryFn: fetchTagLinks, staleTime: 60000 });
+  const byRecord = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const l of (kind === "expense" ? q.data?.expenses : q.data?.incomes) ?? []) {
+      m.set(l.record_id, [...(m.get(l.record_id) ?? []), l.tag_id]);
+    }
+    return m;
+  }, [q.data, kind]);
+  return byRecord;
+}
+
+// EntryInput is what the new-entry sheet collects for a single entry.
+export interface EntryInput {
+  description: string;
+  amount: number;
+  currency: string;
+  date: string;
+  categoryId?: string;
+  priority: Priority;
+  notes: string;
+  marker?: string;
+  status?: Entry["status"];
+  ruleId?: string;
+}
+
+// TagPick is a tag picked in the sheet: an existing one, or a new name.
+export type TagPick = { id: string; name: string } | { id?: undefined; name: string };
+
+function body(kind: LedgerKind, e: EntryInput) {
+  const shared = {
+    description: e.description,
+    amount: e.amount,
+    currency: e.currency,
+    category_id: e.categoryId,
+    notes: [e.marker, e.notes].filter(Boolean).join(" ") || undefined,
+    priority: e.priority,
+    recurring_type: "one-time" as const,
+    status: e.status ?? (e.date > new Date().toISOString().slice(0, 10) ? "pending" : "posted"),
+    source_rule_id: e.ruleId,
+  };
+  return kind === "expense" ? { ...shared, expense_date: e.date, is_debt: false } : { ...shared, date: e.date };
+}
+
+// useSaveEntry creates or updates an entry and sets its tags.
+export function useSaveEntry(kind: LedgerKind) {
+  const qc = useQueryClient();
+  const createE = useCreateExpense();
+  const updateE = useUpdateExpense();
+  const createI = useCreateIncome();
+  const updateI = useUpdateIncome();
+
+  return useMutation({
+    mutationFn: async ({ id, input, tags, hadTags = [] }: { id?: string; input: EntryInput; tags?: TagPick[]; hadTags?: string[] }) => {
+      const b = body(kind, input);
+      let record: Expense | Income;
+      if (kind === "expense") {
+        // The cast drops the income-only shape; body() built an expense.
+        record = id
+          ? await updateE.mutateAsync({ id, data: b as Parameters<typeof updateE.mutateAsync>[0]["data"] })
+          : await createE.mutateAsync(b as Parameters<typeof createE.mutateAsync>[0]);
+      } else {
+        record = id
+          ? await updateI.mutateAsync({ id, data: b as Parameters<typeof updateI.mutateAsync>[0]["data"] })
+          : await createI.mutateAsync(b as Parameters<typeof createI.mutateAsync>[0]);
+      }
+      if (tags) {
+        const want: string[] = [];
+        for (const t of tags) want.push(t.id ?? (await createTag({ name: t.name })).id);
+        for (const t of want) if (!hadTags.includes(t)) await addTag(kind, record.id, t);
+        for (const t of hadTags) if (!want.includes(t)) await removeTag(kind, record.id, t);
+      }
+      return record;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: budgetKeys.tags() });
+    },
+  });
+}
+
+export function useDeleteEntry(kind: LedgerKind) {
+  const e = useDeleteExpense();
+  const i = useDeleteIncome();
+  return kind === "expense" ? e : i;
+}
+
+// useSaveRule creates a rule or replaces one (edit, pause, resume, end).
+// A new rule due today makes today's entry at once, so the entries and the
+// Feed read again.
+export function useSaveRule(kind: LedgerKind) {
+  const qc = useQueryClient();
+  const { isGuest } = useAuth();
+  return useMutation({
+    mutationFn: ({ id, rule }: { id?: string; rule: RuleInput }) => {
+      if (isGuest) throw new GuestBlockedError();
+      return id ? updateRule(kind, id, rule) : createRule(kind, rule);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: kind === "expense" ? budgetKeys.recurringExpenses() : budgetKeys.recurringIncomes() });
+      await qc.invalidateQueries({ queryKey: recordsKey(kind) });
+      qc.invalidateQueries({ queryKey: budgetKeys.stats() });
+      qc.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
+      // Today's new entry gets its Feed note.
+      const records = qc.getQueryData<Entry[]>(recordsKey(kind)) ?? [];
+      const fresh = records.filter((r) => r.ruleId && r.createdAt > new Date(Date.now() - 60000).toISOString());
+      if (fresh.length) {
+        syncBudgetNotes(
+          fresh.map((r) =>
+            syncRecordOf(kind, kind === "expense"
+              ? ({ id: r.id, expense_date: r.date, created_at: r.createdAt } as Expense)
+              : ({ id: r.id, date: r.date, created_at: r.createdAt } as Income)),
+          ),
+        )
+          .then(() => qc.invalidateQueries({ queryKey: feedKey }))
+          .catch(() => {});
+      }
+    },
+  });
+}
+
+// ruleInput is the whole of a rule to send back with some fields changed.
+export function ruleInput(r: Rule, change: Partial<RuleInput> = {}): RuleInput {
+  return {
+    description: r.description,
+    amount: r.amount,
+    currency: r.currency,
+    category_id: r.categoryId,
+    notes: r.notes || undefined,
+    priority: r.priority,
+    recurring_type: r.cadence as Cadence,
+    start_date: r.startDate,
+    end_date: r.endDate,
+    is_active: r.active,
+    ...change,
+  };
+}
+
+// tagsOf names the tags of an entry.
+export function tagsOf(ids: string[] | undefined, tags: Tag[] | undefined): Tag[] {
+  if (!ids?.length || !tags) return [];
+  const byId = new Map(tags.map((t) => [t.id, t]));
+  return ids.map((id) => byId.get(id)).filter((t): t is Tag => !!t);
+}

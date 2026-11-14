@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ExpenseStats } from "@/components/budget/expense-stats";
 import { IncomeForm } from "@/components/budget/income-form";
-import { ExpenseFormDialog } from "@/components/budget/expense-form-dialog";
+import { EntrySheet } from "@/components/budget/ledger/entry-sheet";
 import {
   SavingsRateCard,
   SpendingVelocityCard,
@@ -18,12 +18,10 @@ import {
   useSummaryStats,
   useExpenses,
   useIncomeOccurrences,
-  useCreateIncome,
   useUpdateIncome,
   useDeleteIncome,
   useUpdateExpense,
   useDeleteExpense,
-  useCreateExpense,
   useBudgetRemaining,
 } from "@/hooks/use-budget";
 import { GuestBlockedError } from "@/hooks/use-budget";
@@ -39,7 +37,7 @@ import { formatPeso, formatSigned } from "@/lib/format";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/components/ui/toast";
 import { ExpenseDetailDialog } from "@/components/budget/expense-detail-dialog";
-import type { Expense, Income, CreateIncomeRequest, UpdateIncomeRequest, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
+import type { Expense, Income, UpdateIncomeRequest, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 
 export default function BudgetDashboard() {
   const navigate = useNavigate();
@@ -75,15 +73,15 @@ export default function BudgetDashboard() {
   const { showToast } = useToast();
 
   const [viewingExpense, setViewingExpense] = useState<Expense | null>(null);
-  const [showIncomeForm, setShowIncomeForm] = useState(false);
-  const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  // The kind of a new entry being added, in the shared new-entry sheet.
+  const [newEntry, setNewEntry] = useState<"expense" | "income" | null>(null);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
 
   // check for query param to open expense dialog (deep linking support)
   useEffect(() => {
     const openExpense = searchParams.get("openExpense");
     if (openExpense === "true") {
-      setShowExpenseDialog(true);
+      setNewEntry("expense");
       // remove query param from URL
       navigate("/dashboard/budget", { replace: true });
     }
@@ -91,8 +89,6 @@ export default function BudgetDashboard() {
 
   const updateExpense = useUpdateExpense();
   const deleteExpense = useDeleteExpense();
-  const createIncome = useCreateIncome();
-  const createExpense = useCreateExpense();
   const updateIncome = useUpdateIncome();
   const deleteIncome = useDeleteIncome();
 
@@ -133,20 +129,6 @@ export default function BudgetDashboard() {
     }
   };
 
-  const handleCreateIncome = async (data: CreateIncomeRequest | UpdateIncomeRequest) => {
-    try {
-      await createIncome.mutateAsync(data as CreateIncomeRequest);
-      showToast("Income created successfully", "success");
-      setShowIncomeForm(false);
-    } catch (error) {
-      if (error instanceof GuestBlockedError) {
-        showToast(error.message, "warning");
-      } else {
-        showToast("Failed to create income", "error");
-      }
-    }
-  };
-
   const handleUpdateIncome = async (data: UpdateIncomeRequest) => {
     try {
       if (!editingIncome) return;
@@ -172,19 +154,6 @@ export default function BudgetDashboard() {
         showToast(error.message, "warning");
       } else {
         showToast("Failed to delete income", "error");
-      }
-    }
-  };
-
-  const handleCreateExpense = async (data: CreateExpenseRequest | UpdateExpenseRequest) => {
-    try {
-      await createExpense.mutateAsync(data as CreateExpenseRequest);
-      showToast("Expense created successfully", "success");
-    } catch (error) {
-      if (error instanceof GuestBlockedError) {
-        showToast(error.message, "warning");
-      } else {
-        showToast("Failed to create expense", "error");
       }
     }
   };
@@ -215,7 +184,7 @@ export default function BudgetDashboard() {
         </div>
         <div className="flex gap-2">
           <Button
-            onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}
+            onClick={() => { handleActionClick(); if (!isGuest) setNewEntry("income"); }}
             disabled={isGuest}
             title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
           >
@@ -223,7 +192,7 @@ export default function BudgetDashboard() {
             Add Income
           </Button>
           <Button
-            onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}
+            onClick={() => { handleActionClick(); if (!isGuest) setNewEntry("expense"); }}
             disabled={isGuest}
             title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
           >
@@ -354,7 +323,7 @@ export default function BudgetDashboard() {
                   className="mt-4"
                   disabled={isGuest}
                   title={isGuest ? "Guest user is read-only. Create an account to save changes" : undefined}
-                  onClick={() => { handleActionClick(); if (!isGuest) setShowIncomeForm(true); }}
+                  onClick={() => { handleActionClick(); if (!isGuest) setNewEntry("income"); }}
                 >
                   <Plus className="h-4 w-4" />
                   Add your first income
@@ -460,7 +429,7 @@ export default function BudgetDashboard() {
                       size="sm" 
                       className="mt-4"
                       disabled={isGuest}
-                      onClick={() => { handleActionClick(); if (!isGuest) setShowExpenseDialog(true); }}
+                      onClick={() => { handleActionClick(); if (!isGuest) setNewEntry("expense"); }}
                     >
                       <Plus className="h-4 w-4" />
                       Add your first expense
@@ -499,20 +468,6 @@ export default function BudgetDashboard() {
           </CardContent>
         </Card>
       </motion.div>
-
-      {/* Income Form Dialog */}
-      <Dialog open={showIncomeForm} onOpenChange={setShowIncomeForm}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Add New Income</DialogTitle>
-          </DialogHeader>
-          <IncomeForm
-            onSubmit={handleCreateIncome}
-            onCancel={() => setShowIncomeForm(false)}
-            isLoading={createIncome.isPending}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* Edit Income Dialog */}
       <Dialog open={!!editingIncome} onOpenChange={() => setEditingIncome(null)}>
@@ -566,12 +521,7 @@ export default function BudgetDashboard() {
         isGuest={isGuest}
       />
 
-      {/* Expense Form Dialog */}
-      <ExpenseFormDialog
-        open={showExpenseDialog}
-        onOpenChange={setShowExpenseDialog}
-        onSubmit={handleCreateExpense}
-      />
+      <EntrySheet kind={newEntry ?? "expense"} target={newEntry ? { mode: "new" } : null} onClose={() => setNewEntry(null)} />
     </div>
   );
 }

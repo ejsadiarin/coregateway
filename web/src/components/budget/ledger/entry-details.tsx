@@ -1,0 +1,112 @@
+import { useState } from "react";
+import { format, parseISO } from "date-fns";
+import { ChevronRight, Repeat } from "lucide-react";
+import { BottomSheet } from "./bottom-sheet";
+import { CategoryBadge, CategoryChip, NeedChip, StatusChip, TagChip } from "./chips";
+import { useToast } from "@/components/ui/toast";
+import { GuestBlockedError } from "@/hooks/use-budget";
+import { useDeleteEntry } from "@/hooks/use-ledger";
+import { cadenceLabel, signed, today, type Entry, type Rule } from "@/lib/ledger";
+import type { Category, Tag } from "@/types/api";
+
+// EntryDetails is what a tap on a row opens: the whole entry, and Edit and
+// Delete.
+export function EntryDetails({
+  entry,
+  category,
+  tags,
+  rule,
+  onClose,
+  onEdit,
+  onOpenRule,
+}: {
+  entry: Entry;
+  category?: Category;
+  tags: Tag[];
+  rule?: Rule;
+  onClose: () => void;
+  onEdit: () => void;
+  onOpenRule: (r: Rule) => void;
+}) {
+  const remove = useDeleteEntry(entry.kind);
+  const { showToast } = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const noun = entry.kind === "expense" ? "expense" : "income";
+
+  const del = async () => {
+    try {
+      await remove.mutateAsync(entry.id);
+      showToast(`Deleted “${entry.description}”`, "success");
+      onClose();
+    } catch (e) {
+      showToast(e instanceof GuestBlockedError ? e.message : `Couldn't delete: ${(e as Error).message}`, "error");
+    }
+  };
+
+  return (
+    <BottomSheet open onOpenChange={(o) => !o && onClose()} title={entry.description}>
+      <div className="flex items-center gap-3">
+        <CategoryBadge category={category} className="h-12 w-12 rounded-2xl" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 className="truncate text-xl font-semibold">{entry.description}</h2>
+          <p className="text-sm text-muted-foreground">{format(parseISO(entry.date), "EEEE, MMM d, yyyy")}</p>
+        </div>
+        <span className="font-mono text-xl">{signed(entry.kind, entry.amount, entry.currency)}</span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <CategoryChip category={category} />
+        {entry.priority === "need" && <NeedChip />}
+        {entry.priority === "savings" && <span className="inline-flex h-[22px] items-center rounded-full bg-blue-400/15 px-2.5 text-xs font-medium text-blue-300">Savings</span>}
+        {tags.map((t) => (
+          <TagChip key={t.id} tag={t} />
+        ))}
+        {entry.status === "skipped" && <StatusChip status="skipped" />}
+        {entry.status === "pending" && entry.date > today() && <StatusChip status="pending" />}
+      </div>
+
+      {entry.notes && <p className="rounded-2xl bg-background px-3.5 py-3 text-[15px] leading-relaxed text-foreground/90">{entry.notes}</p>}
+
+      {rule && (
+        <button
+          type="button"
+          onClick={() => onOpenRule(rule)}
+          className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-primary/30 bg-primary/[0.07] px-3.5 text-left"
+        >
+          <Repeat className="h-4 w-4 text-[#f4a084]" aria-hidden />
+          <span className="flex-1 text-[15px]">
+            Made by the rule <b className="font-semibold">{rule.description}</b>
+            <span className="text-muted-foreground"> · {cadenceLabel(rule.cadence)}</span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+        </button>
+      )}
+
+      {confirm ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-3.5">
+          <p className="text-sm">
+            Delete this {noun}? It leaves the budget and its note leaves the Feed.
+            {entry.ruleId && " The rule keeps going; skip a date from the rule instead to keep a record of it."}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setConfirm(false)} className="min-h-11 rounded-xl border border-foreground/15 text-sm font-medium">
+              Keep it
+            </button>
+            <button type="button" disabled={remove.isPending} onClick={del} className="min-h-11 rounded-xl bg-destructive text-sm font-semibold text-white disabled:opacity-50">
+              {remove.isPending ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={onEdit} className="min-h-12 rounded-2xl bg-foreground text-[15px] font-semibold text-background">
+            Edit
+          </button>
+          <button type="button" onClick={() => setConfirm(true)} className="min-h-12 rounded-2xl border border-destructive/40 text-[15px] font-medium text-[#f2777b]">
+            Delete
+          </button>
+        </div>
+      )}
+    </BottomSheet>
+  );
+}
