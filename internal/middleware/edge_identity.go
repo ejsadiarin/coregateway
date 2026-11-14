@@ -159,7 +159,7 @@ func lookup(ctx context.Context, users UserLookupFunc, id uuid.UUID) (string, bo
 }
 
 func issue(w http.ResponseWriter, r *http.Request, next http.Handler, issuer *token.Issuer, downstream string, userID uuid.UUID, azp string, scopes []string, actAs uuid.UUID) {
-	signed, err := issuer.CreateTargetedToken(userID, azp, scopes, actAs, downstream)
+	signed, err := issuer.CreateTargetedToken(userID, azp, scopes, actAs, "", downstream)
 	if err != nil {
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "Failed to establish request identity")
 		return

@@ -100,7 +100,7 @@ func TestCreateTargetedTokenActAs(t *testing.T) {
 	userID := uuid.New()
 	target := uuid.New()
 
-	tokenString, err := iss.CreateTargetedToken(userID, "session", []string{"admin"}, target, "corefinance")
+	tokenString, err := iss.CreateTargetedToken(userID, "session", []string{"admin"}, target, "Asia/Manila", "corefinance")
 	if err != nil {
 		t.Fatalf("create token: %v", err)
 	}
@@ -120,6 +120,42 @@ func TestCreateTargetedTokenActAs(t *testing.T) {
 	if plainClaims.ActAs != "" {
 		t.Errorf("act_as should be omitted, got %q", plainClaims.ActAs)
 	}
+}
+
+// The timezone claim names the zone of the user the request is about (the
+// target in a targeted read), so a downstream dates "today" without a lookup.
+func TestCreateTargetedTokenCarriesTimezone(t *testing.T) {
+	iss := testIssuer(t)
+
+	targeted, err := iss.CreateTargetedToken(uuid.New(), "session", []string{"admin"}, uuid.New(), "Asia/Manila", "corefinance")
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	if got := parseWith(t, targeted, iss.current.Public).TZ; got != "Asia/Manila" {
+		t.Errorf("tz = %q, want Asia/Manila", got)
+	}
+
+	untargeted, err := iss.CreateTargetedToken(uuid.New(), "session", nil, uuid.Nil, "UTC", "corefinance")
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	if got := parseWith(t, untargeted, iss.current.Public).TZ; got != "UTC" {
+		t.Errorf("tz = %q, want UTC", got)
+	}
+
+	raw := strings.Split(untargeted, ".")[1]
+	if !strings.Contains(decodeSegment(t, raw), `"tz":"UTC"`) {
+		t.Errorf("payload does not carry the tz claim: %s", decodeSegment(t, raw))
+	}
+}
+
+func decodeSegment(t *testing.T, seg string) string {
+	t.Helper()
+	b, err := jwt.NewParser().DecodeSegment(seg)
+	if err != nil {
+		t.Fatalf("decode segment: %v", err)
+	}
+	return string(b)
 }
 
 func TestCreateUserTokenScopesJoined(t *testing.T) {
@@ -272,7 +308,7 @@ func TestDownstreamOutsideAllowListRejected(t *testing.T) {
 	if _, err := iss.CreateUserToken(uuid.New(), "session", nil, "coredraw"); err == nil {
 		t.Fatal("expected error for downstream outside JWT_AUDIENCE")
 	}
-	if _, err := iss.CreateTargetedToken(uuid.New(), "session", nil, uuid.New(), "coredraw"); err == nil {
+	if _, err := iss.CreateTargetedToken(uuid.New(), "session", nil, uuid.New(), "UTC", "coredraw"); err == nil {
 		t.Fatal("expected error for targeted token outside JWT_AUDIENCE")
 	}
 }
