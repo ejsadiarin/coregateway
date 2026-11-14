@@ -45,11 +45,13 @@ async function throwIfError(res: Response, op: string): Promise<void> {
 }
 
 // fetchFeed loads one page of the Feed: the newest notes, or with before,
-// the ones placed earlier than that cursor, narrowed by filter.
-export async function fetchFeed(before?: string, filter: FeedFilter = "all"): Promise<FeedPage> {
+// the ones placed earlier than that cursor, narrowed by filter. Archived
+// notes come only with withArchived (coreban ADR-0006).
+export async function fetchFeed(before?: string, filter: FeedFilter = "all", withArchived = false): Promise<FeedPage> {
   const q = new URLSearchParams();
   if (before) q.set("before", before);
   if (filter !== "all") q.set("only", filter);
+  if (withArchived) q.set("archived", "include");
   const url = q.size ? `${notesUrl}?${q}` : notesUrl;
   const res = await fetch(url, { credentials: "include" });
   await throwIfError(res, "load the Feed");
@@ -332,14 +334,20 @@ export function archivePrompt(note: Note): string | null {
   if (link.kind === "card" && link.card && !link.card.archived_at) {
     return `Archive this note and archive its card \u201c${link.card.title}\u201d? Restore the note to bring the card back.`;
   }
-  if (isBudgetLink(link)) {
-    const r = budgetRecordOf(link);
-    const what = r
-      ? ` \u201c${r.description || linkKindName[link.kind]}\u201d (${formatPeso(r.amount, r.currency)})`
-      : "";
-    return `Archive this note and delete its ${link.kind}${what}? The ${link.kind} can't be brought back.`;
-  }
   return null;
+}
+
+// deleteRecordPrompt is the confirmation deleting a live expense or income
+// from the Feed needs (coreban ADR-0006): the record leaves corefinance and
+// its note stays as a "(deleted)" line. null for any other note.
+export function deleteRecordPrompt(note: Note): string | null {
+  const link = note.link;
+  if (!isBudgetLink(link) || link.deleted) return null;
+  const r = budgetRecordOf(link);
+  const what = r
+    ? `the ${link.kind} \u201c${r.description || linkKindName[link.kind]}\u201d (${formatPeso(r.amount, r.currency)})`
+    : `this ${link.kind}`;
+  return `Delete ${what}? It leaves the budget for good; its note stays in the Feed marked deleted.`;
 }
 
 // notePreview is the one line a collapsed note shows: its text, a linked

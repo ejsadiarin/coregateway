@@ -24,6 +24,7 @@ import {
   archivePrompt,
   copyText,
   dayNet,
+  deleteRecordPrompt,
   feedDays,
   deleteNote,
   editNoteText,
@@ -40,6 +41,7 @@ import {
   postNote,
   removeNote,
   replaceNote,
+  saveSnapshot,
   setNoteArchived,
   splitLinks,
   type FeedData,
@@ -198,6 +200,9 @@ interface NoteActions {
   makeCard: () => void;
   openRecord: () => void;
   archive: () => void;
+  // Deletes a live expense or income from corefinance; its note stays,
+  // marked deleted (coreban ADR-0006).
+  deleteRecord: () => void;
   erase: () => void;
 }
 
@@ -246,10 +251,23 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
             Edit {link.kind}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem className={item} onSelect={actions.archive}>
-          <Archive className="h-4 w-4" aria-hidden />
-          Archive
-        </DropdownMenuItem>
+        {isBudgetLink(link) && !link.deleted ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className={`${item} text-destructive focus:text-destructive`}
+              onSelect={actions.deleteRecord}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+              Delete {link.kind}
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <DropdownMenuItem className={item} onSelect={actions.archive}>
+            <Archive className="h-4 w-4" aria-hidden />
+            Archive
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem className={`${item} text-destructive focus:text-destructive`} onSelect={actions.erase}>
           <Trash2 className="h-4 w-4" aria-hidden />
@@ -325,7 +343,12 @@ function LiveNote({
   return (
     <div className="flex items-start justify-end gap-1">
       {link ? (
-        link.deleted ? (
+        link.deleted && isBudgetLink(link) ? (
+          // A deleted expense or income: one muted line, its last content.
+          <div className="min-w-0 max-w-[85%] truncate rounded-lg border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">
+            {linkSummary(link, new Date().getFullYear(), categoryName).title}
+          </div>
+        ) : link.deleted ? (
           <div className={bubble}>
             <LinkLine link={link} categoryName={categoryName} />
             <NoteTime note={note} className="text-right" />
@@ -454,10 +477,12 @@ export default function FeedPage() {
   // All notes, only the owner's own (plain, reminder, card), or only the
   // budget's; each keeps its own pages.
   const [filter, setFilter] = useState<FeedFilter>("all");
-  const key = useMemo(() => [...feedKey, filter], [filter]);
+  // Archived notes are hidden unless asked for (coreban ADR-0006).
+  const [showArchived, setShowArchived] = useState(false);
+  const key = useMemo(() => [...feedKey, filter, showArchived], [filter, showArchived]);
   const feedQuery = useInfiniteQuery({
     queryKey: key,
-    queryFn: ({ pageParam }) => fetchFeed(pageParam, filter),
+    queryFn: ({ pageParam }) => fetchFeed(pageParam, filter, showArchived),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
@@ -474,7 +499,8 @@ export default function FeedPage() {
     (saved) => update((d) => replaceNote(d, saved)),
     (id) => update((d) => removeNote(d, id)),
   );
-  const days = feedDays(notes);
+  // A note archived just now leaves the view at once.
+  const days = feedDays(showArchived ? notes : notes.filter((n) => !n.archived_at));
 
   // Every budget record has a note on its own date (coreban ADR-0005):
   // opening the Feed sends coreban what corefinance holds, and re-reads
@@ -489,6 +515,10 @@ export default function FeedPage() {
     );
   }, [isGuest, queryClient]);
 
+  const toggleArchived = () => {
+    toBottom.current = true;
+    setShowArchived((v) => !v);
+  };
   const pickFilter = (f: FeedFilter) => {
     toBottom.current = true;
     setFilter(f);
@@ -614,11 +644,6 @@ export default function FeedPage() {
   // finds the record gone and the note reads deleted.
   const archiveMutation = useMutation({
     mutationFn: async ({ note, archived }: { note: Note; archived: boolean }) => {
-      const link = note.link;
-      if (archived && isBudgetLink(link) && !link.deleted) {
-        await deleteBudgetRecord(link.kind, link.record_id);
-        return setNoteArchived(note.id, true, budgetRecordOf(link));
-      }
       return setNoteArchived(note.id, archived);
     },
     onSuccess: (note) => {
@@ -629,6 +654,24 @@ export default function FeedPage() {
       else if (note.link) queryClient.invalidateQueries({ queryKey: ["kanban"] });
     },
     onError: fail("Couldn't change this note"),
+  });
+
+  // Deleting a live expense or income from the Feed: the record leaves
+  // corefinance first (ADR-0003), then the note keeps what it last showed.
+  const [removing, setRemoving] = useState<{ note: Note; prompt: string } | null>(null);
+  const deleteRecordMutation = useMutation({
+    mutationFn: async (note: Note) => {
+      const link = note.link;
+      if (!isBudgetLink(link) || link.deleted) return note;
+      const last = budgetRecordOf(link);
+      await deleteBudgetRecord(link.kind, link.record_id);
+      return last ? saveSnapshot(note.id, last) : note;
+    },
+    onSuccess: (note) => {
+      update((d) => replaceNote(d, note));
+      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
+    },
+    onError: fail("Couldn't delete this record"),
   });
 
   const deleteMutation = useMutation({
@@ -720,6 +763,10 @@ export default function FeedPage() {
       if (prompt) setArchiving({ note, prompt });
       else archiveMutation.mutate({ note, archived: true });
     },
+    deleteRecord: () => {
+      const prompt = deleteRecordPrompt(note);
+      if (prompt) setRemoving({ note, prompt });
+    },
     erase: () => setDeleting(note),
   });
 
@@ -750,6 +797,17 @@ export default function FeedPage() {
               {label}
             </Button>
           ))}
+          <Button
+            type="button"
+            size="sm"
+            variant={showArchived ? "default" : "ghost"}
+            aria-pressed={showArchived}
+            className="ml-auto min-h-9 rounded-full px-3"
+            onClick={toggleArchived}
+          >
+            <Archive className="h-4 w-4" aria-hidden />
+            Archived
+          </Button>
         </div>
       </div>
 
@@ -957,6 +1015,27 @@ export default function FeedPage() {
           if (warning) setActionError(warning);
         }}
       />
+
+      <AlertDialog open={removing !== null} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {removing?.note.link?.kind}</AlertDialogTitle>
+            <AlertDialogDescription>{removing?.prompt}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (removing) deleteRecordMutation.mutate(removing.note);
+                setRemoving(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={archiving !== null} onOpenChange={(open) => !open && setArchiving(null)}>
         <AlertDialogContent>

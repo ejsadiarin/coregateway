@@ -6,6 +6,7 @@ import {
   dayNet,
   feedDays,
   archivePrompt,
+  deleteRecordPrompt,
   enterSends,
   feedNotes,
   linkSummary,
@@ -316,14 +317,24 @@ describe("linkSummary for budget records", () => {
 
 
 
+describe("deleteRecordPrompt", () => {
+  it("names the expense or income that deleting from the Feed removes for good", () => {
+    expect(deleteRecordPrompt(expenseNote("n", "e1", false, lunch))).toBe(
+      "Delete the expense \u201cLunch\u201d (\u20b1250.00)? It leaves the budget for good; its note stays in the Feed marked deleted.",
+    );
+    expect(deleteRecordPrompt(linked({ kind: "income", deleted: false, record_id: "i1" }))).toBe(
+      "Delete this income? It leaves the budget for good; its note stays in the Feed marked deleted.",
+    );
+  });
+
+  it("asks nothing for a record already gone or a note that isn't a budget record's", () => {
+    expect(deleteRecordPrompt(expenseNote("n", "e1", true, lunch))).toBeNull();
+    expect(deleteRecordPrompt(note("plain"))).toBeNull();
+  });
+});
+
 describe("archivePrompt for budget records", () => {
-  it("names the expense or income that archiving its note deletes for good", () => {
-    expect(archivePrompt(expenseNote("n", "e1", false, lunch))).toBe(
-      "Archive this note and delete its expense “Lunch” (₱250.00)? The expense can't be brought back.",
-    );
-    expect(archivePrompt(linked({ kind: "income", deleted: false, record_id: "i1" }))).toBe(
-      "Archive this note and delete its income? The income can't be brought back.",
-    );
+  it("asks nothing: archiving only hides the note", () => {
     expect(archivePrompt(expenseNote("n", "e1", true, lunch))).toBeNull();
   });
 });
