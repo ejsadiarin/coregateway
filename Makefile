@@ -73,6 +73,7 @@ help:
 	@echo "  make local-ps         List the stack's containers"
 	@echo "  make local-migrate    Rerun schemas, roles and migrations"
 	@echo "  make local-check      Only check submodules, Dockerfiles and compose file"
+	@echo "  make local-smoke      Smoke-test the cron worker end to end (stack must be up)"
 	@echo ""
 	@echo -e "${GREEN}Building${NC}"
 	@echo "  make build            Build binary to $(BUILD_DIR)/$(BINARY_NAME)"
@@ -177,6 +178,9 @@ local-migrate:
 
 local-check:
 	@./scripts/local.sh check
+
+local-smoke:
+	@./scripts/local.sh smoke
 
 # ==============================================================================
 # Building
@@ -425,7 +429,7 @@ env-check:
 
 # Phony targets
 .PHONY: help run dev build build-docker start run-background \
-        local-up local-down local-reset local-logs local-ps local-migrate local-check \
+        local-up local-down local-reset local-logs local-ps local-migrate local-check local-smoke \
         migrate-up migrate-down migrate-redo migrate-status \
         migrate-create migrate-baseline migrate-fix \
         sqlc sqlc-check swagger generate \

@@ -9,6 +9,8 @@
 #   scripts/local.sh build [service...] rebuild images
 #   scripts/local.sh migrate            rerun schemas, roles and migrations
 #   scripts/local.sh check              only run the preflight checks
+#   scripts/local.sh smoke              smoke-test the cron worker end to end
+#                                       (scripts/local-smoke.sh; stack must be up)
 #   scripts/local.sh compose <args...>  any other docker compose command
 #
 # Preflight (up, build, check): every submodule in .gitmodules is checked out
@@ -108,7 +110,8 @@ case "$cmd" in
   build)   preflight; compose build "$@" ;;
   migrate) compose run --rm --build migrate ;;
   check)   preflight; compose config --quiet && log "compose.local.yml is valid" ;;
+  smoke)   exec "$ROOT/scripts/local-smoke.sh" ;;
   compose) compose "$@" ;;
-  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  -h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) die "unknown command '$cmd' (try: scripts/local.sh help)" ;;
 esac
