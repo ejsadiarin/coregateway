@@ -277,32 +277,13 @@ export async function setKanbanCardLabel(boardId: string, cardId: string, labelI
 
 const settingsUrl = `${apiBaseUrl}/api/coreban/settings`;
 
-// fetchKanbanSettings reads the owner's settings, first starting an owner
-// who has never saved any on this device's timezone (see adoptDeviceTimezone).
+// fetchKanbanSettings reads the owner's coreban settings. Their timezone is
+// the gateway's now (useUserTimezone, ADR-0005); the web no longer saves one
+// to coreban.
 export async function fetchKanbanSettings(): Promise<KanbanSettings> {
   const res = await fetch(settingsUrl, { credentials: "include" });
   await throwIfError(res, "fetching settings");
-  const settings: KanbanSettings = await res.json();
-  return adoptDeviceTimezone(settings, Intl.DateTimeFormat().resolvedOptions().timeZone, saveKanbanSettings);
-}
-
-// adoptDeviceTimezone saves deviceZone as the timezone of an owner who has
-// never saved settings, so a new owner's "Daily at 07:00" means 07:00 where
-// they are rather than coreban's UTC default. Saved settings are never
-// touched: after this, changing zones is the owner's choice in Settings. If
-// the save fails (a zone coreban doesn't know, a read-only session), the
-// defaults stand and the next load tries again.
-export async function adoptDeviceTimezone(
-  settings: KanbanSettings,
-  deviceZone: string | undefined,
-  save: (s: Omit<KanbanSettings, "saved">) => Promise<KanbanSettings>,
-): Promise<KanbanSettings> {
-  if (settings.saved || !deviceZone) return settings;
-  try {
-    return await save({ ntfy_topic: settings.ntfy_topic, timezone: deviceZone });
-  } catch {
-    return settings;
-  }
+  return res.json();
 }
 
 export async function saveKanbanSettings(settings: Omit<KanbanSettings, "saved">): Promise<KanbanSettings> {
