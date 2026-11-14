@@ -105,7 +105,7 @@ if dates "$RULE" | grep -q "$GONE"; then fail "deleted entry was recreated"; els
 RESP=$(api PUT "/api/budget/recurring-expenses/$RULE" \
   "{\"amount\":10,\"currency\":\"PHP\",\"description\":\"smoke daily\",\"recurring_type\":\"daily\",\"start_date\":\"$(day -6)\",\"end_date\":\"$(day -3)\",\"priority\":\"want\"}")
 expect "end in past reports the later entries" "$(expected_dates -2 0)" \
-  "$(echo "$RESP" | jq -r '.entries_after_end[].date' | paste -sd' ')"
+  "$(echo "$RESP" | jq -r '.stale_entries[].date' | paste -sd' ')"
 expect "and skips them" "skipped skipped skipped" \
   "$(entries "$RULE" "start_date=$(day -2)" | awk '{print $2}' | paste -sd' ')"
 expect "entries before the end stay posted" "posted posted posted" \
