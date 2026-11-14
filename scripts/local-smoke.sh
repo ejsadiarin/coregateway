@@ -9,8 +9,10 @@
 # runs don't see each other's data. What it checks, with the worker run as a
 # one-shot container (`/app/worker --once`, the same pass the daemon runs):
 #
-#   catch-up (#7)    a daily rule started 6 days ago gets only today's entry
-#                    from the API; one worker run fills the 6 days before it
+#   one writer (#14) saving a daily rule started 6 days ago fills all 7 days
+#                    straight away, through the same pass the worker runs
+#   catch-up (#7)    a rule the worker missed (inserted straight into the local
+#                    database, as if it was down) is filled by one worker run
 #   idempotent       a second run inserts nothing for the rule
 #   deletes stick    an entry the user deleted is not recreated
 #   timezone (#9)    entries are dated in the user's zone (Asia/Manila here)
@@ -39,6 +41,10 @@ curl -sf -o /dev/null "$GW/health" || die "gateway not answering at $GW (run: sc
 api() { # method path [json]
   curl -s -b "$JAR" -c "$JAR" -X "$1" -H 'Content-Type: application/json' "$GW$2" ${3:+-d "$3"}
 }
+psql_local() {
+  docker compose -f "$ROOT/compose.local.yml" --project-directory "$ROOT" \
+    exec -T postgres psql -U neondb_owner -d coredb -X -tAq -v ON_ERROR_STOP=1 -c "$1"
+}
 worker_once() {
   docker compose -f "$ROOT/compose.local.yml" --project-directory "$ROOT" \
     run --rm --no-deps corefinance-cron-worker --once >/dev/null 2>&1 \
@@ -52,7 +58,7 @@ PASSWORD="smoke-pass-$RANDOM-$RANDOM"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/register" \
   -H 'Content-Type: application/json' -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
 [ "$code" = 201 ] || die "register returned $code"
-api POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" >/dev/null
+USER_ID=$(api POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | jq -r .id)
 expect "timezone saved" "$TZNAME" "$(api PUT /api/budget/settings "{\"timezone\":\"$TZNAME\"}" | jq -r .timezone)"
 
 TODAY=$(TZ=$TZNAME date +%F)
@@ -68,22 +74,26 @@ expected_dates() { # from to (offsets from today)
   echo "${out# }"
 }
 
-# --- catch-up ------------------------------------------------------------------
+# --- one writer ----------------------------------------------------------------
 RULE=$(api POST /api/budget/recurring-expenses \
   "{\"amount\":10,\"currency\":\"PHP\",\"description\":\"smoke daily\",\"recurring_type\":\"daily\",\"start_date\":\"$(day -6)\",\"priority\":\"want\"}" | jq -r .id)
 [ -n "$RULE" ] && [ "$RULE" != null ] || die "could not create the rule"
-expect "API creates only today's entry (user's date)" "$TODAY" "$(dates "$RULE")"
+expect "saving a rule fills every day up to today (user's date)" "$(expected_dates -6 0)" "$(dates "$RULE")"
 
+# --- catch-up ------------------------------------------------------------------
+MISSED=$(psql_local "INSERT INTO corefinance.rules (kind, user_id, description, amount, recurring_type, start_date)
+  VALUES ('income', '$USER_ID', 'smoke missed', 5, 'daily', '$(day -6)') RETURNING id" | head -1)
+[ -n "$MISSED" ] || die "could not insert the missed rule"
 SINCE=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
 sleep 1
 worker_once
-expect "worker fills the 6 missed days" "$(expected_dates -6 0)" "$(dates "$RULE")"
-expect "created_since lists only the back-filled days" "$(expected_dates -6 -1)" \
-  "$(dates "$RULE" "created_since=$SINCE")"
+expect "worker fills a rule it missed" "$(expected_dates -6 0)" "$(dates "$MISSED")"
+expect "created_since lists what the worker filled" "$(expected_dates -6 0)" \
+  "$(dates "$MISSED" "created_since=$SINCE")"
 
 # --- idempotent, deletes stick -----------------------------------------------
 worker_once
-expect "second run inserts nothing" "7" "$(entries "$RULE" | wc -l | tr -d ' ')"
+expect "second run inserts nothing" "7 7" "$(entries "$RULE" | wc -l | tr -d ' ') $(entries "$MISSED" | wc -l | tr -d ' ')"
 
 GONE=$(day -5)
 GONE_ID=$(api GET "/api/budget/rule-entries?rule_id=$RULE&start_date=$GONE&end_date=$GONE" | jq -r '.[0].id')
