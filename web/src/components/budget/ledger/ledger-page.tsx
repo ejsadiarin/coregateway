@@ -96,9 +96,21 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col pb-28">
-      <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-3.5">
-        <h1 className="text-3xl font-semibold tracking-tight">{plural}</h1>
+    <div className="mx-auto flex w-full max-w-2xl flex-col pb-28 md:max-w-3xl md:px-2 lg:max-w-[1240px] lg:px-6 lg:pb-12 2xl:max-w-[1480px]">
+      <header className="flex items-center justify-between gap-3 px-4 pt-5 pb-3.5 lg:px-1 lg:pt-7 lg:pb-5">
+        <h1 className="text-3xl font-semibold tracking-tight lg:text-4xl">{plural}</h1>
+        <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setSheet({ mode: "new" })}
+          className={cn(
+            "hidden min-h-10 items-center gap-1.5 rounded-full px-4 text-sm font-semibold lg:flex",
+            kind === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950",
+          )}
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          {noun}
+        </button>
         <nav aria-label="Budget lists" className="flex rounded-full bg-muted p-[3px]">
           {(["expense", "income"] as const).map((k) => (
             <Link
@@ -114,7 +126,14 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
             </Link>
           ))}
         </nav>
+        </div>
       </header>
+
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="min-w-0">
+      {/* On a phone or tablet the rules and what's coming sit on top; on a
+          desktop they move to the side column. */}
+      <div className="lg:hidden">
 
       {/* Rules */}
       <section aria-labelledby="rules-h" className="flex flex-col gap-2.5 pt-1 pb-2">
@@ -128,7 +147,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
             </span>
           )}
         </div>
-        <div className="flex gap-2.5 overflow-x-auto px-4 pb-1">
+        <div className="flex gap-2.5 overflow-x-auto px-4 pb-1 md:grid md:grid-cols-4 md:overflow-visible">
           {rulesQ.isLoading && [0, 1].map((i) => <div key={i} className="h-[104px] w-[156px] shrink-0 animate-pulse rounded-2xl bg-muted/60" />)}
           {shownRules.map((r) => (
             <button
@@ -136,7 +155,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
               type="button"
               onClick={() => setOpenRule(r.id)}
               className={cn(
-                "flex w-[168px] shrink-0 flex-col gap-2 rounded-2xl border border-foreground/[0.09] bg-popover p-3.5 text-left transition-colors hover:border-foreground/20",
+                "flex w-[168px] shrink-0 flex-col gap-2 rounded-2xl md:w-auto border border-foreground/[0.09] bg-popover p-3.5 text-left transition-colors hover:border-foreground/20",
                 !r.active && "opacity-60",
               )}
             >
@@ -167,7 +186,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
             onClick={() => setSheet({ mode: "new", repeat: true })}
             className={cn(
               "flex shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border border-dashed border-foreground/20 text-sm font-medium text-muted-foreground hover:text-foreground",
-              shownRules.length ? "w-24" : "min-h-[72px] flex-1 flex-row gap-2",
+              shownRules.length ? "w-24 md:min-h-[104px] md:w-auto" : "min-h-[72px] flex-1 flex-row gap-2 md:col-span-4",
             )}
           >
             <Plus className="h-4 w-4" aria-hidden />
@@ -216,9 +235,11 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
         </section>
       )}
 
+      </div>
+
       {/* Filters */}
-      <div className="flex items-center gap-2 px-4 pt-4 pb-1">
-        <div role="radiogroup" aria-label="Made by" className="flex min-w-0 flex-1 rounded-full border border-foreground/[0.08] bg-popover p-[3px]">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-1 lg:sticky lg:top-0 lg:z-20 lg:bg-background/95 lg:px-1 lg:pt-1 lg:pb-2 lg:backdrop-blur">
+        <div role="radiogroup" aria-label="Made by" className="flex min-w-0 flex-1 rounded-full md:max-w-md border border-foreground/[0.08] bg-popover p-[3px]">
           {(
             [
               ["all", "All"],
@@ -289,7 +310,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
               type="button"
               aria-expanded={open}
               onClick={() => setToggled((t) => ({ ...t, [m.key]: !open }))}
-              className="sticky top-0 z-10 flex w-full items-center justify-between gap-3 bg-background/95 px-5 pt-4 pb-2.5 text-left backdrop-blur"
+              className="sticky top-0 z-10 flex w-full items-center justify-between gap-3 bg-background/95 px-5 pt-4 pb-2.5 text-left backdrop-blur lg:top-[52px] lg:px-2"
             >
               <h2 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
                 {format(parseISO(`${m.key}-01`), "MMMM yyyy")}
@@ -302,11 +323,11 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
             {open &&
               m.days.map((d) => (
                 <div key={d.date}>
-                  <div className="flex items-baseline justify-between px-5 pt-4 pb-2">
+                  <div className="flex items-baseline justify-between px-5 pt-4 pb-2 lg:px-2">
                     <span className="text-sm font-semibold text-foreground/80">{format(parseISO(d.date), "EEEE, MMM d")}</span>
                     <span className="font-mono text-[13px] text-muted-foreground">{signed(kind, d.total)}</span>
                   </div>
-                  <ul className="mx-3 overflow-hidden rounded-2xl border border-foreground/[0.07] bg-popover">
+                  <ul className="mx-3 overflow-hidden rounded-2xl border border-foreground/[0.07] bg-popover lg:mx-0">
                     {d.entries.map((e) => (
                       <li key={e.id} className="border-b border-foreground/[0.06] last:border-b-0">
                         <EntryRow {...rowProps(e)} />
@@ -319,11 +340,56 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
         );
       })}
 
+      </div>
+
+      <aside aria-label="Rules and what's coming" className="sticky top-0 hidden max-h-[calc(100dvh-7rem)] flex-col gap-6 overflow-y-auto pb-6 lg:flex">
+        <SideRules
+          rules={shownRules}
+          loading={rulesQ.isLoading}
+          nextOf={nextOf}
+          totals={totals}
+          onOpen={(id) => setOpenRule(id)}
+          onAdd={() => setSheet({ mode: "new", repeat: true })}
+        />
+        {upcoming.length > 0 && (
+          <section aria-labelledby="side-upcoming-h" className="flex flex-col gap-2.5">
+            <h2 id="side-upcoming-h" className="text-[15px] font-semibold text-foreground/85">
+              Upcoming
+            </h2>
+            <ul className="overflow-hidden rounded-2xl border border-dashed border-accent/45 bg-accent/[0.05]">
+              {upcoming.map((e) => (
+                <li key={e.id} className="border-b border-accent/20 last:border-b-0">
+                  <button type="button" onClick={() => setOpenEntry(e.id)} className={cn("flex w-full items-center gap-3 px-3.5 py-3 text-left", e.status === "skipped" && "opacity-60")}>
+                    <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl bg-accent/15 leading-none">
+                      <span className="text-[10px] font-semibold text-accent">{format(parseISO(e.date), "MMM")}</span>
+                      <span className="text-[15px] font-semibold">{format(parseISO(e.date), "d")}</span>
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-sm font-medium">{e.description}</span>
+                      <span className="text-xs text-muted-foreground">{e.status === "skipped" ? "Skipped" : "Pending"}</span>
+                    </span>
+                    <span className={cn("font-mono text-sm", e.status === "skipped" && "line-through")}>{signed(kind, e.amount, e.currency)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <MonthBreakdown
+          kind={kind}
+          entries={past}
+          categoryById={categoryById}
+          active={filter.categoryId}
+          onPick={(id) => setFilter((f) => ({ ...f, categoryId: id === f.categoryId ? undefined : id }))}
+        />
+      </aside>
+      </div>
+
       <button
         type="button"
         onClick={() => setSheet({ mode: "new" })}
         className={cn(
-          "fixed right-4 bottom-20 z-30 flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
+          "fixed right-4 bottom-20 z-30 lg:hidden flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
           kind === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950",
         )}
       >
@@ -410,7 +476,10 @@ function EntryRow({ entry, category, tags, rule, onOpen }: { entry: Entry; categ
     <button type="button" onClick={onOpen} className={cn("flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-foreground/[0.03]", skipped && "opacity-55")}>
       <CategoryBadge category={category} />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <span className="truncate text-[15px] font-medium text-foreground">{entry.description || "(no description)"}</span>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[15px] font-medium text-foreground">{entry.description || "(no description)"}</span>
+          {entry.notes && <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground md:inline">{entry.notes}</span>}
+        </span>
         <span className="flex flex-wrap gap-1.5">
           <CategoryChip category={category} />
           {rule && (
@@ -427,5 +496,130 @@ function EntryRow({ entry, category, tags, rule, onOpen }: { entry: Entry; categ
       </span>
       <span className={cn("font-mono text-[15px] tabular-nums text-foreground", skipped && "line-through")}>{signed(entry.kind, entry.amount, entry.currency)}</span>
     </button>
+  );
+}
+
+function SideRules({
+  rules,
+  loading,
+  nextOf,
+  totals,
+  onOpen,
+  onAdd,
+}: {
+  rules: Rule[];
+  loading: boolean;
+  nextOf: Map<string, string | undefined>;
+  totals: { perMonth: number; perYear: number };
+  onOpen: (id: string) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <section aria-labelledby="side-rules-h" className="flex flex-col gap-2.5">
+      <div className="flex items-baseline justify-between">
+        <h2 id="side-rules-h" className="text-[15px] font-semibold text-foreground/85">
+          Rules {rules.length > 0 && <span className="font-normal text-muted-foreground">· {rules.filter((r) => r.active).length} active</span>}
+        </h2>
+        {(totals.perMonth > 0 || totals.perYear > 0) && (
+          <span className="text-[13px] text-muted-foreground">
+            {[totals.perMonth && `${money(totals.perMonth)}/mo`, totals.perYear && `${money(totals.perYear)}/yr`].filter(Boolean).join(" + ")}
+          </span>
+        )}
+      </div>
+      <ul className="overflow-hidden rounded-2xl border border-foreground/[0.08] bg-popover">
+        {loading && <li className="h-16 animate-pulse bg-muted/40" />}
+        {rules.map((r) => (
+          <li key={r.id} className="border-b border-foreground/[0.06] last:border-b-0">
+            <button type="button" onClick={() => onOpen(r.id)} className={cn("flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-foreground/[0.03]", !r.active && "opacity-60")}>
+              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl", r.active ? "bg-primary/15 text-[#f4a084]" : "bg-muted text-muted-foreground")}>
+                <Repeat className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-sm font-semibold">{r.description}</span>
+                <span className="text-xs text-muted-foreground">
+                  {r.active ? cadenceLabel(r.cadence) : "Paused"}
+                  {r.active && nextOf.get(r.id) && <> · next <span className="text-foreground">{format(parseISO(nextOf.get(r.id)!), "MMM d")}</span></>}
+                </span>
+              </span>
+              <span className="font-mono text-sm">{money(r.amount, r.currency)}</span>
+            </button>
+          </li>
+        ))}
+        <li>
+          <button type="button" onClick={onAdd} className="flex w-full items-center gap-2 px-3.5 py-3 text-sm font-medium text-muted-foreground hover:text-foreground">
+            <Plus className="h-4 w-4" aria-hidden />
+            Add a rule
+          </button>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+// MonthBreakdown shows where this month's money went (or came from), by
+// category; a tap filters the list to that category.
+function MonthBreakdown({
+  kind,
+  entries,
+  categoryById,
+  active,
+  onPick,
+}: {
+  kind: LedgerKind;
+  entries: Entry[];
+  categoryById: Map<string, Category>;
+  active?: string;
+  onPick: (id: string) => void;
+}) {
+  const month = format(new Date(), "yyyy-MM");
+  const rows = useMemo(() => {
+    const by = new Map<string, number>();
+    for (const e of entries) {
+      if (!counted(e) || !e.date.startsWith(month)) continue;
+      const k = e.categoryId ?? "";
+      by.set(k, (by.get(k) ?? 0) + e.amount);
+    }
+    return [...by.entries()].sort((a, b) => b[1] - a[1]);
+  }, [entries, month]);
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, [, v]) => s + v, 0);
+  const max = rows[0][1];
+  return (
+    <section aria-labelledby="breakdown-h" className="flex flex-col gap-2.5">
+      <div className="flex items-baseline justify-between">
+        <h2 id="breakdown-h" className="text-[15px] font-semibold text-foreground/85">
+          {format(new Date(), "MMMM")} by category
+        </h2>
+        <span className="font-mono text-[13px] text-muted-foreground">{signed(kind, total)}</span>
+      </div>
+      <ul className="flex flex-col gap-1 rounded-2xl border border-foreground/[0.08] bg-popover p-2">
+        {rows.map(([id, amount]) => {
+          const c = id ? categoryById.get(id) : undefined;
+          const hue = hueClasses(c);
+          const Icon = categoryIcon(c);
+          return (
+            <li key={id || "none"}>
+              <button
+                type="button"
+                disabled={!id}
+                onClick={() => id && onPick(id)}
+                aria-pressed={!!id && id === active}
+                className={cn("flex w-full flex-col gap-1.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-foreground/[0.04]", id && id === active && "bg-foreground/[0.06]")}
+              >
+                <span className="flex items-center gap-2 text-sm">
+                  <Icon className={cn("h-4 w-4", hue.chip.split(" ").find((x) => x.startsWith("text-")))} aria-hidden />
+                  <span className="flex-1 truncate">{c?.name ?? "No category"}</span>
+                  <span className="font-mono text-[13px]">{money(amount)}</span>
+                  <span className="w-9 text-right text-xs text-muted-foreground">{Math.round((amount / total) * 100)}%</span>
+                </span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-foreground/[0.06]">
+                  <span className={cn("block h-full rounded-full", hue.bar)} style={{ width: `${Math.max(3, (amount / max) * 100)}%` }} />
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

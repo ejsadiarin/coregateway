@@ -41,22 +41,32 @@ const longDate = (d: string) => format(parseISO(d), "EEE, MMM d");
 
 // EntrySheet adds an entry or a rule, or edits one. A new entry can be an
 // expense or an income; turning Repeat on makes it a rule instead.
+// The Feed opens the same sheet: a new entry from what was typed in the
+// composer (it posts the entry's note itself, so no Repeat there), or an
+// entry its note links to.
+export interface FeedOptions {
+  prefill?: string;
+  onSaved: (record: { id: string }, kind: LedgerKind, created: boolean) => void | Promise<void>;
+}
+
 export function EntrySheet({
   kind: pageKind,
   target,
   onClose,
+  feed,
 }: {
   kind: LedgerKind;
   target: SheetTarget | null;
   onClose: () => void;
+  feed?: FeedOptions;
 }) {
   return (
     // A fresh form for each opening.
-    target && <EntryForm key={JSON.stringify(target)} pageKind={pageKind} target={target} onClose={onClose} />
+    target && <EntryForm key={JSON.stringify(target)} pageKind={pageKind} target={target} onClose={onClose} feed={feed} />
   );
 }
 
-function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target: SheetTarget; onClose: () => void }) {
+function EntryForm({ pageKind, target, onClose, feed }: { pageKind: LedgerKind; target: SheetTarget; onClose: () => void; feed?: FeedOptions }) {
   const entry = target.mode === "edit" ? target.entry : undefined;
   const rule = target.mode === "rule" ? target.rule : undefined;
   const from = entry ?? rule;
@@ -64,7 +74,7 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
   const [kind, setKind] = useState<LedgerKind>(from?.kind ?? pageKind);
   const [amount, setAmount] = useState(from ? String(from.amount) : "");
   const [currency, setCurrency] = useState(from?.currency ?? "PHP");
-  const [description, setDescription] = useState(from?.description ?? "");
+  const [description, setDescription] = useState(from?.description ?? feed?.prefill ?? "");
   const [categoryId, setCategoryId] = useState<string | undefined>(from?.categoryId);
   const [date, setDate] = useState(entry?.date ?? rule?.startDate ?? today());
   const [priority, setPriority] = useState<Priority>(from?.priority ?? "want");
@@ -128,7 +138,8 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
         await saveRule.mutateAsync(rule ? { id: rule.id, rule: ruleInput(rule, input) } : { rule: input });
         showToast(rule ? "Rule saved" : `Rule added: ${money(value, currency)} ${cadencePhrase(cadence, date)}`, "success");
       } else {
-        await saveEntry.mutateAsync({
+        const record = await saveEntry.mutateAsync({
+          fromFeed: !!feed,
           id: entry?.id,
           input: {
             description: description.trim(),
@@ -147,6 +158,7 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
           tags: tags ?? undefined,
           hadTags,
         });
+        await feed?.onSaved(record, kind, !entry);
         showToast(entry ? "Saved" : `${expense ? "Expense" : "Income"} added${kind !== pageKind ? ` to ${expense ? "Expenses" : "Incomes"}` : ""}`, "success");
       }
       onClose();
@@ -168,6 +180,7 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
 
   return (
     <BottomSheet
+      wide
       open
       onOpenChange={(o) => !o && onClose()}
       title={title}
@@ -219,12 +232,15 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
       }
     >
       <form
-        className="contents"
+        className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:gap-x-8 lg:gap-y-0"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
+        {/* Phone: one column (category third). Desktop: what and when on the
+            left; category, tags, repeat and note on the right. */}
+        <div className="contents lg:flex lg:flex-col lg:gap-5">
         {/* Amount */}
         <div className="flex flex-col items-center gap-1.5 pt-1">
           <label htmlFor="entry-amount" className="sr-only">
@@ -293,9 +309,32 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
           )}
         </Field>
 
+        <div className="flex flex-col gap-5 max-lg:order-2">
+        {/* Date */}
+        <Field label={repeat ? "Starts" : "Date"}>
+          <div className="flex flex-wrap gap-2">
+            <Pill on={date === today()} onClick={() => setDate(today())}>
+              Today
+            </Pill>
+            <Pill on={date === yesterday()} onClick={() => setDate(yesterday())}>
+              Yesterday
+            </Pill>
+            <DatePill value={date} onChange={setDate} on={date !== today() && date !== yesterday()} />
+          </div>
+        </Field>
+
+        {/* Priority */}
+        <Field label="Priority">
+          <Segmented label="Priority" options={PRIORITIES} value={priority} onChange={setPriority} />
+        </Field>
+
+        </div>
+        </div>
+        <div className="contents lg:flex lg:flex-col lg:gap-5">
+        <div className="max-lg:order-1">
         {/* Category */}
         <Field label="Category">
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 pt-0.5 sm:mx-0 sm:flex-wrap sm:px-0">
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 pt-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
             {categories
               .filter((c) => c.is_active !== false || c.id === categoryId)
               .map((c) => {
@@ -319,29 +358,13 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
           </div>
         </Field>
 
-        {/* Date */}
-        <Field label={repeat ? "Starts" : "Date"}>
-          <div className="flex flex-wrap gap-2">
-            <Pill on={date === today()} onClick={() => setDate(today())}>
-              Today
-            </Pill>
-            <Pill on={date === yesterday()} onClick={() => setDate(yesterday())}>
-              Yesterday
-            </Pill>
-            <DatePill value={date} onChange={setDate} on={date !== today() && date !== yesterday()} />
-          </div>
-        </Field>
-
-        {/* Priority */}
-        <Field label="Priority">
-          <Segmented label="Priority" options={PRIORITIES} value={priority} onChange={setPriority} />
-        </Field>
-
+        </div>
+        <div className="flex flex-col gap-5 max-lg:order-3">
         {/* Tags: they go on single entries, not rules. */}
         {!repeat && <TagField tags={shownTags} allTags={allTags} onChange={setTags} />}
 
         {/* Repeat */}
-        {(isNew || rule) &&
+        {((isNew && !feed) || rule) &&
           (repeat ? (
             <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary/[0.07] p-3.5">
               <div className="flex items-center justify-between">
@@ -407,6 +430,8 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
             + Add a note
           </button>
         )}
+        </div>
+        </div>
         <button type="submit" hidden />
       </form>
     </BottomSheet>
@@ -415,7 +440,7 @@ function EntryForm({ pageKind, target, onClose }: { pageKind: LedgerKind; target
 
 function Switch({ on, label, onChange }: { on: boolean; label: string; onChange?: () => void }) {
   const knob = (
-    <span className={cn("relative h-6 w-[42px] shrink-0 rounded-full transition-colors", on ? "bg-primary" : "bg-stone-700")}>
+    <span className={cn("relative inline-block h-6 w-[42px] shrink-0 rounded-full align-middle transition-colors", on ? "bg-primary" : "bg-stone-700")}>
       <span className={cn("absolute top-[3px] h-[18px] w-[18px] rounded-full transition-all", on ? "right-[3px] bg-background" : "left-[3px] bg-muted-foreground")} />
     </span>
   );

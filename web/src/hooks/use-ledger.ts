@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes } from "@/lib/api";
+import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes } from "@/lib/api";
 import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { feedKey } from "@/lib/feed";
 import { entryOf, ruleOf, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
@@ -107,16 +107,35 @@ function body(kind: LedgerKind, e: EntryInput) {
 // useSaveEntry creates or updates an entry and sets its tags.
 export function useSaveEntry(kind: LedgerKind) {
   const qc = useQueryClient();
+  const { isGuest } = useAuth();
   const createE = useCreateExpense();
   const updateE = useUpdateExpense();
   const createI = useCreateIncome();
   const updateI = useUpdateIncome();
 
   return useMutation({
-    mutationFn: async ({ id, input, tags, hadTags = [] }: { id?: string; input: EntryInput; tags?: TagPick[]; hadTags?: string[] }) => {
+    mutationFn: async ({
+      id,
+      input,
+      tags,
+      hadTags = [],
+      fromFeed = false,
+    }: {
+      id?: string;
+      input: EntryInput;
+      tags?: TagPick[];
+      hadTags?: string[];
+      // A new entry captured in the Feed gets the note the Feed posts for
+      // it, not a synced one.
+      fromFeed?: boolean;
+    }) => {
       const b = body(kind, input);
       let record: Expense | Income;
-      if (kind === "expense") {
+      if (fromFeed && !id) {
+        if (isGuest) throw new GuestBlockedError();
+        record = kind === "expense" ? await createExpense(b as Parameters<typeof createExpense>[0]) : await createIncome(b as Parameters<typeof createIncome>[0]);
+        qc.invalidateQueries({ queryKey: budgetKeys.all });
+      } else if (kind === "expense") {
         // The cast drops the income-only shape; body() built an expense.
         record = id
           ? await updateE.mutateAsync({ id, data: b as Parameters<typeof updateE.mutateAsync>[0]["data"] })

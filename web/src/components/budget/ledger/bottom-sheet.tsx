@@ -15,6 +15,7 @@ export function BottomSheet({
   footer,
   children,
   className,
+  wide,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -24,14 +25,21 @@ export function BottomSheet({
   footer?: ReactNode;
   children: ReactNode;
   className?: string;
+  // wide lays a desktop sheet out across, so it needs no scrolling.
+  wide?: boolean;
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
+        // No focus ring on the first button when a sheet opens; a field
+        // that should take focus asks for it itself.
+        onOpenAutoFocus={(e) => e.preventDefault()}
         className={cn(
           "flex max-h-[92dvh] flex-col rounded-t-3xl border-border bg-popover p-0",
-          "sm:inset-x-auto sm:bottom-4 sm:left-1/2 sm:w-[480px] sm:-translate-x-1/2 sm:rounded-3xl sm:border",
+          // From a tablet up it is a card in the middle of the screen.
+          "sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[88dvh] sm:w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border",
+          wide && "md:w-[min(720px,calc(100vw-3rem))] lg:w-[min(960px,calc(100vw-4rem))]",
           // Each sheet has its own close control.
           "[&>button:last-child]:hidden",
           className,
@@ -39,12 +47,12 @@ export function BottomSheet({
       >
         <SheetTitle className="sr-only">{title}</SheetTitle>
         <SheetDescription className="sr-only">{description ?? title}</SheetDescription>
-        <div className="flex flex-col gap-3 px-4 pt-2.5 pb-1.5">
-          <div aria-hidden className="mx-auto h-1 w-10 rounded-full bg-foreground/25" />
+        <div className={cn("flex flex-col gap-3 px-4 pt-2.5 pb-1.5 sm:pt-4", wide && "lg:px-6")}>
+          <div aria-hidden className="mx-auto h-1 w-10 rounded-full bg-foreground/25 sm:hidden" />
           {header}
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-4 pt-1.5 pb-4">{children}</div>
-        {footer && <div className="border-t border-border px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{footer}</div>}
+        <div className={cn("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-4 pt-1.5 pb-4", wide && "lg:px-6")}>{children}</div>
+        {footer && <div className={cn("border-t border-border px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4", wide && "lg:px-6")}>{footer}</div>}
       </SheetContent>
     </Sheet>
   );

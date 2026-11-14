@@ -26,20 +26,20 @@ import type { Category, Tag } from "@/types/api";
 
 // Each hue as a filled chip (bg + text) and as the rounded square that
 // opens a row. Tailwind needs the class names spelled out.
-const HUE: Record<Hue, { chip: string; ring: string }> = {
-  amber: { chip: "bg-amber-500/15 text-amber-300", ring: "ring-amber-300" },
-  sky: { chip: "bg-sky-400/15 text-sky-300", ring: "ring-sky-300" },
-  violet: { chip: "bg-violet-400/20 text-violet-300", ring: "ring-violet-300" },
-  rose: { chip: "bg-rose-400/15 text-rose-300", ring: "ring-rose-300" },
-  teal: { chip: "bg-teal-400/15 text-teal-300", ring: "ring-teal-300" },
-  lime: { chip: "bg-lime-400/15 text-lime-300", ring: "ring-lime-300" },
-  fuchsia: { chip: "bg-fuchsia-400/15 text-fuchsia-300", ring: "ring-fuchsia-300" },
-  orange: { chip: "bg-orange-400/15 text-orange-300", ring: "ring-orange-300" },
-  blue: { chip: "bg-blue-400/15 text-blue-300", ring: "ring-blue-300" },
-  yellow: { chip: "bg-yellow-300/15 text-yellow-200", ring: "ring-yellow-200" },
-  pink: { chip: "bg-pink-400/15 text-pink-300", ring: "ring-pink-300" },
+const HUE: Record<Hue, { chip: string; ring: string; bar: string }> = {
+  amber: { chip: "bg-amber-500/15 text-amber-300", ring: "ring-amber-300", bar: "bg-amber-400" },
+  sky: { chip: "bg-sky-400/15 text-sky-300", ring: "ring-sky-300", bar: "bg-sky-400" },
+  violet: { chip: "bg-violet-400/20 text-violet-300", ring: "ring-violet-300", bar: "bg-violet-400" },
+  rose: { chip: "bg-rose-400/15 text-rose-300", ring: "ring-rose-300", bar: "bg-rose-400" },
+  teal: { chip: "bg-teal-400/15 text-teal-300", ring: "ring-teal-300", bar: "bg-teal-400" },
+  lime: { chip: "bg-lime-400/15 text-lime-300", ring: "ring-lime-300", bar: "bg-lime-400" },
+  fuchsia: { chip: "bg-fuchsia-400/15 text-fuchsia-300", ring: "ring-fuchsia-300", bar: "bg-fuchsia-400" },
+  orange: { chip: "bg-orange-400/15 text-orange-300", ring: "ring-orange-300", bar: "bg-orange-400" },
+  blue: { chip: "bg-blue-400/15 text-blue-300", ring: "ring-blue-300", bar: "bg-blue-400" },
+  yellow: { chip: "bg-yellow-300/15 text-yellow-200", ring: "ring-yellow-200", bar: "bg-yellow-400" },
+  pink: { chip: "bg-pink-400/15 text-pink-300", ring: "ring-pink-300", bar: "bg-pink-400" },
 };
-const NO_CATEGORY = { chip: "bg-muted text-muted-foreground", ring: "ring-muted-foreground" };
+const NO_CATEGORY = { chip: "bg-muted text-muted-foreground", ring: "ring-muted-foreground", bar: "bg-muted-foreground" };
 
 export const hueClasses = (category?: Category) => {
   const h = hueOf(category);
