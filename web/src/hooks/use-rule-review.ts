@@ -13,7 +13,10 @@ function localStore(): Storage | undefined {
   }
 }
 
-const reviewKey = (kind: LedgerKind) => ["rule-review", kind] as const;
+// ruleReviewKey is the review of every kind; a write that can add rule
+// entries invalidates it.
+export const ruleReviewKey = ["rule-review"] as const;
+const reviewKey = (kind: LedgerKind) => [...ruleReviewKey, kind] as const;
 
 interface Review {
   // ids are the kind's rule entries written since the owner last marked

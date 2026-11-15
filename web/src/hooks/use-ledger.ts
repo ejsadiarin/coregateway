@@ -4,6 +4,7 @@ import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchEx
 import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { feedKey } from "@/lib/feed";
 import { entryOf, ruleOf, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
+import { ruleReviewKey } from "@/hooks/use-rule-review";
 import { addTag, createRule, fetchRules, fetchTagLinks, removeTag, updateRule, type RuleInput } from "@/lib/ledger-api";
 import {
   budgetKeys,
@@ -179,6 +180,8 @@ export function useSaveRule(kind: LedgerKind) {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: kind === "expense" ? budgetKeys.recurringExpenses() : budgetKeys.recurringIncomes() });
       await qc.invalidateQueries({ queryKey: recordsKey(kind) });
+      // A save runs the materialize pass, which can write rule entries.
+      qc.invalidateQueries({ queryKey: ruleReviewKey });
       qc.invalidateQueries({ queryKey: budgetKeys.stats() });
       qc.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
       // Today's new entry gets its Feed note.

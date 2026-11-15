@@ -34,7 +34,11 @@ export function StaleReviewSheet({
 
   const skip = async (id: string) => {
     const e = entries.get(id);
-    if (!e) return settle(id);
+    if (!e) {
+      // Deleted since: nothing left to skip.
+      showToast("That entry is no longer in the ledger", "error");
+      return settle(id);
+    }
     try {
       await save.mutateAsync({ id, input: entryInput(e, { status: "skipped" }) });
       settle(id);

@@ -1,4 +1,4 @@
-import type { Entry, Rule } from "@/lib/ledger";
+import type { Entry, LedgerKind, Rule } from "@/lib/ledger";
 
 // Reviewing what recurring rules wrote (corefinance ADR-0001): the pure
 // parts behind the ledgers' "New from your rules" section and the report a
@@ -14,6 +14,8 @@ export interface StaleEntry {
   needs_review: boolean;
 }
 
+// StaleReport is what a schedule change did to a rule's entries, as the
+// owner is told it.
 export interface StaleReport {
   // review are the edited entries the owner should skip or keep.
   review: StaleEntry[];
@@ -33,7 +35,7 @@ export function staleReport(stale: StaleEntry[] | null | undefined): StaleReport
 // FeedPage is one page of corefinance's "what's new" feed of rule entries
 // (GET /rule-entries/feed), as far as reviewing needs it.
 export interface FeedPage {
-  entries: { kind: "expense" | "income"; id: string }[];
+  entries: { kind: LedgerKind; id: string }[];
   next: string;
 }
 
@@ -44,7 +46,7 @@ export interface FeedPage {
 export async function readFeedSince(
   after: string | undefined,
   fetchPage: (after?: string) => Promise<FeedPage>,
-  kind: "expense" | "income",
+  kind: LedgerKind,
   pageSize: number,
 ): Promise<{ ids: string[]; next: string | undefined }> {
   const ids: string[] = [];
@@ -65,9 +67,11 @@ export async function readFeedSince(
 // blocked site data); then every visit is a first visit.
 type CursorStore = Pick<Storage, "getItem" | "setItem">;
 
-const cursorKey = (kind: "expense" | "income") => `rule-review-cursor:${kind}`;
+const cursorKey = (kind: LedgerKind) => `rule-review-cursor:${kind}`;
 
-export function loadCursor(kind: "expense" | "income", store: CursorStore | undefined): string | undefined {
+// loadCursor is where this browser last marked a kind's rule entries
+// reviewed, or undefined on a first visit.
+export function loadCursor(kind: LedgerKind, store: CursorStore | undefined): string | undefined {
   try {
     return store?.getItem(cursorKey(kind)) ?? undefined;
   } catch {
@@ -75,7 +79,8 @@ export function loadCursor(kind: "expense" | "income", store: CursorStore | unde
   }
 }
 
-export function saveCursor(kind: "expense" | "income", cursor: string, store: CursorStore | undefined): void {
+// saveCursor records where a kind's rule entries were last reviewed.
+export function saveCursor(kind: LedgerKind, cursor: string, store: CursorStore | undefined): void {
   try {
     store?.setItem(cursorKey(kind), cursor);
   } catch {

@@ -142,12 +142,12 @@ export function nextDue(rule: Rule, made: Set<string>, from: string = today()): 
   return undefined;
 }
 
-// ended tells a rule whose last date has passed.
 // ruleLabel names the rule that made an entry, or says just "rule" when
 // that rule is gone.
 export const ruleLabel = (ruleId: string, rules: Map<string, Pick<Rule, "description">>) =>
   rules.get(ruleId)?.description || "rule";
 
+// ended tells a rule whose last date has passed.
 export const ended = (rule: Rule, from: string = today()) => !!rule.endDate && rule.endDate < from;
 
 export function cadenceLabel(c: Cadence): string {
