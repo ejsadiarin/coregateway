@@ -277,9 +277,7 @@ export async function setKanbanCardLabel(boardId: string, cardId: string, labelI
 
 const settingsUrl = `${apiBaseUrl}/api/coreban/settings`;
 
-// fetchKanbanSettings reads the owner's coreban settings. Their timezone is
-// the gateway's now (useUserTimezone, ADR-0005); the web no longer saves one
-// to coreban.
+// fetchKanbanSettings reads the owner's coreban settings.
 export async function fetchKanbanSettings(): Promise<KanbanSettings> {
   const res = await fetch(settingsUrl, { credentials: "include" });
   await throwIfError(res, "fetching settings");

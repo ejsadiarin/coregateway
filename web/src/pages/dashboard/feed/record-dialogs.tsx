@@ -8,7 +8,6 @@ import {
   editKanbanReminder,
   fetchKanbanBoard,
   fetchKanbanBoards,
-  fetchKanbanSettings,
   KanbanRequestError,
   type FeedNote,
 } from "@/lib/kanban";
@@ -17,6 +16,7 @@ import type { Expense, Income } from "@/types/api";
 import { postBudgetNote } from "@/lib/feed";
 import { entryOf } from "@/lib/ledger";
 import { EntrySheet, type SheetTarget } from "@/components/budget/ledger/entry-sheet";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import { ReminderForm } from "@/pages/dashboard/kanban/reminders";
 import { reminderEdit } from "@/lib/kanban-schedule";
 import { columnOption } from "@/lib/kanban-columns";
@@ -41,8 +41,7 @@ export function ReminderDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
-  const timezone = settingsQuery.data?.timezone;
+  const timezone = useUserTimezone().data?.timezone;
   return (
     <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">

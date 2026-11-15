@@ -109,25 +109,25 @@ function fieldError(detail: string, field: "ntfy_topic" | "timezone"): string {
     : detail.replace(/^timezone/, "The timezone");
 }
 
-// TimezoneSaveError is the gateway refusing the timezone, told apart from
-// coreban refusing the topic.
+// TimezoneSaveError is the gateway refusing the timezone after coreban
+// saved the topic, told apart from coreban refusing the topic.
 class TimezoneSaveError extends Error {}
 
 function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTimezone: UserTimezone }) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isGuest } = useAuth();
   const [topicName, setTopicName] = useState(saved.ntfy_topic?.slice(topicPrefix.length) ?? "");
   const [timezone, setTimezone] = useState(savedTimezone.timezone);
   const [savedNotice, setSavedNotice] = useState(false);
 
   // The topic is coreban's; the timezone is the gateway's (ADR-0005), saved
-  // there only when it changed. coreban gets its own timezone back as is,
-  // since its PUT still requires one (coreban#26 drops it).
+  // there after the topic, only when it changed. The shared demo guest
+  // keeps UTC: the gateway refuses it a timezone.
   const saveMutation = useMutation({
     mutationFn: async (next: { ntfy_topic: string | null; timezone: string }) => {
-      const settings = await saveKanbanSettings({ ntfy_topic: next.ntfy_topic, timezone: saved.timezone });
+      const settings = await saveKanbanSettings({ ntfy_topic: next.ntfy_topic });
       queryClient.setQueryData(settingsKey, settings);
-      if (next.timezone !== savedTimezone.timezone || !savedTimezone.saved) {
+      if (!isGuest && (next.timezone !== savedTimezone.timezone || !savedTimezone.saved)) {
         try {
           const tz = await saveUserTimezone(savedTimezone.user_id, next.timezone);
           queryClient.setQueryData(userTimezoneKey(user?.id), tz);
@@ -142,7 +142,11 @@ function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTi
 
   const err = saveMutation.error;
   const topicError = err instanceof KanbanRequestError ? fieldError(err.detail, "ntfy_topic") : "";
-  const timezoneError = err instanceof TimezoneSaveError ? fieldError(err.message, "timezone") : "";
+  // The topic is already saved when the timezone fails, so say so.
+  const timezoneError =
+    err instanceof TimezoneSaveError
+      ? `${fieldError(err.message, "timezone") || "Couldn't save the timezone."} Your notification target was saved.`
+      : "";
   const otherError = err && !topicError && !timezoneError ? "Couldn't save your settings." : "";
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -197,7 +201,7 @@ function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTi
       <div className="grid gap-2">
         <Label htmlFor="kanban-timezone">Timezone</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={timezone} onValueChange={setTimezone}>
+          <Select value={timezone} onValueChange={setTimezone} disabled={isGuest}>
             <SelectTrigger id="kanban-timezone" className="min-h-11 flex-1" aria-invalid={timezoneError ? true : undefined}>
               <SelectValue />
             </SelectTrigger>
@@ -210,7 +214,7 @@ function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTi
               ))}
             </SelectContent>
           </Select>
-          {timezone !== deviceTimezone && (
+          {!isGuest && timezone !== deviceTimezone && (
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setTimezone(deviceTimezone)}>
               Use device
             </Button>
@@ -218,7 +222,7 @@ function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTi
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           "Daily at 07:00" means 07:00 here, and your budget dates its entries in it too. This device is on{" "}
-          {zoneLabel(deviceTimezone)}.
+          {zoneLabel(deviceTimezone)}.{isGuest && " The shared demo account stays on UTC."}
         </p>
         {timezoneError && <p className="text-sm text-destructive">{timezoneError}</p>}
       </div>
