@@ -2,10 +2,22 @@
 
 Moves the existing Immich install on `core-2` (the N100) into the cluster
 built in [`homelab-k3s.md`](./homelab-k3s.md). The photos and videos do not
-move: the cluster mounts the directory they are already in.
+move: the cluster mounts the directory they are already in. Only the database
+is "restored": dumped from Compose and loaded into the cluster's Postgres.
 
-Prerequisites: sections 1–13 of the main guide are done and verified
-(CloudNativePG, `local-path-retain`, the internal Gateway, tailnet access and DNS).
+`core-2` is the Kubernetes node name of the machine whose hostname is
+`homelab` today. `ssh core-2` below means a shell on that machine.
+
+Prerequisites:
+
+1. The restore drill in [`immich-restore-drill.md`](./immich-restore-drill.md)
+   has passed. Do not change how Immich runs before you have proved the backup
+   can rebuild it.
+2. Sections 1–13 of the main guide are done and verified (CloudNativePG,
+   `local-path-retain`, the internal Gateway, tailnet access and DNS).
+
+Once Immich runs in the cluster, backups and every kind of restore are in
+[`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md).
 
 - [1. What changes and what does not](#1-what-changes-and-what-does-not)
 - [2. Your files are not locked in](#2-your-files-are-not-locked-in)
@@ -24,38 +36,57 @@ Prerequisites: sections 1–13 of the main guide are done and verified
 
 | Piece | Compose today | In the cluster |
 |---|---|---|
-| Photos and videos | `UPLOAD_LOCATION` on `core-2` | Same directory, mounted through a static local volume. Nothing is copied |
+| Photos and videos | `/home/ejs/services/immich/library` on `core-2`'s NVMe, about 181 GB | Same directory, mounted through a static local volume. Nothing is copied |
 | Server | `immich_server` container | Official Helm chart, pinned to `core-2` |
 | Machine learning | `immich_machine_learning` | Same chart, prefers `core-1` (the i5) |
 | Redis | `redis:6.2` container | Valkey from the chart, no persistence |
-| Database | `immich_postgres`, Postgres 14 + VectorChord 0.4.3, superuser `postgres` | CloudNativePG, Postgres 18 + VectorChord 1.1.1, on `core-2`'s SSD |
-| URL | `immich.local.ejsadiarin.com` via Traefik (LAN) | `immich.lab.ejsadiarin.com` via the internal Gateway (tailnet devices only) |
-| Media backup | restic on the host | Unchanged |
+| Database | `immich_postgres`, Postgres 14.19 + VectorChord 0.4.3, superuser `postgres`, 341 MB | CloudNativePG, Postgres 18 + VectorChord 1.1.1, on `core-2`'s SSD |
+| Library mount inside the container | `/usr/src/app/upload` (Compose file from an older release) | `/data` (fixed by the chart) |
+| URL | `immich.local.ejsadiarin.com` via Traefik (tailnet address, public DNS record) | `immich.lab.ejsadiarin.com` via the internal Gateway (tailnet devices only) |
+| Media backup | restic on the host, run by hand | Same job, on a timer |
 | Database backup | Immich's nightly dump into `library/backups` | That, plus continuous backup to B2 |
 
-Versions checked 2026-11-10: Immich `v3.3.6`, chart `0.13.4` (its default
-image tag is `v3.2.0`, so the tag is set explicitly). Immich supports Postgres
-14 to 19 and VectorChord 0.3 up to, not including, 2.0.
+State and versions checked 2026-11-15: Immich `v3.4.1` is both the latest
+release and what Compose runs (its tag floats on `release`). Chart `0.13.4`
+has a default image tag of `v3.2.0`, so the tag is set explicitly. Immich's
+image carries Postgres clients for 14 to 18 and supports VectorChord 0.3 up
+to, not including, 2.0.
 
-The move and an Immich upgrade never happen together: Compose is first brought
+The move and an Immich upgrade never happen together: Compose is first pinned
 to the exact version the cluster will run.
+
+The riskiest step is loading a Postgres 14 dump into Postgres 18 with a newer
+VectorChord. That was rehearsed on 2026-11-15: the live nightly dump was
+loaded into a throwaway `cloudnative-vectorchord:18.6-1.1.1` container with
+the command from section 6.3. It took 17 seconds with no errors; all 49,215
+assets, both search indexes and `vchord` 1.1.1 were present, and every table
+was owned by `immich`.
 
 ---
 
 ## 2. Your files are not locked in
 
-With the storage template on and its migration job run (both true for you),
-every original is a normal file under a readable path:
+The storage template is on (`{{y}}/{{album}}/{{filename}}`), so nearly every
+original is a normal file under a readable path:
 
 ```
-<UPLOAD_LOCATION>/
-├── library/<user>/<your template>/IMG_1234.jpg   ← originals. Open these with anything
-├── upload/<user-id>/…                            ← mobile uploads in flight; empty when idle
-├── profile/<user-id>/…                           ← avatars
-├── thumbs/…                                      ← generated previews, can be rebuilt
-├── encoded-video/…                               ← generated transcodes, can be rebuilt
-└── backups/…                                     ← nightly database dumps
+/home/ejs/services/immich/library/
+├── library/admin/<year>/<album>/IMG_1234.jpg   ← originals (49,040). Open these with anything
+├── upload/<user-id>/…                          ← mobile uploads in flight
+├── profile/<user-id>/…                         ← avatars
+├── thumbs/…                                    ← generated previews, can be rebuilt
+├── encoded-video/…                             ← generated transcodes, plus motion-photo videos
+└── backups/…                                   ← nightly database dumps
 ```
+
+Two things in that tree are not what the folder names suggest (2026-11-15):
+
+- `encoded-video/` also holds the video halves of 144 motion photos. Immich
+  tracks them as assets, so the folder is not purely "can be rebuilt". Back
+  it up with the rest.
+- `upload/` still holds 31 assets the template has not moved, and 109 files
+  (5.6 GB) the database does not reference at all: leftovers from interrupted
+  uploads. They are harmless. Do not clean them up during the migration.
 
 - Any photo viewer, file manager, `rsync` or restic can read `library/`
   directly on `core-2`. That stays true in the cluster because the volume is
@@ -78,71 +109,107 @@ inside its own block-device images, which no photo viewer can open.
 
 All on `core-2`, in the Immich Compose directory.
 
-### 3.1 Find the real library path
+### 3.1 Confirm the library path
+
+`<LIBRARY_PATH>` below is `/home/ejs/services/immich/library`. It sits on the
+root NVMe; no data drives are attached to this machine today.
 
 ```sh
-cd ~/services/immich                      # wherever the compose file lives
-grep -E 'UPLOAD_LOCATION|DB_DATA_LOCATION|IMMICH_VERSION' .env
-realpath "$(grep '^UPLOAD_LOCATION=' .env | cut -d= -f2)"
-df -h "$(realpath "$(grep '^UPLOAD_LOCATION=' .env | cut -d= -f2)")"
+cd ~/services/immich
+docker inspect immich_server \
+  --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'
+#   /home/ejs/services/immich/library -> /usr/src/app/upload   (today)
+df -h /home/ejs/services/immich/library            # the root filesystem
 ```
 
-Write down the absolute path. It is `<LIBRARY_PATH>` below. `df` tells you
-whether it sits on the root SSD or on one of the labelled drives; if it is on
-a drive, that drive must be in `/etc/fstab` (main guide, section 3).
+If you later move the library to a separate drive, that drive must be in
+`/etc/fstab` (main guide, section 3) and `<LIBRARY_PATH>` changes with it.
 
 ### 3.2 Confirm a fresh backup exists
 
 ```sh
-ls -lt "<LIBRARY_PATH>/backups" | head -3      # a dump from the last 24 h
-restic snapshots --latest 1                     # your existing job, recent
+ls -lt ~/services/immich/library/backups | head -3     # a dump from the last 24 h
+source ~/services/restic/restic-env
+sudo -E restic snapshots --latest 1                    # from the last 24 h
 ```
 
-Do not continue without both.
+Do not continue without both. If the snapshot is older, run `,backup-homelab`
+now.
 
-### 3.3 Bring Compose to the target version
+### 3.3 Pin the version and replace the Compose file
 
-`.env` currently has `IMMICH_VERSION=release`, which floats. Pin it:
+Compose runs `v3.4.1` through a floating tag. Pin it, so nothing upgrades
+underneath the migration:
 
 ```sh
-sed -i 's/^IMMICH_VERSION=.*/IMMICH_VERSION=v3.3.6/' .env
+grep -q '^IMMICH_VERSION=' .env \
+  && sed -i 's/^IMMICH_VERSION=.*/IMMICH_VERSION=v3.4.1/' .env \
+  || echo 'IMMICH_VERSION=v3.4.1' >> .env
 ```
 
-The `docker-compose.yml` in `core-infra` is from an older release: it mounts
-the library at `/usr/src/app/upload` and uses Redis 6.2. Current Immich
-expects the library at **`/data`**. Replace the file with the one published
-for the pinned release, re-apply your Traefik labels and `proxy` network, then:
+The `docker-compose.yml` in `core-infra` is from an older release. It differs
+from the `v3.4.1` file in three ways that matter:
+
+| | Yours | `v3.4.1` release file |
+|---|---|---|
+| Library mount | `${UPLOAD_LOCATION}:/usr/src/app/upload` | `${UPLOAD_LOCATION}:/data` |
+| Cache | `redis:6.2-alpine` | `valkey/valkey:9` |
+| Database image | Same tag, no digest | Same tag, pinned by digest |
+
+Replace the file with the release's, then put back what is yours: the Traefik
+labels on `immich-server`, `networks: [proxy]` on all four services, and the
+top-level `networks:` block.
 
 ```sh
+cp docker-compose.yml docker-compose.old.yml
 curl -L -o docker-compose.new.yml \
-  https://github.com/immich-app/immich/releases/download/v3.3.6/docker-compose.yml
-diff docker-compose.yml docker-compose.new.yml    # merge labels and networks by hand
-docker compose pull && docker compose up -d
-docker compose logs -f immich-server              # wait for a clean start
+  https://github.com/immich-app/immich/releases/download/v3.4.1/docker-compose.yml
+diff docker-compose.old.yml docker-compose.new.yml     # merge labels and networks by hand
+mv docker-compose.new.yml docker-compose.yml
+docker compose up -d --remove-orphans
+docker compose logs -f immich-server
 ```
 
-Read the release notes for every major version between what you were running
-(`docker inspect immich_server --format '{{.Config.Image}}'` and the version
-shown in the web UI) and `v3.3.6` before pulling.
+Changing the mount to `/data` changes where Immich looks for every file.
+Immich notices at startup and rewrites the paths in the database itself. In
+the log, expect:
+
+```
+Media location changed (from=/usr/src/app/upload, to=/data)
+Detected a change to media location, performing an automatic migration of file paths ...
+```
+
+Why it has not happened already: when both `/data` and `/usr/src/app/upload`
+exist in the container, Immich keeps using the old one. Today both exist (the
+image always has `/data`; your Compose file adds the other). Once the library
+is mounted at `/data`, only that path exists and Immich switches.
+
+Take a new database dump afterwards (**Administration → Job Queues → Create
+job → Create Database Dump**) and run `,backup-homelab`, so the newest backup
+matches the new paths.
 
 ### 3.4 Check the paths stored in the database
-
-Immich stores each file's path as seen from inside the container. The cluster
-mounts the library at `/data`, so the database must agree:
 
 ```sh
 docker exec immich_postgres psql -U postgres -d immich -Atc \
   'SELECT "originalPath" FROM asset LIMIT 3;'
 ```
 
-- Paths start with `/data/` → good.
-- Paths start with `/usr/src/app/upload/` or `upload/` → the install has not
-  been moved to the new location yet. Fix it here, on Compose, following the
-  release notes for the version that introduced `/data`, and re-run the query.
-  Do not migrate until it shows `/data/`.
+- Paths start with `/data/` → good. Open the web UI and view a photo and a
+  video before going on.
+- Paths still start with `/usr/src/app/upload/` → the automatic rewrite did
+  not run. Check that the mount is `/data` (the `docker inspect` command in
+  3.1), then run it by hand and restart:
 
-If the query fails on the table name, run `\dt` in `psql`; older versions call
-the table `assets`.
+  ```sh
+  docker exec -it immich_server immich-admin change-media-location
+  #   previous value: /usr/src/app/upload      new value: /data
+  docker compose restart immich-server
+  ```
+
+If you skip 3.3 altogether, the cluster's first start performs the same
+rewrite, because the chart mounts the library at `/data`. Doing it on Compose
+first keeps the two changes apart, and keeps rollback (section 9) trivial.
 
 ### 3.5 Check the extensions
 
@@ -150,10 +217,13 @@ the table `assets`.
 docker exec immich_postgres psql -U postgres -d immich -c '\dx'
 ```
 
-Expected: `vchord`, `vector`, `earthdistance`, `cube` and a few standard ones.
-If **`vectors`** (pgvecto.rs, with an "s") is still listed, the dump will not
-restore into the new database. Remove it first, as Immich's VectorChord
-migration notes describe:
+Checked 2026-11-15: `vchord` 0.4.3, `vector`, `earthdistance`, `cube`,
+`pg_trgm`, `unaccent`, `uuid-ossp`. The old **`vectors`** extension
+(pgvecto.rs, with an "s") is gone, which is what the new database needs. An
+empty schema named `vectors` is still there and is carried over by the dump;
+it does no harm.
+
+If `vectors` ever shows up in `\dx` again, remove it before dumping:
 
 ```sh
 docker exec immich_postgres psql -U postgres -d immich -c 'DROP EXTENSION vectors;'
@@ -162,12 +232,25 @@ docker exec immich_postgres psql -U postgres -d immich -c 'DROP EXTENSION vector
 ### 3.6 Record ownership
 
 ```sh
-stat -c '%u:%g' "<LIBRARY_PATH>/library"
+stat -c '%u:%g' ~/services/immich/library/library      # 0:0
 ```
 
-Compose runs Immich as root unless you changed it, so this is normally `0:0`.
-The chart also runs as root by default. If you see another owner, set the same
-user in the chart values (section 7) so new files match old ones.
+Checked 2026-11-15: `0:0`. Compose runs Immich as root, and so does the chart
+by default, so new files will match old ones with no extra setting.
+
+### 3.7 Record a baseline
+
+Section 8 compares against these numbers.
+
+```sh
+docker exec immich_postgres psql -U postgres -d immich -At -c "
+  select 'assets',  count(*) from asset
+  union all select 'albums', count(*) from album
+  union all select 'faces',  count(*) from asset_face
+  union all select 'users',  count(*) from \"user\";"
+```
+
+On 2026-11-15: 49,215 assets, 44 albums, 1,941 faces, 1 user.
 
 ---
 
@@ -195,7 +278,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: static-local         # a label only; no provisioner behind it
   local:
-    path: <LIBRARY_PATH>
+    path: /home/ejs/services/immich/library      # <LIBRARY_PATH>
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -219,13 +302,23 @@ spec:
       storage: 1Ti
 ```
 
-Two guards against writing to the wrong place if a drive is not mounted:
+The path is on `core-2`'s root disk, so it is always there when the node is
+up. The node name in `nodeAffinity` must match `kubectl get nodes` exactly.
+It comes from `node-name` in the k3s config (main guide, section 6); if the
+N100 joined under another name, the volume never binds.
 
-1. `<LIBRARY_PATH>` must be a directory **inside** the mounted filesystem, not
-   the mount point itself. If the drive is missing, the path does not exist and
-   the pod fails to start instead of writing to the root disk.
-2. Immich keeps a hidden `.immich` marker file in each folder and refuses to
-   start if they are gone.
+Guards against writing to the wrong place:
+
+1. Immich keeps a hidden `.immich` marker file in each of the six folders and
+   refuses to start if one is gone.
+2. If the library later moves to a separate drive, `<LIBRARY_PATH>` must be a
+   directory **inside** the mounted filesystem, not the mount point itself.
+   With the drive missing, the path then does not exist and the pod fails to
+   start instead of writing to the root disk.
+
+The library shares the 477 GB disk with the OS, Docker, the database volume
+and Longhorn's replicas (main guide, section 10.2). On 2026-11-15 the disk was
+67 % full with 147 GB free.
 
 **Verify**
 
@@ -359,7 +452,7 @@ above is the simpler start.
 
 ```sh
 kubectl -n immich get cluster immich-database      # "Cluster in healthy state", 1/1
-kubectl -n immich get secret immich-database-app   # created by the operator
+kubectl -n immich get svc immich-database-rw       # the address Immich connects to
 kubectl -n immich exec immich-database-1 -c postgres -- psql -c '\du immich'
 #   attributes include Superuser
 kubectl -n immich exec immich-database-1 -c postgres -- \
@@ -369,6 +462,13 @@ kubectl -n immich exec immich-database-1 -c postgres -- \
 If `immich` is not a superuser, the operator did not apply the managed role to
 the bootstrap owner. Grant it by hand
 (`psql -c 'ALTER ROLE immich SUPERUSER;'`) and keep going.
+
+There is no `immich-database-app` Secret. The operator generates one only
+when it invents the password itself; here the password comes from
+`immich-db-owner`, which lives in Git (encrypted). That is deliberate: the
+password survives a rebuild of the cluster, so a restored database and a
+reinstalled Immich still agree. Section 7 reads the credentials from
+`immich-db-owner` for that reason.
 
 The database must stay **empty** until the restore. Do not install the Immich
 chart yet: its first start would create a fresh schema and the restore would
@@ -392,16 +492,19 @@ docker compose stop immich-server immich-machine-learning
 ### 6.2 Dump
 
 ```sh
-docker exec -t immich_postgres pg_dump --clean --if-exists \
+docker exec immich_postgres pg_dump --clean --if-exists \
   --no-owner --no-privileges \
   --dbname=immich --username=postgres \
   | gzip > ~/immich-cutover.sql.gz
-ls -lh ~/immich-cutover.sql.gz
+ls -lh ~/immich-cutover.sql.gz                    # about 60 MB
 gunzip -t ~/immich-cutover.sql.gz && echo archive ok
 ```
 
 `--no-owner` makes everything belong to whoever restores it. Without it, every
 table would be owned by `postgres` in the new cluster and not by `immich`.
+
+Keep this file until the decommission in section 10. Together with the
+untouched `postgres` directory it is your way back.
 
 Then stop the rest, so nothing can write to the library:
 
@@ -425,13 +528,14 @@ scp core-2:immich-cutover.sql.gz .
 
 The `sed` line is from Immich's own restore procedure. `--single-transaction`
 with `ON_ERROR_STOP` means a failure leaves the database empty rather than
-half-loaded; fix the cause and run it again.
+half-loaded; fix the cause and run it again. Expect it to finish in under a
+minute (17 seconds in the 2026-11-15 rehearsal).
 
 **Verify**
 
 ```sh
 kubectl -n immich exec immich-database-1 -c postgres -- psql -d immich -Atc \
-  'SELECT count(*) FROM asset;'                       # matches the count on Compose
+  'SELECT count(*) FROM asset;'                       # matches the baseline from 3.7
 kubectl -n immich exec immich-database-1 -c postgres -- psql -d immich -c '\dx'
 #   vchord at 1.1.x, vector, earthdistance, cube; no "vectors"
 kubectl -n immich exec immich-database-1 -c postgres -- psql -d immich -Atc \
@@ -474,17 +578,15 @@ spec:
         containers:
           main:
             image:
-              tag: v3.3.6                      # same as Compose; bump deliberately
+              tag: v3.4.1                      # same as Compose; bump deliberately
             env:
               TZ: Asia/Manila
-              DB_HOSTNAME:
-                valueFrom: {secretKeyRef: {name: immich-database-app, key: host}}
+              DB_HOSTNAME: immich-database-rw    # Service created by CloudNativePG
+              DB_DATABASE_NAME: immich
               DB_USERNAME:
-                valueFrom: {secretKeyRef: {name: immich-database-app, key: user}}
+                valueFrom: {secretKeyRef: {name: immich-db-owner, key: username}}
               DB_PASSWORD:
-                valueFrom: {secretKeyRef: {name: immich-database-app, key: password}}
-              DB_DATABASE_NAME:
-                valueFrom: {secretKeyRef: {name: immich-database-app, key: dbname}}
+                valueFrom: {secretKeyRef: {name: immich-db-owner, key: password}}
 
     immich:
       persistence:
@@ -543,8 +645,9 @@ grep -n -B2 -A2 'mountPath: /data' /tmp/immich.yaml  # library mounted at /data
 grep -n 'DB_HOSTNAME' /tmp/immich.yaml               # present on the server
 ```
 
-If the library is mounted anywhere other than `/data`, stop: the paths in the
-database (section 3.4) must match the mount.
+The chart mounts the library claim at `/data` by default. If the rendered
+output shows anything else, stop: the paths in the database (section 3.4)
+must match the mount.
 
 The route, `apps/immich/route.yaml`:
 
@@ -585,6 +688,22 @@ kubectl -n immich get pods -o wide
 kubectl -n immich exec deploy/immich-server -- ls /data
 #   library upload profile thumbs encoded-video backups
 curl -sI https://immich.lab.ejsadiarin.com | head -1          # 200
+kubectl -n immich exec immich-database-1 -c postgres -- psql -d immich -Atc \
+  'SELECT "originalPath" FROM asset LIMIT 1;'                 # starts with /data/
+```
+
+Then prove the cluster's database and the files on disk still agree. Immich
+stores a SHA-1 of every original at upload; recompute them all on `core-2`:
+
+```sh
+# laptop
+kubectl -n immich exec immich-database-1 -c postgres -- psql -d immich -At -c \
+  "select encode(checksum,'hex') || '  ' || \"originalPath\" from asset where not \"isExternal\";" \
+  | sed 's#  /data/#  /home/ejs/services/immich/library/#' > immich-sha1.txt
+wc -l < immich-sha1.txt                                       # the asset count from 3.7
+scp immich-sha1.txt core-2:/tmp/
+ssh core-2 'sudo sha1sum --quiet -c /tmp/immich-sha1.txt; echo "exit=$?"'
+#   no output and exit=0: every photo and video is present and unchanged
 ```
 
 In the web UI at `https://immich.lab.ejsadiarin.com`:
@@ -652,53 +771,50 @@ Compose Immich, then delete the strays.
 
 | Data | Covered by |
 |---|---|
-| Originals (`library/`, `upload/`, `profile/`) | Existing restic job on `core-2`. Keep `<LIBRARY_PATH>` in its include list; nothing about it changed |
+| Everything under `<LIBRARY_PATH>` | The restic job on `core-2` (`,backup-homelab`). `~/services/immich` stays in its target list; nothing about the path changed |
 | Database, continuous | CloudNativePG to `b2://<B2_CLUSTER_BUCKET>/cnpg/immich`, 30-day retention, point-in-time recovery |
 | Database, portable dump | Immich's nightly job still writes into `library/backups`, which restic carries offsite |
 
-Confirm the first scheduled CNPG backup:
+Confirm the first scheduled CNPG backup and the first nightly dump written
+from the cluster:
 
 ```sh
 kubectl -n immich get backup                     # phase: completed
 kubectl -n immich get cluster immich-database -o jsonpath='{.status.conditions}' | jq
 #   ContinuousArchiving: True
+ssh core-2 'ls -lt ~/services/immich/library/backups | head -2'
+#   a dump named ...-pg18.x.sql.gz from last night
 ```
 
-Restoring the database from B2 into a new cluster (same name, empty volume):
-
-```yaml
-spec:
-  bootstrap:
-    recovery:
-      source: origin
-  externalClusters:
-    - name: origin
-      plugin:
-        name: barman-cloud.cloudnative-pg.io
-        parameters:
-          barmanObjectName: immich-b2
-          serverName: immich-database
-```
-
-A cluster restored this way must archive to a **different** `serverName` or
-path than the one it was restored from; set `serverName` in the `plugins`
-parameters to a new value.
+Day-to-day checks and every restore path (one bad day, a lost database
+volume, a lost library, a lost node) are in
+[`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md). Run its
+database drill (section 7) once before decommissioning Compose.
 
 ### Decommission Compose
 
-After two weeks without problems and one successful restic and CNPG backup:
+After two weeks without problems, one successful restic run, one successful
+CNPG backup and one passed database drill:
 
-1. Remove the Immich service from `core-infra/immich/` (or leave the file with
-   a note that it is retired).
-2. Archive, then delete, the old database directory:
+1. Remove the Immich containers and leave a note in `core-infra/immich/` that
+   the Compose file is retired:
 
    ```sh
-   sudo tar -C ~/services/immich -czf /mnt/Backups/immich-pg14-final.tgz postgres
+   cd ~/services/immich && docker compose down
+   ```
+
+   Keep `docker-compose.yml` and `.env` in place: restic still backs them up,
+   and they are the way back to Compose if you ever leave the cluster.
+2. Delete the old database directory. `~/immich-cutover.sql.gz` (60 MB) is
+   the archive of it; move that file into `~/services/immich/` so restic keeps
+   a copy, then:
+
+   ```sh
    sudo rm -rf ~/services/immich/postgres
    ```
 
-3. Remove the `immich_model-cache` Docker volume and the `immich.local`
-   Traefik labels.
+3. Remove the `immich_model-cache` Docker volume. The `immich.local` Traefik
+   labels go away with the containers.
 
 **Do not delete `<LIBRARY_PATH>`.** It is the live library.
 

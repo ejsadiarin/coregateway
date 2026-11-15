@@ -5,7 +5,12 @@ services, and the self-hosted apps moving out of Docker Compose.
 
 - Cluster manifests live in the **`core-infra`** repo (Flux tree). This repo
   only produces images and holds this guide.
-- Immich has its own guide: [`immich-migration.md`](./immich-migration.md).
+- Immich has three guides, used in this order:
+  [`immich-restore-drill.md`](./immich-restore-drill.md) (prove the backup,
+  before anything changes), [`immich-migration.md`](./immich-migration.md)
+  (the move), and
+  [`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md) (backups
+  and restores once it runs here).
 - coreban's attachment storage (Cloudflare R2) has its own runbook,
   [`coreban-attachments.md`](./coreban-attachments.md), called from
   section 15.2.
@@ -14,6 +19,38 @@ services, and the self-hosted apps moving out of Docker Compose.
 
 Work top to bottom. Every phase ends with a **Verify** block; do not continue
 until it passes.
+
+### Order of work
+
+| Step | What | Where | Touches the running services? |
+|---|---|---|---|
+| 0 | Prove the backup restores | [`immich-restore-drill.md`](./immich-restore-drill.md) | No |
+| 1 | Build the platform on `core-1` | Sections 2–5 | No |
+| 2 | Join the N100 as `core-2` | Section 6 | Adds k3s beside Docker; Compose keeps running |
+| 3 | Secrets, Flux, controllers, storage, certificates, Gateways, tailnet, tunnel | Sections 7–14 | No |
+| 4 | Platform backups work and one restore has been tried | Section 18 | No |
+| 5 | coregateway stack, then ntfy | Sections 15–16 | Moves those services |
+| 6 | Immich | [`immich-migration.md`](./immich-migration.md) | An hour of Immich downtime |
+| 7 | Operate | [`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md), sections 17 and 19 | |
+
+Step 0 comes first on purpose. Nothing about how the photos are stored
+changes until the existing backup has rebuilt Immich on another machine.
+
+### Where things stand (2026-11-15)
+
+Checked on the N100. Where a later section assumes something else, this table
+wins.
+
+| Topic | Today | What it means for this guide |
+|---|---|---|
+| Machines | One server in use: `homelab` (N100, 12 GB, Debian 12) | `homelab` becomes `core-2`. The node name comes from `node-name` in the k3s config (section 6); renaming the OS is optional (section 3) |
+| Disks | One 477 GB NVMe, 67 % full, 147 GB free. No data drives are attached | Skip "Data drives" in section 3. Read the space note in section 10.2 before installing Longhorn |
+| Immich | `v3.4.1` on Compose. Library at `~/services/immich/library` on that NVMe: 181 GB, 49,215 assets | The library is the largest and fastest-growing thing on the disk |
+| Running on Compose | Traefik, Immich, Gitea, ntfy, Glance, BentoPDF, the coregateway stack | |
+| Not running | AdGuard Home (stopped for months), Vaultwarden, Authentik, Uptime Kuma, Beszel | Wherever this guide says "store it in Vaultwarden", read "in a password manager that does not live on `core-2`, plus paper". Section 13.3 option A needs AdGuard running again; option B does not |
+| Internal DNS | `*.local.ejsadiarin.com` is a public Cloudflare record pointing at `homelab`'s tailnet address | This is already section 13.3 option B |
+| Backups | restic to B2 through `,backup-homelab`, run by hand. No timer | Add the timer ([`immich-restore-drill.md`](./immich-restore-drill.md) section 12) before step 6 |
+| `core-infra` | The repository checked out at `~/services`; public on GitHub | Everything secret goes in as sops-encrypted files (section 7). The pre-commit guard there is not optional |
 
 - [1. Design](#1-design)
 - [2. Before you start](#2-before-you-start)
@@ -68,7 +105,7 @@ is not on the tailnet cannot reach `*.lab`.
 
 | Area | Choice |
 |---|---|
-| Nodes | `core-1` = i5 8th gen, 16 GB (first server, embedded etcd). `core-2` = N100, 12 GB (worker; still runs the Compose stack and holds the data drives). A third node later makes all three servers |
+| Nodes | `core-1` = i5 8th gen, 16 GB (first server, embedded etcd). `core-2` = N100, 12 GB (worker; still runs the Compose stack and holds the Immich library on its NVMe). A third node later makes all three servers |
 | Kubernetes | k3s, no taint on the server; heavy pods prefer `core-1`, disk-bound pods are pinned |
 | CNI | Cilium: kube-proxy replacement, Hubble, Gateway API. LB IPAM only hands the Gateways cluster-internal addresses; no L2 announcements |
 | GitOps | Flux, tree in `core-infra` under `clusters/homelab` |
@@ -155,6 +192,14 @@ sudo systemctl enable --now iscsid
 sudo dpkg-reconfigure -plow unattended-upgrades
 ```
 
+Renaming the N100 from `homelab` is optional: Kubernetes takes the node name
+from `node-name` in the k3s config, not from the OS. If you do rename it,
+also change the `127.0.1.1` line in `/etc/hosts`, expect the Tailscale device
+name to follow, and expect the next restic run to rescan everything once
+(restic keys its change detection on the host name; nothing is uploaded
+twice). The Immich guides say `ssh core-2` for "a shell on the N100" either
+way.
+
 `open-iscsi` and `nfs-common` are Longhorn requirements. `iptables` must also
 be present: Cilium's Gateway API proxy uses it for transparent proxying unless
 `bpf.tproxy` is enabled.
@@ -193,7 +238,11 @@ If a host firewall is on, allow between the two nodes: TCP 6443, 10250,
 
 ### Data drives on `core-2` (N100 only)
 
-The drives are mounted today by `core-infra/scripts/,mount-drive`, by hand.
+No data drives are attached as of 2026-11-15, and the Immich library is on
+the root NVMe. Skip this block until a drive is added.
+
+When drives are attached, they are mounted by
+`core-infra/scripts/,mount-drive`, by hand.
 Kubernetes needs them present at boot, or pods will write into empty mount
 points on the root disk.
 
@@ -218,7 +267,7 @@ add a guard so a pod cannot start against an unmounted path.
 ```sh
 systemctl is-active iscsid                 # active
 lsmod | grep -E 'iscsi_tcp|xt_TPROXY'      # both listed
-findmnt /mnt/Storage1                      # core-2: mounted, survives a reboot
+findmnt /mnt/Storage1                      # core-2, only if drives are attached: mounted, survives a reboot
 ```
 
 ---
@@ -781,6 +830,25 @@ stringData:
 Longhorn stores replicas on the root SSDs under `/var/lib/longhorn`. Both
 disks are 512 GB and shared with the OS, so the 25 % floor matters.
 
+**Space on `core-2` is tight.** On 2026-11-15 its disk had 147 GB free of
+467 GB. The 25 % floor is about 117 GB, which leaves roughly 30 GB for
+Longhorn replicas on that node. Longhorn also holds back a share of a root
+disk for the OS (`storageReservedPercentageForDefaultDisk`, 30 % unless you
+set it), which would leave under 10 GB. The Immich library (181 GB, growing)
+draws from the same free space. Every Longhorn volume keeps a replica on both
+nodes, so `core-2` caps the whole cluster. The volumes this guide creates add
+up to about 34 GB (Prometheus 20, machine-learning cache 10, Grafana 2,
+ntfy 2). Before installing Longhorn, do one of:
+
+- free space on `core-2` (`docker system df`, old images, the 5.6 GB of
+  upload leftovers noted in the Immich guide);
+- give Prometheus a single-replica volume pinned to `core-1` (it already
+  prefers that node) with a `StorageClass` whose `numberOfReplicas` is `"1"`;
+- move the Immich library to a dedicated drive.
+
+Check the result with `df -h /var/lib/longhorn` on `core-2` and the
+schedulable figure under **Node** in the Longhorn UI.
+
 Nightly backup of every volume, as `infrastructure/configs/longhorn-backup.yaml`:
 
 ```yaml
@@ -1105,6 +1173,8 @@ changing `src`.
 ### 13.3 DNS
 
 Every `*.lab` name must resolve to `<LAB_TS_IP>`. Two ways; pick one.
+Option B is how `*.local` already works today, and AdGuard Home is currently
+stopped, so B is the path with no new moving parts.
 
 **A. AdGuard rewrite plus Tailscale split DNS (keeps the names private).**
 
@@ -2037,7 +2107,8 @@ alertmanager:
 Confirm the template name against the ntfy docs for your version; if it is
 missing, use a small bridge such as `ntfy-alertmanager` instead.
 
-Uptime Kuma and Beszel on Compose keep working and are worth keeping: they
+Uptime Kuma and Beszel on Compose (neither is running as of 2026-11-15) are
+worth bringing back: they
 watch the cluster from outside it.
 
 ---
@@ -2050,7 +2121,7 @@ watch the cluster from outside it.
 | Manifests and encrypted secrets | Git | GitHub `core-infra` | Every push |
 | Longhorn volumes | `RecurringJob nightly-b2` | `…/longhorn` | Nightly, keep 14 |
 | Immich database | CloudNativePG + Barman Cloud plugin | `…/cnpg/immich` | Continuous WAL, daily base |
-| Immich media | Existing restic job on `core-2` | Existing restic bucket | As today |
+| Immich media | Existing restic job on `core-2` (`,backup-homelab`) | Existing restic bucket | By hand today; nightly once the timer from [`immich-restore-drill.md`](./immich-restore-drill.md) section 12 is installed |
 | coreban attachments | None yet: R2 holds the only copy | R2 `coreban-attachments` | [`coreban-attachments.md`](./coreban-attachments.md) section 10 |
 | `coredb` | Neon's own history; periodic `pg_dump` from the laptop | Neon, local | Manual |
 | Keys that unlock everything | Vaultwarden and paper | Off-cluster | On change |
@@ -2061,10 +2132,18 @@ watch the cluster from outside it.
 - the k3s server token and `config.yaml`
 - the B2 application key
 - the tunnel credentials JSON
-- the restic repository password
+- the restic repository password, its B2 key and the repository address
 
-Vaultwarden runs on Compose on `core-2`, so it does not depend on the cluster.
-It does depend on `core-2`: the paper copy of the age key covers that case.
+"Outside the cluster" must also mean outside `core-2`. Today the restic
+values exist only in `~/services/restic` and `~/.password-store` on that
+machine, both of which are inside the backup they unlock. Vaultwarden is not
+running. Until these live in a password manager hosted elsewhere, plus a
+paper copy, a dead `core-2` means the Immich backup cannot be opened.
+[`immich-restore-drill.md`](./immich-restore-drill.md) section 3 tests
+exactly this.
+
+Immich has its own restore procedures and drills:
+[`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md).
 
 ### Restore drill
 
@@ -2091,8 +2170,12 @@ change. Total loss of both nodes:
    its original name, then create the matching PV/PVC (the UI offers this).
    Do it before the app that owns the claim starts, or scale that app to zero.
 4. Immich database: bootstrap a new CNPG cluster with `bootstrap.recovery`
-   from the object store (see the Immich guide).
-5. Rejoin `core-2`, remount the drives, check the static volumes bind.
+   from the object store
+   ([`immich-k3s-backup-restore.md`](./immich-k3s-backup-restore.md) section
+   6.2). Change `database.yaml` to its recovery form **before** Flux applies
+   `apps`, or an empty database is created instead.
+5. Rejoin `core-2`, restore the Immich library with restic if its disk was
+   lost (same runbook, section 6.4), check the static volumes bind.
 
 A drill that is only read is not a drill. The cheap version: restore one
 Longhorn volume to a new name and read a file from it, monthly.
