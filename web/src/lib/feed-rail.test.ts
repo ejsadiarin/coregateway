@@ -86,11 +86,9 @@ describe("comingUp", () => {
         reminder("r4", "no more", null),
       ],
       [
-        { id: "s", kind: "expense", description: "spotify subscription", amount: 85, currency: "PHP", next: "2026-11-21" },
-        { id: "w", kind: "expense", description: "a day too late", amount: 1, currency: "PHP", next: "2026-11-22" },
-        { id: "b", kind: "income", description: "baon mom", amount: 500, currency: "PHP", next: "2026-11-17" },
-        { id: "y", kind: "expense", description: "domain", amount: 700, currency: "PHP", next: "2026-12-01" },
-        { id: "p", kind: "expense", description: "paused", amount: 1, currency: "PHP", next: undefined },
+        { id: "s", kind: "expense", description: "spotify subscription", amount: 85, currency: "PHP", dates: ["2026-11-21"] },
+        { id: "b", kind: "income", description: "baon mom", amount: 500, currency: "PHP", dates: ["2026-11-17", "2026-11-18", "2026-11-19"] },
+        { id: "p", kind: "expense", description: "paused", amount: 1, currency: "PHP", dates: [] },
       ],
       now,
     );
@@ -100,7 +98,8 @@ describe("comingUp", () => {
       ["2026-11-21", "rule", "spotify subscription"],
     ]);
     expect(items[0].time).toBe("09:00");
-    expect(items[1]).toMatchObject({ ruleKind: "income", amount: 500 });
+    expect(items[1]).toMatchObject({ ruleKind: "income", amount: 500, count: 3 });
+    expect(items[2].count).toBe(1);
   });
 });
 

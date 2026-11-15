@@ -89,15 +89,19 @@ export interface ComingItem {
   amount?: number;
   currency?: string;
   ruleKind?: LedgerKind;
+  // count is how many times a rule falls in the seven days; its row shows
+  // the first.
+  count?: number;
 }
 
 // comingUp lists, soonest first, the reminders that fire and the rules that
-// post in the seven days from now's date. A reminder that won't be sent
+// post in the seven days from now's date: one row per rule, at its first
+// date there, with how many times it falls in them. A reminder that won't be sent
 // (no notification target, or its card is done or archived) and a rule
-// with no next date are left out.
+// with no date in them are left out.
 export function comingUp(
   reminders: { id: string; message: string; next_fire_at: string | null; paused: string | null }[],
-  rules: { id: string; kind: LedgerKind; description: string; amount: number; currency: string; next: string | undefined }[],
+  rules: { id: string; kind: LedgerKind; description: string; amount: number; currency: string; dates: string[] }[],
   now: Date,
 ): ComingItem[] {
   const from = format(now, "yyyy-MM-dd");
@@ -113,16 +117,18 @@ export function comingUp(
     items.push({ key: `reminder:${r.id}`, date, time, kind: "reminder", title: r.message, sort: `${date} ${time}` });
   }
   for (const r of rules) {
-    if (!r.next || !inRange(r.next)) continue;
+    const dates = r.dates.filter(inRange).sort();
+    if (dates.length === 0) continue;
     items.push({
       key: `rule:${r.id}`,
-      date: r.next,
+      date: dates[0],
       kind: "rule",
       title: r.description,
       amount: r.amount,
       currency: r.currency,
       ruleKind: r.kind,
-      sort: `${r.next} 99`,
+      count: dates.length,
+      sort: `${dates[0]} 99`,
     });
   }
   return items.sort((a, b) => a.sort.localeCompare(b.sort)).map(({ sort: _sort, ...item }) => item);

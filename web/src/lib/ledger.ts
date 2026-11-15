@@ -142,6 +142,21 @@ export function nextDue(rule: Rule, made: Set<string>, from: string = today()): 
   return undefined;
 }
 
+// dueDatesWithin is every date from `from` to `until` (inclusive) the rule
+// is due that it hasn't made an entry for yet, as nextDue counts them. A
+// paused rule has none.
+export function dueDatesWithin(rule: Rule, made: Set<string>, from: string, until: string): string[] {
+  if (!rule.active || !rule.startDate) return [];
+  const start = parseISO(rule.startDate);
+  const out: string[] = [];
+  for (let n = 0; n < 5000; n++) {
+    const d = ymd(nthDue(start, rule.cadence, n));
+    if (d > until || (rule.endDate && d > rule.endDate)) break;
+    if (d >= from && !made.has(d)) out.push(d);
+  }
+  return out;
+}
+
 // ruleLabel names the rule that made an entry, or says just "rule" when
 // that rule is gone.
 export const ruleLabel = (ruleId: string, rules: Map<string, Pick<Rule, "description">>) =>
@@ -221,14 +236,6 @@ export const canSkip = (r: { source_rule_id?: string | null }) => !!r.source_rul
 // undefined lets its date decide between posted and pending.
 export const skipStatus = (current: Entry["status"] | undefined): Entry["status"] | undefined =>
   current === "skipped" ? undefined : "skipped";
-
-// nextDates is each rule's next date (nextDue), given the entries it has
-// made so far.
-export function nextDates(rules: Rule[], entries: Entry[], from: string = today()): Map<string, string | undefined> {
-  const made = new Map<string, Set<string>>();
-  for (const e of entries) if (e.ruleId) made.set(e.ruleId, (made.get(e.ruleId) ?? new Set()).add(e.date));
-  return new Map(rules.map((r) => [r.id, nextDue(r, made.get(r.id) ?? new Set(), from)]));
-}
 
 export interface DayGroup {
   date: string;

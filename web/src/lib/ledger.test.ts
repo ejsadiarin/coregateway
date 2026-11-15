@@ -3,12 +3,12 @@ import {
   applyFilter,
   byMonth,
   cadencePhrase,
+  dueDatesWithin,
   canSkip,
   cleanNotes,
   ended,
   hueOf,
   money,
-  nextDates,
   nextDue,
   recents,
   ruleLabel,
@@ -206,12 +206,16 @@ describe("skipping one date", () => {
 });
 
 
-describe("nextDates", () => {
-  it("gives each rule its next date from the entries it has made", () => {
-    const monthly = rule({ id: "m", cadence: "monthly", startDate: "2026-09-05" });
-    const daily = rule({ id: "d", cadence: "daily", startDate: "2026-11-14" });
-    const next = nextDates([monthly, daily], [entry({ ruleId: "d", date: "2026-11-15" })], "2026-11-15");
-    expect(next.get("m")).toBe("2026-12-05");
-    expect(next.get("d")).toBe("2026-11-16");
+describe("dueDatesWithin", () => {
+  it("lists every date a rule falls on in a window that it hasn't made yet", () => {
+    const daily = rule({ id: "d", cadence: "daily", startDate: "2026-11-01" });
+    const made = new Set(["2026-11-15"]);
+    expect(dueDatesWithin(daily, made, "2026-11-15", "2026-11-18")).toEqual(["2026-11-16", "2026-11-17", "2026-11-18"]);
+  });
+
+  it("stops at the rule's end and finds none for a paused rule", () => {
+    const weekly = rule({ id: "w", cadence: "weekly", startDate: "2026-11-02", endDate: "2026-11-16" });
+    expect(dueDatesWithin(weekly, new Set(), "2026-11-01", "2026-11-30")).toEqual(["2026-11-02", "2026-11-09", "2026-11-16"]);
+    expect(dueDatesWithin(rule({ id: "p", cadence: "daily", startDate: "2026-11-01", active: false }), new Set(), "2026-11-15", "2026-11-21")).toEqual([]);
   });
 });

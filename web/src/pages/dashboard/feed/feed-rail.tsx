@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { addMonths, endOfMonth, format, parseISO } from "date-fns";
+import { addDays, addMonths, endOfMonth, format, parseISO } from "date-fns";
 import { BellRing, ChevronLeft, ChevronRight, Repeat } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useBudgetRemaining } from "@/hooks/use-budget";
@@ -7,15 +7,19 @@ import { useEntries, useRules } from "@/hooks/use-ledger";
 import { comingUp, monthDays, monthSummary, noteDaysFor, shortNet } from "@/lib/feed-rail";
 import { feedKey, fetchNoteDays } from "@/lib/feed";
 import { fetchKanbanReminders, remindersKey } from "@/lib/kanban";
-import { money, nextDates, today, type Entry, type Rule } from "@/lib/ledger";
+import { dueDatesWithin, money, today, type Entry, type Rule } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
 const NONE: never[] = [];
 
-// withNext pairs each rule with its next date, as the ledger works it out.
-function withNext(rules: Rule[], entries: Entry[]) {
-  const next = nextDates(rules, entries);
-  return rules.map((r) => ({ ...r, next: next.get(r.id) }));
+// withDates pairs each rule with the dates it falls on in the next seven
+// days that it hasn't made an entry for yet.
+function withDates(rules: Rule[], entries: Entry[]) {
+  const made = new Map<string, Set<string>>();
+  for (const e of entries) if (e.ruleId) made.set(e.ruleId, (made.get(e.ruleId) ?? new Set()).add(e.date));
+  const from = today();
+  const until = format(addDays(new Date(), 6), "yyyy-MM-dd");
+  return rules.map((r) => ({ ...r, dates: dueDatesWithin(r, made.get(r.id) ?? new Set(), from, until) }));
 }
 
 const card = "rounded-2xl border border-border bg-card/60 p-4";
@@ -45,7 +49,7 @@ export function FeedRail({ noteDays, onPickDay }: { noteDays: Set<string>; onPic
 
   const cells = useMemo(() => monthDays(month, [...expenses, ...incomes], dotDays, today()), [month, expenses, incomes, dotDays]);
   const coming = useMemo(
-    () => comingUp(reminders, [...withNext(expenseRules, expenses), ...withNext(incomeRules, incomes)], new Date()),
+    () => comingUp(reminders, [...withDates(expenseRules, expenses), ...withDates(incomeRules, incomes)], new Date()),
     [reminders, expenseRules, incomeRules, expenses, incomes],
   );
   const summary = remaining ? monthSummary(remaining) : undefined;
@@ -128,6 +132,7 @@ export function FeedRail({ noteDays, onPickDay }: { noteDays: Set<string>; onPic
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {c.title}
                   {c.time && <span className="text-muted-foreground"> · {c.time}</span>}
+                  {c.count !== undefined && c.count > 1 && <span className="text-muted-foreground"> · ×{c.count}</span>}
                 </span>
                 {c.amount !== undefined && (
                   <span className={cn("shrink-0 font-mono text-[13px]", c.ruleKind === "income" && "text-emerald-400")}>
