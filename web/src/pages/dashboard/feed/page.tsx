@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { entryInput, useRules, useSaveEntry } from "@/hooks/use-ledger";
-import { entryOf, ruleLabel } from "@/lib/ledger";
-import { canSkip, skipStatus } from "@/lib/feed-rail";
+import { entryInput, useEntryTags, useKindCategories, useRules, useSaveEntry } from "@/hooks/use-ledger";
+import { entryOf } from "@/lib/ledger";
+import { budgetChips, canSkip, skipStatus } from "@/lib/feed-rail";
+import { CategoryChip, RuleChip, StatusChip, TagChip } from "@/components/budget/ledger/chips";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,7 +17,6 @@ import {
   Pencil,
   Plus,
   ReceiptText,
-  Repeat,
   SendHorizontal,
   SquareKanban,
   SkipForward,
@@ -52,7 +52,7 @@ import {
   type FeedData,
 } from "@/lib/feed";
 import { budgetRecordOf, deleteBudgetRecord, isBudgetLink } from "@/lib/feed-records";
-import { budgetKeys } from "@/hooks/use-budget";
+import { budgetKeys, useTags } from "@/hooks/use-budget";
 import type { FeedFilter, Note, NoteLink } from "@/types/feed";
 import { syncAllBudgetNotes } from "@/lib/budget-sync";
 import { formatPeso } from "@/lib/format";
@@ -142,15 +142,28 @@ function LinkLine({ link, categoryName, className }: { link: NoteLink; categoryN
 // posted.
 function BudgetLine({ link, categoryName }: { link: NoteLink; categoryName?: CategoryName }) {
   const r = isBudgetLink(link) ? budgetRecordOf(link) : undefined;
-  // The Ledger reads the same rules, so the Feed rarely asks again.
-  const rules = useRules(link.kind === "income" ? "income" : "expense").data;
-  const ruleById = useMemo(() => new Map((rules ?? []).map((x) => [x.id, x])), [rules]);
+  const kind = link.kind === "income" ? "income" : "expense";
+  // The same queries as the Expenses and Incomes pages, so a record's chips
+  // match its ledger row and are rarely fetched again.
+  const rules = useRules(kind).data;
+  const categories = useKindCategories(kind).data;
+  const tagIds = useEntryTags(kind);
+  const tags = useTags().data;
+  const ctx = useMemo(
+    () => ({
+      ruleById: new Map((rules ?? []).map((x) => [x.id, x])),
+      categoryById: new Map((categories ?? []).map((c) => [c.id, c])),
+      tagById: new Map((tags ?? []).map((t) => [t.id, t])),
+      tagIds,
+    }),
+    [rules, categories, tags, tagIds],
+  );
   if (!r) return <LinkLine link={link} categoryName={categoryName} />;
+  const chips = budgetChips(r, ctx);
   const income = link.kind === "income";
   const Icon = linkIcons[link.kind];
   const status = r.status ?? "posted";
   const muted = status !== "posted";
-  const category = r.category_id ? categoryName?.(r.category_id) : undefined;
   return (
     <span className={cn("block min-w-0 text-left", muted && "opacity-60")}>
       <span className="flex min-w-0 items-start gap-2 text-sm leading-relaxed">
@@ -167,15 +180,14 @@ function BudgetLine({ link, categoryName }: { link: NoteLink; categoryName?: Cat
           {formatPeso(r.amount, r.currency)}
         </span>
       </span>
-      {(category || r.source_rule_id || muted) && (
-        <span className="mt-1 flex flex-wrap items-center justify-end gap-x-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          {category && <span>{category}</span>}
-          {r.source_rule_id && (
-            <span className="inline-flex items-center gap-1">
-              <Repeat className="h-3 w-3" aria-hidden /> {ruleLabel(r.source_rule_id, ruleById)}
-            </span>
-          )}
-          {muted && <span>{status}</span>}
+      {(chips.category || chips.rule || chips.tags.length > 0 || chips.status) && (
+        <span className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+          <CategoryChip category={chips.category} icon />
+          {chips.rule && <RuleChip>{chips.rule}</RuleChip>}
+          {chips.tags.map((t) => (
+            <TagChip key={t.id} tag={t} />
+          ))}
+          {chips.status && <StatusChip status={chips.status} />}
         </span>
       )}
     </span>

@@ -73,9 +73,16 @@ export function categoryIcon(category?: Pick<Category, "name">): LucideIcon {
 
 const CHIP = "inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-medium leading-none";
 
-export function CategoryChip({ category }: { category?: Category }) {
+// CategoryChip names a category in its colour, with its icon when asked.
+export function CategoryChip({ category, icon = false }: { category?: Category; icon?: boolean }) {
   if (!category) return null;
-  return <span className={cn(CHIP, hueClasses(category).chip)}>{category.name}</span>;
+  const Icon = categoryIcon(category);
+  return (
+    <span className={cn(CHIP, hueClasses(category).chip)}>
+      {icon && <Icon className="h-3 w-3" aria-hidden />}
+      {category.name}
+    </span>
+  );
 }
 
 export function TagChip({ tag }: { tag: Tag }) {
