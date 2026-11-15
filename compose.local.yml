@@ -174,23 +174,13 @@ services:
       context: ./services/corefinance
       dockerfile: Dockerfile.corefinance-cron-worker
       target: worker
-    # GATEWAY_API_KEY: minted by scripts/local.sh up (an admin-owned key with
-    # corefinance:admin) for the worker's timezone lookups (ADR-0005). On the
-    # first `up` the worker starts before the key exists and exits (it won't
-    # run without one); local.sh recreates it once the key is minted.
-    env_file:
-      - path: ./.local/worker.env
-        required: false
     environment:
       DATABASE_URL: postgresql://corefinance_role:cfpw@postgres:5432/coredb?sslmode=disable
       ENV: development
-      GATEWAY_URL: http://coregateway-api:8080
       GODEBUG: netdns=go
     depends_on:
       migrate:
         condition: service_completed_successfully
-      coregateway-api:
-        condition: service_healthy
 
   coredraw-api:
     <<: *go-service

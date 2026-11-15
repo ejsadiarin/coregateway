@@ -87,29 +87,6 @@ wait_for_web() {
   die "the web did not answer at $url; see: scripts/local.sh logs"
 }
 
-# The corefinance worker looks users' timezones up from the gateway with an
-# admin-owned corefinance:admin API key (ADR-0005). Mint one once per local
-# database and keep it in .local/worker.env (gitignored), then restart the
-# worker so it picks it up. `reset` drops the database, so drop the key too.
-ensure_worker_key() {
-  local env="$ROOT/.local/worker.env" gw="http://localhost:${LOCAL_GATEWAY_PORT:-28080}" jar key
-  [ -s "$env" ] && return 0
-  command -v jq >/dev/null || die "missing jq (needed once, to mint the worker's gateway key)"
-  jar=$(mktemp)
-  curl -sf -c "$jar" -o /dev/null -H 'Content-Type: application/json' "$gw/api/auth/login" \
-    -d "{\"email\":\"${LOCAL_ADMIN_EMAIL:-admin@local.dev}\",\"password\":\"${LOCAL_ADMIN_PASSWORD:-local-admin-pass-123}\"}" \
-    || { rm -f "$jar"; die "admin login failed; cannot mint the worker's gateway key"; }
-  key=$(curl -sf -b "$jar" -H 'Content-Type: application/json' "$gw/api/auth/keys" \
-    -d '{"label":"corefinance-worker (local)","scopes":["corefinance:admin"]}' | jq -r .key)
-  rm -f "$jar"
-  [ -n "$key" ] && [ "$key" != null ] || die "could not mint the worker's gateway key"
-  mkdir -p "$ROOT/.local"
-  printf 'GATEWAY_API_KEY=%s\n' "$key" > "$env"
-  chmod 600 "$env"
-  log "minted the worker's gateway key into .local/worker.env"
-  compose up -d --force-recreate --no-deps corefinance-cron-worker >/dev/null
-}
-
 cmd=${1:-up}
 [ $# -gt 0 ] && shift
 
@@ -118,9 +95,8 @@ case "$cmd" in
     preflight
     log "building and starting (first build takes a few minutes)"
     compose up -d --build --remove-orphans "$@"
-    command -v curl >/dev/null || die "missing curl (needed to wait for the web and mint the worker's gateway key)"
+    command -v curl >/dev/null || die "missing curl (needed to wait for the web)"
     wait_for_web
-    ensure_worker_key
     log "up:"
     log "  web      http://localhost:${LOCAL_WEB_PORT:-23000}"
     log "  gateway  http://localhost:${LOCAL_GATEWAY_PORT:-28080}"
@@ -129,7 +105,7 @@ case "$cmd" in
     log "logs: scripts/local.sh logs    stop: scripts/local.sh down"
     ;;
   down)    compose down --remove-orphans ;;
-  reset)   compose down --remove-orphans --volumes && rm -f "$ROOT/.local/worker.env" && log "local volumes removed" ;;
+  reset)   compose down --remove-orphans --volumes && log "local volumes removed" ;;
   logs)    compose logs -f --tail=100 "$@" ;;
   ps)      compose ps -a ;;
   build)   preflight; compose build "$@" ;;
