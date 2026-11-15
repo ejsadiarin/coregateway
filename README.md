@@ -2,55 +2,185 @@
 
 API gateway and service monitor for a homelab dashboard. Built with Go, chi, pgx, and sqlc.
 
-## Prerequisites
+It is one of four repos that run together:
 
-- Go 1.26+
-- PostgreSQL 13+
+| Repo | Path | What it is |
+|---|---|---|
+| coregateway | `.` | The gateway (`cmd/coregateway`) and the dashboard web app (`web/`) |
+| corefinance | `services/corefinance` (submodule) | Budget: expenses, incomes, recurring rules |
+| coreban | `services/coreban` (submodule) | Kanban boards, reminders, and the Feed |
+| coredraw | `services/coredraw` (submodule) | Whiteboards |
 
-## Setup
+Pick the path that fits:
 
-### 1. Install CLI tools
+- **Try everything on your machine:** [Quick start](#quick-start-the-whole-stack-locally). Docker only, no accounts, no `.env`.
+- **Run the stack against your real databases:** [Running against your own databases](#running-against-your-own-databases).
+- **Deploy to production:** [Production prerequisites](#production-prerequisites).
+- **Work on the gateway's Go code:** [Native development](#native-development).
+
+## Quick start: the whole stack locally
+
+You need Docker with the compose plugin, git with SSH access to the
+submodule repos, `openssl` and `curl`.
+
+```bash
+git clone --recurse-submodules git@github.com:ejsadiarin/coregateway.git
+cd coregateway
+make local-up
+```
+
+The first run builds every image, which takes a few minutes. `make local-up`
+checks out any missing submodule, generates a dev signing key in `.local/`,
+starts Postgres and an S3 server in containers, runs every migration, and
+waits for the web to answer. Then open:
+
+| What | Where |
+|---|---|
+| Dashboard | http://localhost:23000 |
+| Sign in | `admin@local.dev` / `local-admin-pass-123` |
+| Gateway | http://localhost:28080 |
+| Postgres | `postgresql://neondb_owner:owner@localhost:25432/coredb` |
+| S3 (versitygw) | http://localhost:27070, bucket `coreban-attachments` |
+
+Nothing here reads `.env` or reaches Neon, R2 or ntfy. Reminders are saved
+but not sent, since there is no ntfy server. Every port binds to
+`127.0.0.1`, and each can be changed with `LOCAL_*_PORT` (see the top of
+`compose.local.yml`).
+
+| Command | What it does |
+|---|---|
+| `make local-up` | Build and start everything (`S=<service>` for one) |
+| `make local-down` | Stop, keeping the database and the bucket |
+| `make local-reset` | Stop and **delete** the local data |
+| `make local-logs` | Follow logs (`S=coreban-api` for one service) |
+| `make local-ps` | List the containers |
+| `make local-migrate` | Rerun the schemas, roles and migrations |
+| `make local-check` | Only check submodules, Dockerfiles and the compose file |
+| `make local-smoke` | Smoke-test the corefinance worker end to end (stack must be up) |
+
+## Running against your own databases
+
+`compose.yml` runs the same services on the databases in your `.env` files,
+for example to try a change on production data. It binds the web and the
+gateway to `localhost` and to this machine's Tailscale IP, so other tailnet
+devices can reach it.
+
+1. Fill in `.env` here and in each `services/*/.env` ([which values](#the-env-files)).
+2. Give the gateway its signing key: [`docs/deploy/gateway-signing-key.md`](docs/deploy/gateway-signing-key.md), "Compose: once per machine".
+3. Start it:
+
+```bash
+make stack-up      # build and start; prints the web address
+make stack-logs    # S=<service> for one
+make stack-ps
+make stack-down
+```
+
+The web is at `http://<tailscale-ip>:3000` and `http://localhost:3000`.
+Everything you do there is real: it writes to the databases in `.env`. The
+corefinance worker runs here too, which is safe next to production's,
+because only one pass at a time writes a user's rule entries (corefinance
+ADR-0001). coreban sends reminders only if its `.env` sets `NTFY_URL`; leave
+it empty so that production stays the only sender.
+
+## Production prerequisites
+
+Everything the deployed stack needs. The optional rows can be added later;
+the stack starts without them.
+
+| # | What | Needed for | How |
+|---|---|---|---|
+| 1 | Neon Postgres: database `coredb`, one schema and one role per repo | Everything | [Setting up Neon](#setting-up-neon) below |
+| 2 | An Ed25519 signing key for the gateway | Every request to a downstream | [`docs/deploy/gateway-signing-key.md`](docs/deploy/gateway-signing-key.md); rotation: [`docs/runbooks/jwt-key-rotation.md`](docs/runbooks/jwt-key-rotation.md) |
+| 3 | A `.env` (or a Secret) per repo | Everything | [The `.env` files](#the-env-files) below |
+| 4 | Cloudflare R2 bucket, API token and CORS rule | Images and videos in the Feed (optional) | [`docs/deploy/coreban-attachments.md`](docs/deploy/coreban-attachments.md) |
+| 5 | An ntfy server and a token for coreban | Sending reminders (optional) | [`services/coreban/README.md`](services/coreban/README.md#ntfy-server) |
+| 6 | A domain, Cloudflare Tunnel and Tailscale | Reaching the dashboard | [`docs/deploy/homelab-k3s.md`](docs/deploy/homelab-k3s.md), sections 13 and 14 |
+| 7 | Images and a cluster to run them | Running it | [`docs/deploy/homelab-k3s.md`](docs/deploy/homelab-k3s.md), section 15 |
+
+Tools on the machine you deploy from: Go 1.26+, `psql`, `openssl`, and
+`goose` (`go install github.com/pressly/goose/v3/cmd/goose@latest`).
+
+### Setting up Neon
+
+Do this once per environment. Nothing migrates when a service starts.
+
+1. **Create the project.** In Neon, create a project and a database named
+   `coredb`. Note two connection hosts: the **direct** one, and the
+   **pooled** one (its name contains `-pooler`). The owner role is
+   `neondb_owner`.
+2. **Write each repo's `.env`** from its `.env.example`
+   ([which values](#the-env-files)). `MIGRATION_URL` uses the direct host and
+   `neondb_owner`. `DATABASE_URL` uses the pooled host and the repo's own
+   role, whose password you choose in step 5.
+3. **Create the four schemas**, from this repo:
+
+   ```bash
+   MIGRATION_URL=$(grep -m1 '^MIGRATION_URL=' .env | cut -d= -f2-)
+   psql "$MIGRATION_URL" -c 'CREATE SCHEMA IF NOT EXISTS coregateway; CREATE SCHEMA IF NOT EXISTS corefinance; CREATE SCHEMA IF NOT EXISTS coreban; CREATE SCHEMA IF NOT EXISTS coredraw;'
+   ```
+
+4. **Migrate the gateway first.** corefinance's first migration uses a
+   function the gateway's migrations install.
+
+   ```bash
+   make migrate-up
+   ```
+
+5. **Create the gateway's role.** Neon refuses weak passwords, so generate
+   one and put it into `internal/db/bootstrap.sql` as you run it:
+
+   ```bash
+   PW=$(openssl rand -base64 24 | tr -d '/+=')
+   sed "s/REPLACE_ME/$PW/" internal/db/bootstrap.sql | psql "$MIGRATION_URL" -v ON_ERROR_STOP=1
+   echo "$PW"   # put this into DATABASE_URL as coregateway_role's password
+   ```
+
+6. **Repeat steps 4 and 5 in each service**, from its directory with its own
+   `.env` (read its `MIGRATION_URL` the same way first): `services/corefinance`,
+   then `services/coreban`. For coredraw,
+   its `db-setup` target does both steps and writes the password into its `.env`.
+   On a brand-new database, give corefinance's first migration the gateway's
+   schema too: end its `MIGRATION_URL` with
+   `options=-c%20search_path%3Dcorefinance%2Ccoregateway`, and change it back
+   to `search_path%3Dcorefinance` afterwards.
+7. **Check.** `make migrate-status` in each repo lists every migration as
+   applied.
+
+Later releases need only `make migrate-up` in the repo being released, before
+its new image goes out ([`homelab-k3s.md` section 15.6](docs/deploy/homelab-k3s.md#156-database-migrations)).
+
+### The `.env` files
+
+Copy each `.env.example` to `.env`; the comments in each explain every value.
+
+| File | Must set | Optional |
+|---|---|---|
+| `.env` (gateway) | `DATABASE_URL`, `MIGRATION_URL`, `JWT_PRIVATE_KEY_FILE`, `JWT_KID`, `ALLOWED_ORIGINS`, `ENV` | `ADMIN_EMAIL` / `ADMIN_PASSWORD` (creates the first admin on start), `CORE*_URL` |
+| `services/corefinance/.env` | `DATABASE_URL`, `MIGRATION_URL`, `JWT_JWKS_URL` | |
+| `services/coreban/.env` | `DATABASE_URL`, `MIGRATION_URL`, `JWT_JWKS_URL` | `NTFY_URL` / `NTFY_TOKEN` (reminders), `S3_*` (attachments) |
+| `services/coredraw/.env` | `DATABASE_URL`, `MIGRATION_URL`, `JWT_JWKS_URL` | |
+
+`JWT_JWKS_URL` is the gateway's JWKS endpoint as each service reaches it,
+such as `http://coregateway-api:8080/.well-known/jwks.json`. A downstream refuses to start if it can't fetch it (ADR-0002), so
+start the gateway first. Every variable shared by the services is explained in
+[`docs/runbooks/service-env-vars.md`](docs/runbooks/service-env-vars.md).
+
+## Native development
+
+To run the gateway's Go code directly (Go 1.26+):
 
 ```bash
 go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 go install github.com/pressly/goose/v3/cmd/goose@latest
+cp .env.example .env    # point it at a database; drop sslmode for a local one
+make migrate-up
+make run                # or `make dev` for live reload (needs air)
 ```
 
-### 2. Configure environment
-
-Create a `.env` file:
-
-```bash
-DATABASE_URL=postgresql://core:core@localhost:5432/core?sslmode=disable
-PORT=8080
-ENV=development
-FRONTEND_URL=http://localhost:3000
-```
-
-### 3. Run migrations
-
-```bash
-goose -dir internal/db/migrations postgres "$DATABASE_URL" up
-```
-
-### 4. Generate code
-
-```bash
-sqlc generate
-```
-
-### 5. Build and run
-
-```bash
-go build -o coregateway ./cmd/coregateway
-./coregateway
-```
-
-Or:
-
-```bash
-go run ./cmd/coregateway
-```
+After editing SQL in `internal/db/queries/`, run `make sqlc`. The web app has
+its own instructions in [`web/README.md`](web/README.md). `make help` lists
+every target.
 
 ## Project Structure
 
@@ -80,7 +210,8 @@ coregateway/
 │   ├── coredraw/             # Coredraw whiteboard microservice (git submodule, own Go module)
 │   └── coreban/              # Coreban kanban + reminders downstream service (git submodule, own Go module)
 ├── proto/                    # Protobuf definitions (buf-managed)
-├── compose.yml               # Docker Compose for local development
+├── compose.yml               # Stack on the .env databases (stack-* targets)
+├── compose.local.yml         # Self-contained local stack (local-* targets)
 ├── coregateway-api.http      # HTTP client file (VS Code REST Client)
 └── go.mod
 ```
@@ -161,7 +292,6 @@ Budget API flow:
 | `DATABASE_URL` | `postgresql://core:core@localhost:5432/core?sslmode=disable` | PostgreSQL connection string |
 | `PORT` | `8080` | Server port |
 | `ENV` | `development` | `development` (text+debug) or `production` (JSON+info) |
-| `FRONTEND_URL` | - | Frontend URL for CORS |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `COREFINANCE_URL` | `http://localhost:6969` | Corefinance-api base URL (internal service) |
 | `COREDRAW_URL` | `http://localhost:6971` | Coredraw-api base URL (internal service) |
@@ -174,9 +304,10 @@ Budget API flow:
 | `JWT_AUDIENCE` | `corefinance,coredraw,coreban` | Allow-list of downstreams the gateway may mint for; each token carries exactly one |
 | `JWT_TTL_SECONDS` | `300` | Internal JWT lifetime in seconds |
 
-See `docs/auth-flow.md` and `.env.example` for the full auth picture.
 | `ADMIN_EMAIL` | - | Admin user email (for seeding) |
 | `ADMIN_PASSWORD` | - | Admin user password (for seeding) |
+
+See `docs/auth-flow.md` and `.env.example` for the full auth picture.
 
 ## Development
 
