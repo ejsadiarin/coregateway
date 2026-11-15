@@ -41,11 +41,9 @@ func (anyUserQuerier) GetUser(_ context.Context, id uuid.UUID) (db.CoregatewayUs
 	return db.CoregatewayUser{ID: id, Email: "user@example.com", Role: auth.RoleUser}, nil
 }
 
-// Keys a downstream background job might hold to look a user's timezone up.
-const (
-	testAdminOwnedFinanceAdminKey = "test-admin-owned-corefinance-admin-key"
-	testUserOwnedBanAdminKey      = "test-user-owned-coreban-admin-key"
-)
+// An admin-owned key with a downstream admin scope: the most a key can
+// hold, and still not enough to touch another user's timezone.
+const testAdminOwnedFinanceAdminKey = "test-admin-owned-corefinance-admin-key"
 
 type timezoneBody struct {
 	UserID   string `json:"user_id"`
@@ -61,7 +59,6 @@ func timezoneSetup(t *testing.T) (http.Handler, func(role string, id uuid.UUID) 
 	s.UserHandler = user.NewHandler(user.NewService(q))
 	adminID, userID := q.idOf(auth.RoleAdmin), q.idOf(auth.RoleUser)
 	q.keyByHash[auth.HashAPIKey(testAdminOwnedFinanceAdminKey)] = db.CoregatewayApiKey{ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:admin"}}
-	q.keyByHash[auth.HashAPIKey(testUserOwnedBanAdminKey)] = db.CoregatewayApiKey{ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coreban:admin"}}
 	as := func(role string, id uuid.UUID) http.Handler { return proxyRouter(s, role, id) }
 	proxied := func() token.Claims {
 		_, _, authHeader, _ := fake.snapshot()
@@ -189,13 +186,30 @@ func TestProxiedTokenCarriesSavedTimezone(t *testing.T) {
 	}
 }
 
-// A downstream background job has no internal token; it looks a user's
-// timezone up with an admin-owned key holding a downstream admin scope.
-func TestUserTimezoneLookupForBackgroundJobs(t *testing.T) {
-	t.Run("admin-owned downstream admin key reads any user's timezone", func(t *testing.T) {
-		anon, as, _, _, userID := timezoneSetup(t)
-		doKeyRequest(t, as(auth.RoleUser, userID), "", http.MethodPut, "/api/users/"+userID.String()+"/timezone", `{"timezone":"Asia/Manila"}`)
+// A user's timezone is their own: no admin, session or key, reads or sets
+// another user's (downstream background work uses the zone it last saw in
+// a request's tz claim, ADR-0005).
+func TestUserTimezoneIsTheUsersOwn(t *testing.T) {
+	t.Run("an admin cannot read someone else's timezone", func(t *testing.T) {
+		_, as, _, adminID, userID := timezoneSetup(t)
+		rec := doKeyRequest(t, as(auth.RoleAdmin, adminID), "", http.MethodGet, "/api/users/"+userID.String()+"/timezone", "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("an admin-owned downstream admin key cannot read someone else's timezone", func(t *testing.T) {
+		anon, _, _, _, userID := timezoneSetup(t)
 		rec := doKeyRequest(t, anon, testAdminOwnedFinanceAdminKey, http.MethodGet, "/api/users/"+userID.String()+"/timezone", "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", rec.Code)
+		}
+	})
+
+	t.Run("a key reads its owner's own timezone", func(t *testing.T) {
+		anon, as, _, adminID, _ := timezoneSetup(t)
+		doKeyRequest(t, as(auth.RoleAdmin, adminID), "", http.MethodPut, "/api/users/"+adminID.String()+"/timezone", `{"timezone":"Asia/Manila"}`)
+		rec := doKeyRequest(t, anon, testAdminOwnedFinanceAdminKey, http.MethodGet, "/api/users/"+adminID.String()+"/timezone", "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body)
 		}
@@ -204,46 +218,22 @@ func TestUserTimezoneLookupForBackgroundJobs(t *testing.T) {
 		}
 	})
 
-	t.Run("an unset timezone is a 200, not an error", func(t *testing.T) {
-		anon, _, _, _, userID := timezoneSetup(t)
-		rec := doKeyRequest(t, anon, testAdminOwnedFinanceAdminKey, http.MethodGet, "/api/users/"+userID.String()+"/timezone", "")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200", rec.Code)
-		}
-		if got := decodeTimezone(t, rec); got.Timezone != "UTC" || got.Saved {
-			t.Errorf("body = %+v, want UTC, not saved", got)
-		}
-	})
-
-	t.Run("an unknown user is 404", func(t *testing.T) {
-		anon, _, _, _, _ := timezoneSetup(t)
-		rec := doKeyRequest(t, anon, testAdminOwnedFinanceAdminKey, http.MethodGet, "/api/users/"+uuid.NewString()+"/timezone", "")
-		if rec.Code != http.StatusNotFound {
-			t.Errorf("status = %d, want 404", rec.Code)
-		}
-	})
-
-	t.Run("a non-admin owner's downstream admin key cannot read others", func(t *testing.T) {
-		anon, _, _, adminID, _ := timezoneSetup(t)
-		rec := doKeyRequest(t, anon, testUserOwnedBanAdminKey, http.MethodGet, "/api/users/"+adminID.String()+"/timezone", "")
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("status = %d, want 403", rec.Code)
-		}
-	})
-
-	t.Run("an admin-owned read key cannot read others", func(t *testing.T) {
-		anon, _, _, _, userID := timezoneSetup(t)
-		rec := doKeyRequest(t, anon, testAdminReadKeyPlaintext, http.MethodGet, "/api/users/"+userID.String()+"/timezone", "")
-		if rec.Code != http.StatusForbidden {
-			t.Errorf("status = %d, want 403", rec.Code)
-		}
-	})
-
-	t.Run("a lookup key cannot set a timezone", func(t *testing.T) {
+	t.Run("a key cannot set someone else's timezone", func(t *testing.T) {
 		anon, _, _, _, userID := timezoneSetup(t)
 		rec := doKeyRequest(t, anon, testAdminOwnedFinanceAdminKey, http.MethodPut, "/api/users/"+userID.String()+"/timezone", `{"timezone":"Asia/Manila"}`)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("status = %d, want 403", rec.Code)
 		}
 	})
+}
+
+// The demo guest is shared by anyone who can reach the login page, so one
+// visitor's zone would date everyone else's demo: it cannot set one.
+func TestDemoGuestCannotSetTimezone(t *testing.T) {
+	_, as, _, _, _ := timezoneSetup(t)
+	guestID := uuid.New()
+	rec := doKeyRequest(t, as(auth.RoleGuest, guestID), "", http.MethodPut, "/api/users/"+guestID.String()+"/timezone", `{"timezone":"Asia/Manila"}`)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 (%s)", rec.Code, rec.Body)
+	}
 }

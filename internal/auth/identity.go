@@ -85,21 +85,6 @@ func KeyCoversScope(held []string, need string) bool {
 	return false
 }
 
-// KeyHoldsDownstreamAdmin reports whether held carries `admin` or any
-// `<downstream>:admin` scope: the standing a downstream's background job
-// holds to read gateway facts about every user (e.g. their timezone).
-func KeyHoldsDownstreamAdmin(held []string) bool {
-	for _, h := range held {
-		if h == "admin" {
-			return true
-		}
-		if _, op, ok := strings.Cut(h, ":"); ok && op == "admin" {
-			return true
-		}
-	}
-	return false
-}
-
 // KeyHasScope reports whether the caller authed via a key holding scope.
 // Session callers always report false — they use the role path.
 func KeyHasScope(r *http.Request, scope string) bool {

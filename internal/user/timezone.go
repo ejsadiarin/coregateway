@@ -41,7 +41,7 @@ func (s *Service) Timezone(ctx context.Context, id uuid.UUID) (Timezone, error) 
 	if err != nil {
 		return Timezone{}, err
 	}
-	return Timezone{UserID: id.String(), Timezone: timezone.Effective(u.Timezone), Saved: u.Timezone.Valid}, nil
+	return timezoneOf(id, u.Timezone), nil
 }
 
 // SetTimezone saves a user's timezone after checking it is an IANA zone.
@@ -56,36 +56,43 @@ func (s *Service) SetTimezone(ctx context.Context, id uuid.UUID, tz string) (Tim
 	if err != nil {
 		return Timezone{}, err
 	}
-	return Timezone{UserID: id.String(), Timezone: timezone.Effective(stored), Saved: stored.Valid}, nil
+	return timezoneOf(id, stored), nil
+}
+
+func timezoneOf(id uuid.UUID, stored pgtype.Text) Timezone {
+	return Timezone{UserID: id.String(), Timezone: timezone.Effective(stored), Saved: stored.Valid}
 }
 
 type setTimezoneRequest struct {
 	Timezone string `json:"timezone"`
 }
 
-// GetTimezone serves GET /api/users/{id}/timezone. A caller reads their own
-// with identity only. Reading another user's is the lookup a downstream
-// background job makes: it needs an admin-role caller and, for a key, the
-// `admin` scope or a `<downstream>:admin` scope.
-func (h *Handler) GetTimezone(w http.ResponseWriter, r *http.Request) {
+// ownTimezone parses the {id} a timezone route names and checks it is the
+// caller's own: a user's timezone is theirs alone to read and set (no admin
+// reads another's; downstream background work uses the zone it last saw in
+// a request's tz claim, ADR-0005). It writes the refusal when it isn't.
+func ownTimezone(w http.ResponseWriter, r *http.Request) (uuid.UUID, *auth.UserContext, bool) {
 	id, ok := helper.ParseUUID(w, r, "id")
 	if !ok {
-		return
+		return uuid.Nil, nil, false
 	}
 	caller := auth.GetUserFromContext(r)
 	if caller == nil {
 		helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
-		return
+		return uuid.Nil, nil, false
 	}
 	if caller.ID != id {
-		if caller.Role != auth.RoleAdmin {
-			helper.RespondErrorJSON(w, http.StatusForbidden, "Access denied")
-			return
-		}
-		if scopes, ok := auth.KeyScopesFromContext(r); ok && !auth.KeyHoldsDownstreamAdmin(scopes) {
-			helper.RespondErrorJSON(w, http.StatusForbidden, "Insufficient permissions")
-			return
-		}
+		helper.RespondErrorJSON(w, http.StatusForbidden, "Access denied")
+		return uuid.Nil, nil, false
+	}
+	return id, caller, true
+}
+
+// GetTimezone serves GET /api/users/{id}/timezone: the caller's own.
+func (h *Handler) GetTimezone(w http.ResponseWriter, r *http.Request) {
+	id, _, ok := ownTimezone(w, r)
+	if !ok {
+		return
 	}
 	tz, err := h.service.Timezone(r.Context(), id)
 	if errors.Is(err, ErrUserNotFound) {
@@ -100,20 +107,16 @@ func (h *Handler) GetTimezone(w http.ResponseWriter, r *http.Request) {
 	helper.RespondJSON(w, http.StatusOK, tz)
 }
 
-// SetTimezone serves PUT /api/users/{id}/timezone. Only the user sets
-// their own timezone.
+// SetTimezone serves PUT /api/users/{id}/timezone: only the user sets
+// their own. The demo guest is shared by anyone who can reach the login
+// page, so it keeps the default rather than one visitor's zone.
 func (h *Handler) SetTimezone(w http.ResponseWriter, r *http.Request) {
-	id, ok := helper.ParseUUID(w, r, "id")
+	id, caller, ok := ownTimezone(w, r)
 	if !ok {
 		return
 	}
-	caller := auth.GetUserFromContext(r)
-	if caller == nil {
-		helper.RespondErrorJSON(w, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-	if caller.ID != id {
-		helper.RespondErrorJSON(w, http.StatusForbidden, "Access denied")
+	if caller.Role == auth.RoleGuest {
+		helper.RespondErrorJSON(w, http.StatusForbidden, "demo accounts can't set a timezone")
 		return
 	}
 	var req setTimezoneRequest
