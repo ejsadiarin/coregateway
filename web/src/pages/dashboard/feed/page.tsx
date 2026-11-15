@@ -3,6 +3,7 @@ import { entryInput, useEntryTags, useKindCategories, useRules, useSaveEntry } f
 import { entryOf } from "@/lib/ledger";
 import { budgetChips, canSkip, skipStatus } from "@/lib/feed-rail";
 import { CategoryChip, RuleChip, StatusChip, TagChip } from "@/components/budget/ledger/chips";
+import { FeedRail } from "./feed-rail";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -544,6 +545,22 @@ export default function FeedPage() {
     );
   }, [isGuest, queryClient]);
 
+  // Tapping a day in the rail's calendar moves the chat there, loading
+  // older pages until that day (or the first day after it) is in.
+  const noteDays = useMemo(() => new Set(days.map((d) => d.key)), [days]);
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
+  useEffect(() => {
+    if (!jumpTo) return;
+    const oldest = days[0]?.key;
+    if (hasNextPage && (!oldest || oldest > jumpTo)) {
+      if (!isFetchingNextPage) fetchNextPage();
+      return;
+    }
+    const target = days.find((d) => d.key >= jumpTo) ?? days[days.length - 1];
+    if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    setJumpTo(null);
+  }, [jumpTo, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   const toggleArchived = () => {
     toBottom.current = true;
     setShowArchived((v) => !v);
@@ -828,7 +845,9 @@ export default function FeedPage() {
   const captureText = draft.trim();
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col">
+    // A wide screen gives the chat two thirds and the rail the rest (#22).
+    <div className="mx-auto flex h-full w-full max-w-3xl gap-6 lg:max-w-[1400px] lg:pr-6">
+    <div className="flex min-w-0 flex-[2] flex-col">
       <div className="px-4 pt-4 md:px-6 md:pt-6">
         <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Feed</h1>
         <div role="group" aria-label="Show" className="mt-3 flex gap-2">
@@ -915,7 +934,7 @@ export default function FeedPage() {
             {days.map((day) => {
               const { net, any } = dayNet(day.notes);
               return (
-                <section key={day.key} aria-label={day.label} className="grid grid-cols-1 gap-3">
+                <section key={day.key} id={`feed-day-${day.key}`} aria-label={day.label} className="grid scroll-mt-4 grid-cols-1 gap-3">
                   <div className="flex items-center gap-3 py-1">
                     <span className="h-px flex-1 bg-border" />
                     <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -1132,6 +1151,8 @@ export default function FeedPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+    <FeedRail noteDays={noteDays} onPickDay={setJumpTo} />
     </div>
   );
 }
