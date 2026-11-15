@@ -29,6 +29,7 @@ import {
   type Priority,
   type Rule,
 } from "@/lib/ledger";
+import { staleReport, type StaleReport } from "@/lib/rule-review";
 
 export type SheetTarget = { mode: "new"; repeat?: boolean } | { mode: "edit"; entry: Entry } | { mode: "rule"; rule: Rule };
 
@@ -54,19 +55,35 @@ export function EntrySheet({
   target,
   onClose,
   feed,
+  onStale,
 }: {
   kind: LedgerKind;
   target: SheetTarget | null;
   onClose: () => void;
   feed?: FeedOptions;
+  // onStale hears what a rule edit's schedule change did to the rule's
+  // entries, when it did anything.
+  onStale?: (rule: Rule, report: StaleReport) => void;
 }) {
   return (
     // A fresh form for each opening.
-    target && <EntryForm key={JSON.stringify(target)} pageKind={pageKind} target={target} onClose={onClose} feed={feed} />
+    target && <EntryForm key={JSON.stringify(target)} pageKind={pageKind} target={target} onClose={onClose} feed={feed} onStale={onStale} />
   );
 }
 
-function EntryForm({ pageKind, target, onClose, feed }: { pageKind: LedgerKind; target: SheetTarget; onClose: () => void; feed?: FeedOptions }) {
+function EntryForm({
+  pageKind,
+  target,
+  onClose,
+  feed,
+  onStale,
+}: {
+  pageKind: LedgerKind;
+  target: SheetTarget;
+  onClose: () => void;
+  feed?: FeedOptions;
+  onStale?: (rule: Rule, report: StaleReport) => void;
+}) {
   const entry = target.mode === "edit" ? target.entry : undefined;
   const rule = target.mode === "rule" ? target.rule : undefined;
   const from = entry ?? rule;
@@ -135,7 +152,9 @@ function EntryForm({ pageKind, target, onClose, feed }: { pageKind: LedgerKind; 
           start_date: date,
           end_date: endDate,
         };
-        await saveRule.mutateAsync(rule ? { id: rule.id, rule: ruleInput(rule, input) } : { rule: input });
+        const saved = await saveRule.mutateAsync(rule ? { id: rule.id, rule: ruleInput(rule, input) } : { rule: input });
+        const report = staleReport(saved?.stale_entries);
+        if (rule && (report.review.length || report.skipped)) onStale?.(rule, report);
         showToast(rule ? "Rule saved" : `Rule added: ${money(value, currency)} ${cadencePhrase(cadence, date)}`, "success");
       } else {
         const record = await saveEntry.mutateAsync({

@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { ruleInput, useDeleteEntry, useSaveEntry, useSaveRule } from "@/hooks/use-ledger";
 import { cadencePhrase, counted, ended, money, signed, today, type Entry, type Rule } from "@/lib/ledger";
+import { staleReport, type StaleReport } from "@/lib/rule-review";
 import type { Category } from "@/types/api";
 
 const short = (d: string) => format(parseISO(d), "MMM d");
@@ -23,6 +24,7 @@ export function RuleSheet({
   onClose,
   onEdit,
   onOpenEntry,
+  onStale,
 }: {
   rule: Rule;
   made: Entry[];
@@ -31,6 +33,8 @@ export function RuleSheet({
   onClose: () => void;
   onEdit: () => void;
   onOpenEntry: (e: Entry) => void;
+  // onStale hears what ending the rule did to entries after its new end.
+  onStale?: (rule: Rule, report: StaleReport) => void;
 }) {
   const save = useSaveRule(rule.kind);
   const skip = useSaveEntry(rule.kind);
@@ -60,8 +64,10 @@ export function RuleSheet({
   const end = () => {
     const last = made.some((e) => e.date === today()) ? today() : format(subDays(new Date(), 1), "yyyy-MM-dd");
     return run(async () => {
-      await save.mutateAsync({ id: rule.id, rule: ruleInput(rule, { end_date: last < rule.startDate ? rule.startDate : last }) });
+      const saved = await save.mutateAsync({ id: rule.id, rule: ruleInput(rule, { end_date: last < rule.startDate ? rule.startDate : last }) });
       setConfirmEnd(false);
+      const report = staleReport(saved?.stale_entries);
+      if (report.review.length || report.skipped) onStale?.(rule, report);
     }, "Rule ended; its entries stay");
   };
 

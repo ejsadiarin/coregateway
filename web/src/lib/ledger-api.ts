@@ -1,5 +1,6 @@
 import { apiBaseUrl } from "@/lib/api";
 import type { Cadence, LedgerKind, Priority, RawRule } from "@/lib/ledger";
+import type { StaleEntry } from "@/lib/rule-review";
 
 // Reads and writes the Expenses and Incomes pages need beyond lib/api:
 // rules (paused ones too), every record's tags at once, and tagging.
@@ -38,11 +39,16 @@ export interface RuleInput {
   is_active?: boolean;
 }
 
+// SavedRule is a rule as a save returns it. An update that changed the
+// schedule also lists the entries the new schedule no longer produces
+// (corefinance ADR-0001).
+export type SavedRule = RawRule & { stale_entries?: StaleEntry[] | null };
+
 export const createRule = (kind: LedgerKind, rule: RuleInput) =>
-  call<RawRule>(rulesPath(kind), { method: "POST", body: JSON.stringify(rule) });
+  call<SavedRule>(rulesPath(kind), { method: "POST", body: JSON.stringify(rule) });
 
 export const updateRule = (kind: LedgerKind, id: string, rule: RuleInput) =>
-  call<RawRule>(`${rulesPath(kind)}/${id}`, { method: "PUT", body: JSON.stringify(rule) });
+  call<SavedRule>(`${rulesPath(kind)}/${id}`, { method: "PUT", body: JSON.stringify(rule) });
 
 export interface TagLink {
   record_id: string;

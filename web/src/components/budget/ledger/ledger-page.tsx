@@ -7,6 +7,8 @@ import { CategoryBadge, CategoryChip, NeedChip, RuleChip, StatusChip, TagChip, c
 import { EntryDetails } from "./entry-details";
 import { EntrySheet, type SheetTarget } from "./entry-sheet";
 import { RuleSheet } from "./rule-sheet";
+import { StaleReviewSheet } from "./stale-review-sheet";
+import type { StaleReport } from "@/lib/rule-review";
 import { cn } from "@/lib/utils";
 import { useTags } from "@/hooks/use-budget";
 import { tagsOf, useEntries, useEntryTags, useKindCategories, useRules } from "@/hooks/use-ledger";
@@ -47,10 +49,13 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [openEntry, setOpenEntry] = useState<string | null>(null);
   const [openRule, setOpenRule] = useState<string | null>(null);
+  // stale is what the last rule save's schedule change did to its entries.
+  const [stale, setStale] = useState<{ rule: Rule; report: StaleReport } | null>(null);
   const [pickCategory, setPickCategory] = useState(false);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
 
   const entries = entriesQ.data ?? NO_ENTRIES;
+  const entryById = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
   const rules = rulesQ.data ?? NO_RULES;
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const ruleById = useMemo(() => new Map(rules.map((r) => [r.id, r])), [rules]);
@@ -397,7 +402,9 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
         {noun}
       </button>
 
-      <EntrySheet kind={kind} target={sheet} onClose={() => setSheet(null)} />
+      <EntrySheet kind={kind} target={sheet} onClose={() => setSheet(null)} onStale={(rule, report) => setStale({ rule, report })} />
+
+      {stale && <StaleReviewSheet rule={stale.rule} report={stale.report} entries={entryById} onClose={() => setStale(null)} />}
 
       {entry && (
         <EntryDetails
@@ -431,6 +438,10 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
           onOpenEntry={(e) => {
             setOpenRule(null);
             setOpenEntry(e.id);
+          }}
+          onStale={(r, report) => {
+            setOpenRule(null);
+            setStale({ rule: r, report });
           }}
         />
       )}
