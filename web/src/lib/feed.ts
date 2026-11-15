@@ -58,6 +58,15 @@ export async function fetchFeed(before?: string, filter: FeedFilter = "all", wit
   return res.json();
 }
 
+// fetchNoteDays lists the dates from `from` to `to` (YYYY-MM-DD, inclusive)
+// on which the owner has a note that isn't archived, counted in their
+// timezone (coreban GET /notes/days).
+export async function fetchNoteDays(from: string, to: string): Promise<string[]> {
+  const res = await fetch(`${notesUrl}/days?${new URLSearchParams({ from, to })}`, { credentials: "include" });
+  await throwIfError(res, "load the days with notes");
+  return ((await res.json()) as { days: string[] }).days;
+}
+
 async function send(method: string, url: string, body: unknown, op: string): Promise<Note> {
   const res = await fetch(url, {
     method,

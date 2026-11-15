@@ -152,3 +152,10 @@ export function shortNet(n: number): string {
   if (a < 1000) return sign + String(Math.round(a));
   return sign + (a / 1000).toFixed(a >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k";
 }
+
+// noteDaysFor is the set of days the calendar marks for notes: every day
+// coreban lists for the month (any note that isn't archived, whatever the
+// Feed's filter), or, until it answers, the days the Feed has loaded.
+export function noteDaysFor(fromCoreban: string[] | undefined, loaded: Set<string>): Set<string> {
+  return fromCoreban ? new Set(fromCoreban) : loaded;
+}

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { addMonths, format, parseISO } from "date-fns";
+import { addMonths, endOfMonth, format, parseISO } from "date-fns";
 import { BellRing, ChevronLeft, ChevronRight, Repeat } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useBudgetRemaining } from "@/hooks/use-budget";
 import { useEntries, useRules } from "@/hooks/use-ledger";
-import { comingUp, monthDays, monthSummary, shortNet } from "@/lib/feed-rail";
+import { comingUp, monthDays, monthSummary, noteDaysFor, shortNet } from "@/lib/feed-rail";
+import { feedKey, fetchNoteDays } from "@/lib/feed";
 import { fetchKanbanReminders, remindersKey } from "@/lib/kanban";
 import { money, nextDates, today, type Entry, type Rule } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
@@ -30,14 +31,24 @@ export function FeedRail({ noteDays, onPickDay }: { noteDays: Set<string>; onPic
   const incomeRules = useRules("income").data ?? NONE;
   const reminders = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders(), staleTime: 60000 }).data ?? NONE;
   const remaining = useBudgetRemaining().data;
+  // Every day this month with a note, from coreban; until it answers (or
+  // if it is an older coreban without the route), the days the Feed has
+  // loaded. Under feedKey, so a posted or archived note refreshes it.
+  const monthDate = parseISO(`${month}-01`);
+  const servedDays = useQuery({
+    queryKey: [...feedKey, "days", month],
+    queryFn: () => fetchNoteDays(`${month}-01`, format(endOfMonth(monthDate), "yyyy-MM-dd")),
+    staleTime: 60000,
+    retry: false,
+  }).data;
+  const dotDays = useMemo(() => noteDaysFor(servedDays, noteDays), [servedDays, noteDays]);
 
-  const cells = useMemo(() => monthDays(month, [...expenses, ...incomes], noteDays, today()), [month, expenses, incomes, noteDays]);
+  const cells = useMemo(() => monthDays(month, [...expenses, ...incomes], dotDays, today()), [month, expenses, incomes, dotDays]);
   const coming = useMemo(
     () => comingUp(reminders, [...withNext(expenseRules, expenses), ...withNext(incomeRules, incomes)], new Date()),
     [reminders, expenseRules, incomeRules, expenses, incomes],
   );
   const summary = remaining ? monthSummary(remaining) : undefined;
-  const monthDate = parseISO(`${month}-01`);
 
   return (
     <aside aria-label="Feed side panel" className="hidden min-w-[300px] max-w-[420px] flex-1 flex-col gap-4 overflow-y-auto py-6 lg:flex">

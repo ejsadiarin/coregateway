@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetChips, comingUp, monthDays, monthSummary, shortNet } from "./feed-rail";
+import { budgetChips, comingUp, monthDays, monthSummary, noteDaysFor, shortNet } from "./feed-rail";
 
 describe("budgetChips", () => {
   const subs = { id: "c1", name: "subscriptions" };
@@ -127,5 +127,17 @@ describe("shortNet", () => {
     expect(shortNet(-1300)).toBe("\u22121.3k");
     expect(shortNet(2000)).toBe("+2k");
     expect(shortNet(-12500)).toBe("\u221213k");
+  });
+});
+
+describe("noteDaysFor", () => {
+  const loaded = new Set(["2026-11-14", "2026-11-15"]);
+
+  it("marks every day coreban lists, scrolled to or not", () => {
+    expect(noteDaysFor(["2026-11-02", "2026-11-15"], loaded)).toEqual(new Set(["2026-11-02", "2026-11-15"]));
+  });
+
+  it("falls back to the days the Feed has loaded until coreban answers", () => {
+    expect(noteDaysFor(undefined, loaded)).toBe(loaded);
   });
 });
