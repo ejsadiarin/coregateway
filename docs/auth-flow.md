@@ -263,11 +263,18 @@ Claims (5 minutes lifetime):
 `tz` is the timezone of the user the request is about (ADR-0005): the
 target user in a targeted read (the `act_as` user), otherwise the caller.
 It is always an IANA zone name and is `UTC` for a user who hasn't set one,
-so a downstream never has to pick a default. The edge looks it up per
+so a downstream never has to pick a default. The gateway looks it up per
 mint; when the lookup fails the request is a `500` and is never proxied
 with a guessed zone. A change reaches requests on the next mint (within
-the token TTL). Treat a token without `tz` (minted before this claim
-shipped) as UTC.
+the token TTL).
+
+A downstream with background work (corefinance's worker, coreban's
+reminder dispatcher) keeps the zone it last saw in a request's `tz` for
+that user and uses it there, since background work has no internal token.
+Treat a token without `tz` (minted before this claim shipped) as "use the
+last-seen zone", or UTC if none was ever seen. So a zone change reaches a
+downstream's background work on the user's next request to it (ADR-0005,
+amended).
 
 ### A user's timezone (`/api/users/{id}/timezone`)
 
@@ -278,9 +285,10 @@ migration `004_user_timezone.sql`; `NULL` = not set = UTC). Handlers:
 
 | Call | Who | Result |
 |---|---|---|
-| `GET /api/users/{id}/timezone` | the user themself (session or any of their keys) | `200` |
-| `GET /api/users/{id}/timezone` for another user | an admin session, or a key **owned by an admin** holding `admin` or a `<downstream>:admin` scope (e.g. `corefinance:admin`) | `200` |
-| `PUT /api/users/{id}/timezone` `{"timezone":"Asia/Manila"}` | the user themself only (admins can't set others') | `200`, same body as `GET` |
+| `GET /api/users/{id}/timezone` | the user themself only (session or any of their keys) | `200` |
+| `PUT /api/users/{id}/timezone` `{"timezone":"Asia/Manila"}` | the user themself only, and never the demo guest | `200`, same body as `GET` |
+
+No one reads or sets another user's timezone, admins included.
 
 Response body (both methods):
 
@@ -296,19 +304,9 @@ lookup, with a JSON `{"error": "..."}` body:
 |---|---|
 | `400` | malformed `{id}`, or (PUT) a value that isn't an IANA zone |
 | `401` | no credential, or an unknown/revoked/expired key |
-| `403` | not the user, and not an admin with a covering key scope |
+| `403` | not the user; or (PUT) the demo guest, which is shared by every visitor and keeps UTC |
 | `404` | no such user |
 | `5xx` | the gateway couldn't read the store |
-
-**Background jobs** (corefinance's worker, coreban's reminder dispatcher)
-have no internal token, so they call this lookup with an API key
-(`Authorization: Bearer cgw_live_...`). Mint it from an admin session with
-the job's own downstream admin scope, e.g. `{"label":"corefinance-worker",
-"scopes":["corefinance:admin"]}`, rather than `admin`: a `<downstream>:admin`
-key can't manage users, keys or monitored services, and isn't an admin
-scope at the edge (no targeted reads). A job must fail closed on anything
-but `200` (skip the pass and retry; ADR-0002, ADR-0005), and use
-`timezone` as is, `UTC` included, on `200`.
 
 `jti` is informational: verifiers do not read it, but it makes one proxied
 request greppable across the gateway log and every downstream log, where
