@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRules } from "@/hooks/use-ledger";
+import { ruleLabel } from "@/lib/ledger";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -137,6 +139,9 @@ function LinkLine({ link, categoryName, className }: { link: NoteLink; categoryN
 // posted.
 function BudgetLine({ link, categoryName }: { link: NoteLink; categoryName?: CategoryName }) {
   const r = isBudgetLink(link) ? budgetRecordOf(link) : undefined;
+  // The Ledger reads the same rules, so the Feed rarely asks again.
+  const rules = useRules(link.kind === "income" ? "income" : "expense").data;
+  const ruleById = useMemo(() => new Map((rules ?? []).map((x) => [x.id, x])), [rules]);
   if (!r) return <LinkLine link={link} categoryName={categoryName} />;
   const income = link.kind === "income";
   const Icon = linkIcons[link.kind];
@@ -164,7 +169,7 @@ function BudgetLine({ link, categoryName }: { link: NoteLink; categoryName?: Cat
           {category && <span>{category}</span>}
           {r.source_rule_id && (
             <span className="inline-flex items-center gap-1">
-              <Repeat className="h-3 w-3" aria-hidden /> rule
+              <Repeat className="h-3 w-3" aria-hidden /> {ruleLabel(r.source_rule_id, ruleById)}
             </span>
           )}
           {muted && <span>{status}</span>}

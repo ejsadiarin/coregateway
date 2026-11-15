@@ -9,6 +9,7 @@ import {
   money,
   nextDue,
   recents,
+  ruleLabel,
   ruleTotals,
   signed,
   splitUpcoming,
@@ -172,5 +173,16 @@ describe("colors and money", () => {
     expect(money(85.5)).toBe("₱85.50");
     expect(signed("expense", 85)).toBe("−₱85");
     expect(signed("income", 500, "USD")).toBe("+$500");
+  });
+});
+
+describe("ruleLabel", () => {
+  it("names the rule that made an entry", () => {
+    const rules = new Map([["r1", { description: "Spotify subscription" }]]);
+    expect(ruleLabel("r1", rules)).toBe("Spotify subscription");
+  });
+
+  it("says just rule when the rule is gone", () => {
+    expect(ruleLabel("deleted", new Map())).toBe("rule");
   });
 });

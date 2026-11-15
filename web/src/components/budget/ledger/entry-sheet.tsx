@@ -275,6 +275,12 @@ function EntryForm({ pageKind, target, onClose, feed }: { pageKind: LedgerKind; 
               </option>
             ))}
           </select>
+          {entry?.ruleId && (
+            <p className="max-w-xs text-center text-xs leading-relaxed text-muted-foreground">
+              Made by a rule. Changes here apply to this entry only; the rule keeps its own amount and schedule. To drop just this date,
+              skip it rather than deleting or re-dating it.
+            </p>
+          )}
         </div>
 
         {/* Description */}
