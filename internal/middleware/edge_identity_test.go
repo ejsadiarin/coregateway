@@ -57,7 +57,7 @@ func TestEdgeIdentitySessionMintsJWT(t *testing.T) {
 	})
 
 	req := requestWithUser(httptest.NewRequest(http.MethodGet, "/api/budget/remaining", nil), userID)
-	EdgeIdentity("corefinance", iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity("corefinance", iss, nil, stubAnyone)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	if !nextCalled {
 		t.Fatal("expected next handler to be called")
@@ -98,7 +98,7 @@ func TestEdgeIdentityAdminSessionGrantsAdminScope(t *testing.T) {
 		Email: "admin@example.com",
 		Role:  auth.RoleAdmin,
 	}))
-	EdgeIdentity("corefinance", iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+	EdgeIdentity("corefinance", iss, nil, stubAnyone)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 	presented, ok := bearerToken(mustRequest(t, gotAuth))
 	if !ok {
@@ -134,7 +134,7 @@ func TestEdgeIdentitySessionScopeFollowsRole(t *testing.T) {
 			req = req.WithContext(auth.ContextWithUser(req.Context(), &auth.UserContext{
 				ID: uuid.New(), Email: role + "@example.com", Role: role,
 			}))
-			EdgeIdentity("corefinance", iss, nil, nil)(next).ServeHTTP(httptest.NewRecorder(), req)
+			EdgeIdentity("corefinance", iss, nil, stubAnyone)(next).ServeHTTP(httptest.NewRecorder(), req)
 
 			presented, ok := bearerToken(mustRequest(t, gotAuth))
 			if !ok {
@@ -242,7 +242,7 @@ func TestEdgeIdentityKeyCarriesItsOwnersGuestScope(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			owner := uuid.New()
 			keys := stubValidator{userID: owner, keyID: "key-1", scopes: []string{"coreban:write"}}
-			lookup := func(_ context.Context, id uuid.UUID) (string, bool, error) { return role, id == owner, nil }
+			lookup := func(_ context.Context, id uuid.UUID) (UserRecord, bool, error) { return UserRecord{Role: role, Timezone: "UTC"}, id == owner, nil }
 			var gotAuth string
 			var gotKeyScopes []string
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -277,7 +277,7 @@ func TestEdgeIdentityKeyCarriesItsOwnersGuestScope(t *testing.T) {
 func TestEdgeIdentityKeyOfAVanishedOwnerIsRejected(t *testing.T) {
 	iss := testIssuer(t)
 	keys := stubValidator{userID: uuid.New(), keyID: "key-1", scopes: []string{"coreban:write"}}
-	lookup := func(context.Context, uuid.UUID) (string, bool, error) { return "", false, nil }
+	lookup := func(context.Context, uuid.UUID) (UserRecord, bool, error) { return UserRecord{}, false, nil }
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true })
 	req := httptest.NewRequest(http.MethodGet, "/api/coreban/notes", nil)

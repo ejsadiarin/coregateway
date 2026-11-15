@@ -95,7 +95,8 @@ case "$cmd" in
     preflight
     log "building and starting (first build takes a few minutes)"
     compose up -d --build --remove-orphans "$@"
-    command -v curl >/dev/null && wait_for_web
+    command -v curl >/dev/null || die "missing curl (needed to wait for the web)"
+    wait_for_web
     log "up:"
     log "  web      http://localhost:${LOCAL_WEB_PORT:-23000}"
     log "  gateway  http://localhost:${LOCAL_GATEWAY_PORT:-28080}"

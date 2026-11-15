@@ -68,6 +68,10 @@ _Avoid_: scope check, authorization
 An account registered at the gateway.
 _Avoid_: account, member, principal
 
+**Timezone**:
+A user's IANA zone (e.g. Asia/Manila), stored at the gateway and asserted in each internal token for the user the request is about; UTC until the user sets one.
+_Avoid_: locale, offset, tz setting
+
 **Caller**:
 The user a request is authenticated as, whether by session or by API key ownership.
 _Avoid_: requester, actor, client

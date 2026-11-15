@@ -90,6 +90,13 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/users/{id}", s.UserHandler.GetUser)
 	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Put("/api/users/{id}", s.UserHandler.UpdateUser)
 
+	// A user's timezone (ADR-0005). The user reads and sets their own; a
+	// downstream background job reads anyone's with an admin-owned key
+	// holding `admin` or a `<downstream>:admin` scope. The handler
+	// enforces both; contract in docs/auth-flow.md.
+	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Get("/api/users/{id}/timezone", s.UserHandler.GetTimezone)
+	r.With(auth.RequireIdentity(s.AuthService, s.KeysService)).Put("/api/users/{id}/timezone", s.UserHandler.SetTimezone)
+
 	// services (monitor) — admin-only; key callers need the admin scope.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
@@ -105,18 +112,16 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 
-	// A user's role and existence, for ?user_id= targeting and for the
-	// restrictions a key carries from its owner (user authority stays in
-	// the gateway; downstream never looks up users). Shared by every proxy.
-	userLookup := func(ctx context.Context, id uuid.UUID) (string, bool, error) {
-		u, err := s.AuthService.GetUser(ctx, id)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return "", false, nil
-			}
-			return "", false, err
+	// A user's role, timezone and existence, for ?user_id= targeting, for
+	// the restrictions a key carries from its owner, and for the token's tz
+	// claim (user authority stays in the gateway; downstream never looks up
+	// users). Shared by every proxy.
+	userLookup := func(ctx context.Context, id uuid.UUID) (middleware.UserRecord, bool, error) {
+		user, err := s.AuthService.LookupUser(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return middleware.UserRecord{}, false, nil
 		}
-		return u.Role, true, nil
+		return user, err == nil, err
 	}
 
 	// budget — authenticated at the edge, streamed to corefinance-api.

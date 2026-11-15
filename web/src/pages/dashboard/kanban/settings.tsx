@@ -4,6 +4,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, BellOff, BellRing } from "lucide-react";
 import { fetchKanbanSettings, saveKanbanSettings, KanbanRequestError } from "@/lib/kanban";
 import type { KanbanSettings } from "@/types/kanban";
+import { useAuth } from "@/contexts/auth-context";
+import { useUserTimezone, userTimezoneKey } from "@/hooks/use-user-timezone";
+import { saveUserTimezone, type UserTimezone } from "@/lib/user-timezone";
 import { zoneLabel } from "@/lib/kanban-schedule";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +52,13 @@ const previewTopicName = (input: string) => {
 
 export default function KanbanSettingsPage() {
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
+  const timezoneQuery = useUserTimezone();
+  const loading = settingsQuery.isLoading || timezoneQuery.isLoading;
+  const failed = settingsQuery.error || timezoneQuery.error;
+  const retry = () => {
+    if (settingsQuery.error) settingsQuery.refetch();
+    if (timezoneQuery.error) timezoneQuery.refetch();
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
@@ -64,17 +74,17 @@ export default function KanbanSettingsPage() {
         Where your reminders are pushed, and the timezone their times are read in.
       </p>
 
-      {settingsQuery.isLoading && (
+      {loading && (
         <div className="mt-6 grid gap-4" aria-busy="true">
           <div className="h-11 animate-pulse rounded bg-muted" />
           <div className="h-11 animate-pulse rounded bg-muted" />
         </div>
       )}
 
-      {settingsQuery.error && (
+      {failed && (
         <div className="mt-6">
           <p className="text-sm text-destructive">Couldn't load your settings.</p>
-          <Button variant="outline" className="mt-2 min-h-11" onClick={() => settingsQuery.refetch()}>
+          <Button variant="outline" className="mt-2 min-h-11" onClick={retry}>
             Retry
           </Button>
         </div>
@@ -82,13 +92,16 @@ export default function KanbanSettingsPage() {
 
       {/* The form keeps its own state from the first load; saving updates
           the cached settings it reads its status line from. */}
-      {settingsQuery.data && <SettingsForm saved={settingsQuery.data} />}
+      {settingsQuery.data && timezoneQuery.data && (
+        <SettingsForm saved={settingsQuery.data} savedTimezone={timezoneQuery.data} />
+      )}
     </div>
   );
 }
 
-// fieldError rewrites coreban's field-named message for the form, where the
-// coreban- prefix is fixed and the field is labelled "Notification target".
+// fieldError rewrites a field-named message (coreban's for the topic, the
+// gateway's for the timezone) for the form, where the coreban- prefix is
+// fixed and the field is labelled "Notification target".
 function fieldError(detail: string, field: "ntfy_topic" | "timezone"): string {
   if (!detail.startsWith(field)) return "";
   return field === "ntfy_topic"
@@ -96,25 +109,45 @@ function fieldError(detail: string, field: "ntfy_topic" | "timezone"): string {
     : detail.replace(/^timezone/, "The timezone");
 }
 
-function SettingsForm({ saved }: { saved: KanbanSettings }) {
+// TimezoneSaveError is the gateway refusing the timezone after coreban
+// saved the topic, told apart from coreban refusing the topic.
+class TimezoneSaveError extends Error {}
+
+function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTimezone: UserTimezone }) {
   const queryClient = useQueryClient();
+  const { user, isGuest } = useAuth();
   const [topicName, setTopicName] = useState(saved.ntfy_topic?.slice(topicPrefix.length) ?? "");
-  const [timezone, setTimezone] = useState(saved.timezone);
+  const [timezone, setTimezone] = useState(savedTimezone.timezone);
   const [savedNotice, setSavedNotice] = useState(false);
 
+  // The topic is coreban's; the timezone is the gateway's (ADR-0005), saved
+  // there after the topic, only when it changed. The shared demo guest
+  // keeps UTC: the gateway refuses it a timezone.
   const saveMutation = useMutation({
-    mutationFn: saveKanbanSettings,
-    onSuccess: (next) => {
-      queryClient.setQueryData(settingsKey, next);
-      setSavedNotice(true);
+    mutationFn: async (next: { ntfy_topic: string | null; timezone: string }) => {
+      const settings = await saveKanbanSettings({ ntfy_topic: next.ntfy_topic });
+      queryClient.setQueryData(settingsKey, settings);
+      if (!isGuest && (next.timezone !== savedTimezone.timezone || !savedTimezone.saved)) {
+        try {
+          const tz = await saveUserTimezone(savedTimezone.user_id, next.timezone);
+          queryClient.setQueryData(userTimezoneKey(user?.id), tz);
+        } catch (err) {
+          throw new TimezoneSaveError(err instanceof Error ? err.message : "");
+        }
+      }
     },
+    onSuccess: () => setSavedNotice(true),
     onMutate: () => setSavedNotice(false),
   });
 
-  const detail = saveMutation.error instanceof KanbanRequestError ? saveMutation.error.detail : "";
-  const topicError = fieldError(detail, "ntfy_topic");
-  const timezoneError = fieldError(detail, "timezone");
-  const otherError = saveMutation.error && !topicError && !timezoneError ? "Couldn't save your settings." : "";
+  const err = saveMutation.error;
+  const topicError = err instanceof KanbanRequestError ? fieldError(err.detail, "ntfy_topic") : "";
+  // The topic is already saved when the timezone fails, so say so.
+  const timezoneError =
+    err instanceof TimezoneSaveError
+      ? `${fieldError(err.message, "timezone") || "Couldn't save the timezone."} Your notification target was saved.`
+      : "";
+  const otherError = err && !topicError && !timezoneError ? "Couldn't save your settings." : "";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +201,7 @@ function SettingsForm({ saved }: { saved: KanbanSettings }) {
       <div className="grid gap-2">
         <Label htmlFor="kanban-timezone">Timezone</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={timezone} onValueChange={setTimezone}>
+          <Select value={timezone} onValueChange={setTimezone} disabled={isGuest}>
             <SelectTrigger id="kanban-timezone" className="min-h-11 flex-1" aria-invalid={timezoneError ? true : undefined}>
               <SelectValue />
             </SelectTrigger>
@@ -181,14 +214,15 @@ function SettingsForm({ saved }: { saved: KanbanSettings }) {
               ))}
             </SelectContent>
           </Select>
-          {timezone !== deviceTimezone && (
+          {!isGuest && timezone !== deviceTimezone && (
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setTimezone(deviceTimezone)}>
               Use device
             </Button>
           )}
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          "Daily at 07:00" means 07:00 here. This device is on {zoneLabel(deviceTimezone)}.
+          "Daily at 07:00" means 07:00 here, and your budget dates its entries in it too. This device is on{" "}
+          {zoneLabel(deviceTimezone)}.{isGuest && " The shared demo account stays on UTC."}
         </p>
         {timezoneError && <p className="text-sm text-destructive">{timezoneError}</p>}
       </div>

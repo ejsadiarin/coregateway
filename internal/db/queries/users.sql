@@ -30,6 +30,12 @@ SET
 WHERE id = $1
 RETURNING *;
 
+-- name: SetUserTimezone :one
+UPDATE coregateway.users
+SET timezone = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING timezone;
+
 -- name: DeleteUser :exec
 DELETE FROM coregateway.users
 WHERE id = $1;

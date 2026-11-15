@@ -27,7 +27,6 @@ import {
   moveKanbanCard,
   deleteKanbanCard,
   fetchKanbanArchivedCards,
-  fetchKanbanSettings,
   fetchKanbanReminders,
   createKanbanReminder,
   editKanbanReminder,
@@ -79,6 +78,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePageTitle } from "@/components/layout/page-title";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -164,7 +164,7 @@ export default function KanbanBoardPage() {
     retry: (count, err) => !(err instanceof KanbanBoardNotFoundError) && count < 3,
   });
   usePageTitle(boardQuery.data?.name);
-  const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
+  const timezoneQuery = useUserTimezone();
   const labelsKey = [...boardKey, "labels"];
   const labelsQuery = useQuery({ queryKey: labelsKey, queryFn: () => fetchKanbanLabels(boardId) });
   const boardLabels = labelsQuery.data ?? [];
@@ -176,7 +176,7 @@ export default function KanbanBoardPage() {
   const year = new Date().getFullYear();
   const dueLabel = (card: KanbanCard): DueLabel | null => {
     if (!card.due) return null;
-    const tz = settingsQuery.data?.timezone;
+    const tz = timezoneQuery.data?.timezone;
     return {
       text: `Due ${formatDue(card.due, year)}`,
       overdue: card.status !== "done" && tz !== undefined && isOverdue(card.due, new Date(), tz),
@@ -868,7 +868,7 @@ function CardEditor({
             {dueKind !== "none" && (
               <div className="grid gap-2">
                 <Label htmlFor="kanban-card-due-value" className="text-xs text-muted-foreground">
-                  {dueKind === "date" ? "Day" : "Day and time, in your Kanban timezone"}
+                  {dueKind === "date" ? "Day" : "Day and time, in your timezone"}
                 </Label>
                 <Input
                   id="kanban-card-due-value"
@@ -1416,7 +1416,7 @@ function CardReminders({ card }: { card: KanbanCard }) {
     queryKey: ["kanban", "reminders", "card", card.id],
     queryFn: () => fetchKanbanReminders(card.id),
   });
-  const settingsQuery = useQuery({ queryKey: ["kanban", "settings"], queryFn: fetchKanbanSettings });
+  const timezoneQuery = useUserTimezone();
   // Every reminders list, the reminders page's included.
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["kanban", "reminders"] });
 
@@ -1471,7 +1471,7 @@ function CardReminders({ card }: { card: KanbanCard }) {
       {error && <p className="text-sm text-destructive">{error}</p>}
       {adding ? (
         <ReminderForm
-          timezone={settingsQuery.data?.timezone}
+          timezone={timezoneQuery.data?.timezone}
           submitLabel="Add"
           secondary
           messageLabel="Message (the card's title if empty)"

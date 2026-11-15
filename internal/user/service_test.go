@@ -36,6 +36,9 @@ func (m *mockQuerier) UpdateUser(ctx context.Context, arg sqlc.UpdateUserParams)
 	if m.updateUserFn != nil { return m.updateUserFn(ctx, arg) }
 	return sqlc.CoregatewayUser{}, nil
 }
+func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
+	return arg.Timezone, nil
+}
 func (m *mockQuerier) DeleteUser(_ context.Context, id uuid.UUID) error {
 	if m.deleteUserFn != nil { return m.deleteUserFn(context.Background(), id) }
 	return nil

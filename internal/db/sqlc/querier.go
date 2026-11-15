@@ -43,6 +43,7 @@ type Querier interface {
 	ListServices(ctx context.Context) ([]ListServicesRow, error)
 	ListUsers(ctx context.Context) ([]CoregatewayUser, error)
 	RevokeApiKey(ctx context.Context, id uuid.UUID) (int64, error)
+	SetUserTimezone(ctx context.Context, arg SetUserTimezoneParams) (pgtype.Text, error)
 	TouchApiKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (CoregatewayService, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (CoregatewayUser, error)

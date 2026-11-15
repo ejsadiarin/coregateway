@@ -69,12 +69,11 @@ export interface KanbanBoard {
 }
 
 // KanbanSettings mirrors coreban's settings: the owner's notification
-// target (an ntfy topic name under coreban-, or null for none) and the IANA
-// timezone their schedules are read in. saved is false while these are
-// coreban's defaults, before the owner has saved their own.
+// target (an ntfy topic name under coreban-, or null for none). saved is
+// false while these are coreban's defaults. The timezone isn't here: the
+// gateway owns it (useUserTimezone, ADR-0005).
 export interface KanbanSettings {
   ntfy_topic: string | null;
-  timezone: string;
   saved: boolean;
 }
 

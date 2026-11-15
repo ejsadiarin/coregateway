@@ -11,6 +11,7 @@ import (
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 	usertypes "github.com/ejsadiarin/coregateway/internal/user/v1"
 	"github.com/ejsadiarin/coregateway/internal/session"
+	"github.com/ejsadiarin/coregateway/internal/timezone"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -136,6 +137,24 @@ func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.
 		Role:      user.Role,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
+}
+
+// UserRecord is what the gateway needs to know about a user to mint their
+// internal token: their role and their timezone (an IANA zone, already
+// defaulted to UTC when unset).
+type UserRecord struct {
+	Role     string
+	Timezone string
+}
+
+// LookupUser reports a user's record. A missing user is pgx.ErrNoRows,
+// wrapped.
+func (s *Service) LookupUser(ctx context.Context, id uuid.UUID) (UserRecord, error) {
+	user, err := s.queries.GetUser(ctx, id)
+	if err != nil {
+		return UserRecord{}, fmt.Errorf("failed to look up user: %w", err)
+	}
+	return UserRecord{Role: user.Role, Timezone: timezone.Effective(user.Timezone)}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*usertypes.User, error) {
