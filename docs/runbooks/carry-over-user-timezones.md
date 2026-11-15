@@ -18,6 +18,15 @@ database owner. Nothing here runs automatically.
    has no timezone for; running this first keeps the zone the user already
    chose instead.
 
+3. **Before** corefinance migration `00012_user-timezones-observed.sql`
+   (corefinance#18) and coreban migration `00016` (coreban#26): corefinance's
+   renames `user_settings` to `user_timezones` (and `updated_at` to
+   `seen_at`), and coreban's drops `owner_settings.timezone`. If corefinance
+   00012 has already run, read `corefinance.user_timezones` (`seen_at`) in
+   place of `corefinance.user_settings` (`updated_at`) below; its rows are the
+   zones users saved in corefinance until the worker's first lookup replaces
+   them.
+
 Running it later is still safe: it only fills users whose gateway timezone
 is still unset, so it never overwrites one saved through the gateway.
 

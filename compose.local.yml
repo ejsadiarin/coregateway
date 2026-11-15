@@ -175,7 +175,9 @@ services:
       dockerfile: Dockerfile.corefinance-cron-worker
       target: worker
     # GATEWAY_API_KEY: minted by scripts/local.sh up (an admin-owned key with
-    # corefinance:admin) for the worker's timezone lookups (ADR-0005).
+    # corefinance:admin) for the worker's timezone lookups (ADR-0005). On the
+    # first `up` the worker starts before the key exists and exits (it won't
+    # run without one); local.sh recreates it once the key is minted.
     env_file:
       - path: ./.local/worker.env
         required: false
