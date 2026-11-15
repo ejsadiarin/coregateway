@@ -5,8 +5,7 @@ import { BottomSheet } from "./bottom-sheet";
 import { CategoryBadge, CategoryChip, NeedChip, StatusChip, TagChip } from "./chips";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
-import { entryInput, useDeleteEntry, useSaveEntry } from "@/hooks/use-ledger";
-import { skipStatus } from "@/lib/feed-rail";
+import { useDeleteEntry, useToggleSkip } from "@/hooks/use-ledger";
 import { cadenceLabel, signed, today, type Entry, type Rule } from "@/lib/ledger";
 import type { Category, Tag } from "@/types/api";
 
@@ -34,15 +33,10 @@ export function EntryDetails({
   const [confirm, setConfirm] = useState(false);
   const noun = entry.kind === "expense" ? "expense" : "income";
 
-  const save = useSaveEntry(entry.kind);
+  const skip = useToggleSkip();
   const skipped = entry.status === "skipped";
   const toggleSkip = async () => {
-    try {
-      await save.mutateAsync({ id: entry.id, input: entryInput(entry, { status: skipStatus(entry.status) }) });
-      showToast(skipped ? "It counts again" : "Skipped this date", "success");
-    } catch (e) {
-      showToast(e instanceof GuestBlockedError ? e.message : `Couldn't do that: ${(e as Error).message}`, "error");
-    }
+    if (await skip.toggle(entry)) showToast(skipped ? "It counts again" : "Skipped this date", "success");
   };
 
   const del = async () => {
@@ -103,7 +97,7 @@ export function EntryDetails({
           </p>
           <button
             type="button"
-            disabled={save.isPending}
+            disabled={skip.pending}
             onClick={toggleSkip}
             className="min-h-11 rounded-xl border border-primary/40 bg-primary/10 text-[15px] font-semibold text-[#f4a084] disabled:opacity-50"
           >

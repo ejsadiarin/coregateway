@@ -297,6 +297,10 @@ export async function saveKanbanSettings(settings: Omit<KanbanSettings, "saved">
 
 const remindersUrl = `${apiBaseUrl}/api/coreban/reminders`;
 
+// remindersKey is the query key of the owner's reminders list, shared by
+// every page that shows or changes them.
+export const remindersKey = ["kanban", "reminders"] as const;
+
 // fetchKanbanReminders lists the owner's reminders (only one card's, given
 // cardId), soonest first.
 export async function fetchKanbanReminders(cardId?: string): Promise<KanbanReminder[]> {

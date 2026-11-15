@@ -4,45 +4,36 @@ import { BellRing, ChevronLeft, ChevronRight, Repeat } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useBudgetRemaining } from "@/hooks/use-budget";
 import { useEntries, useRules } from "@/hooks/use-ledger";
-import { comingUp, monthDays, monthSummary } from "@/lib/feed-rail";
-import { fetchKanbanReminders } from "@/lib/kanban";
-import { money, nextDue, today, type Entry, type Rule } from "@/lib/ledger";
+import { comingUp, monthDays, monthSummary, shortNet } from "@/lib/feed-rail";
+import { fetchKanbanReminders, remindersKey } from "@/lib/kanban";
+import { money, nextDates, today, type Entry, type Rule } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
 const NONE: never[] = [];
 
-// shortNet is a day's net in a calendar cell: "+500", "−1.3k".
-function shortNet(n: number): string {
-  const sign = n < 0 ? "−" : "+";
-  const a = Math.abs(n);
-  return sign + (a >= 1000 ? `${(a / 1000).toFixed(a >= 10000 ? 0 : 1).replace(/\.0$/, "")}k` : String(Math.round(a)));
-}
-
-// nextOf pairs each active rule with its next date, as the ledger works it
-// out: the first due date from today it hasn't made an entry for.
-function nextOf(rules: Rule[], entries: Entry[]) {
-  const made = new Map<string, Set<string>>();
-  for (const e of entries) if (e.ruleId) made.set(e.ruleId, (made.get(e.ruleId) ?? new Set()).add(e.date));
-  return rules.map((r) => ({ ...r, next: nextDue(r, made.get(r.id) ?? new Set()) }));
+// withNext pairs each rule with its next date, as the ledger works it out.
+function withNext(rules: Rule[], entries: Entry[]) {
+  const next = nextDates(rules, entries);
+  return rules.map((r) => ({ ...r, next: next.get(r.id) }));
 }
 
 const card = "rounded-2xl border border-border bg-card/60 p-4";
 
 // FeedRail sits beside the Feed on a wide screen (#22): a calendar that
-// moves the chat to a day, what is coming up in the next seven days, and
-// this month's budget. It supports the chat; the chat stays the page.
+// moves the Feed to a day, what is coming up in the next seven days, and
+// this month's budget. It supports the Feed; the Feed stays the page.
 export function FeedRail({ noteDays, onPickDay }: { noteDays: Set<string>; onPickDay: (date: string) => void }) {
   const [month, setMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const expenses = useEntries("expense").data ?? NONE;
   const incomes = useEntries("income").data ?? NONE;
   const expenseRules = useRules("expense").data ?? NONE;
   const incomeRules = useRules("income").data ?? NONE;
-  const reminders = useQuery({ queryKey: ["kanban", "reminders"], queryFn: () => fetchKanbanReminders(), staleTime: 60000 }).data ?? NONE;
+  const reminders = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders(), staleTime: 60000 }).data ?? NONE;
   const remaining = useBudgetRemaining().data;
 
   const cells = useMemo(() => monthDays(month, [...expenses, ...incomes], noteDays, today()), [month, expenses, incomes, noteDays]);
   const coming = useMemo(
-    () => comingUp(reminders, [...nextOf(expenseRules, expenses), ...nextOf(incomeRules, incomes)], new Date()),
+    () => comingUp(reminders, [...withNext(expenseRules, expenses), ...withNext(incomeRules, incomes)], new Date()),
     [reminders, expenseRules, incomeRules, expenses, incomes],
   );
   const summary = remaining ? monthSummary(remaining) : undefined;

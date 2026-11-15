@@ -9,6 +9,7 @@ import {
   editKanbanReminder,
   deleteKanbanReminder,
   KanbanRequestError,
+  remindersKey,
 } from "@/lib/kanban";
 import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
@@ -40,7 +41,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const remindersKey = ["kanban", "reminders"];
 const settingsKey = ["kanban", "settings"];
 
 const toneClass: Record<ReminderStatus["tone"], string> = {

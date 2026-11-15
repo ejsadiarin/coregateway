@@ -1,20 +1,11 @@
-// The pure parts of the Feed's budget notes and its side rail: skipping one
-// date of a rule entry, the chips a budget note shows, and the rail's
-// calendar, coming-up list and month summary.
+// The pure parts of the Feed's budget notes and its side rail: the chips a
+// budget note shows, and the rail's calendar, coming-up list and month
+// summary.
 
 import { addDays, format, getDay, getDaysInMonth, parseISO } from "date-fns";
-import { cadenceLabel, ruleLabel, type Cadence } from "@/lib/ledger";
+import { cadenceLabel, ruleLabel, type Cadence, type Entry, type LedgerKind } from "@/lib/ledger";
 
-type Status = "pending" | "posted" | "skipped";
-
-// canSkip tells a record that can be skipped for its date alone: a rule
-// entry. A record typed by hand is deleted instead.
-export const canSkip = (r: { source_rule_id?: string | null }) => !!r.source_rule_id;
-
-// skipStatus is the status to save to skip a record, or to undo a skip:
-// undefined lets its date decide between posted and pending.
-export const skipStatus = (current: Status | undefined): Status | undefined =>
-  current === "skipped" ? undefined : "skipped";
+type Status = Entry["status"];
 
 // BudgetChips are the chips under a budget note: its category, the rule
 // that made it ("Monthly · Spotify"; just "rule" once the rule is gone),
@@ -51,8 +42,9 @@ export function budgetChips<C, T>(
   };
 }
 
-// DayCell is one day of the rail's calendar. net is its budget records'
-// income less spending (skipped ones don't count), undefined with none;
+// DayCell is one day of the rail's calendar. net is its posted budget
+// records' income less spending, as the Feed's day heading counts it
+// (dayNet), undefined with none;
 // dot marks a day with any notes or records.
 export interface DayCell {
   date: string; // yyyy-MM-dd
@@ -67,14 +59,14 @@ export interface DayCell {
 // before its first day, then each day.
 export function monthDays(
   month: string,
-  entries: { date: string; kind: "expense" | "income"; amount: number; status: Status }[],
+  entries: { date: string; kind: LedgerKind; amount: number; status: Status }[],
   noteDays: Set<string>,
   today: string,
 ): (DayCell | null)[] {
   const first = parseISO(`${month}-01`);
   const nets = new Map<string, number>();
   for (const e of entries) {
-    if (e.status === "skipped" || !e.date.startsWith(month)) continue;
+    if (e.status !== "posted" || !e.date.startsWith(month)) continue;
     nets.set(e.date, (nets.get(e.date) ?? 0) + (e.kind === "income" ? e.amount : -e.amount));
   }
   const cells: (DayCell | null)[] = Array.from({ length: getDay(first) }, () => null);
@@ -96,15 +88,16 @@ export interface ComingItem {
   title: string;
   amount?: number;
   currency?: string;
-  ruleKind?: "expense" | "income";
+  ruleKind?: LedgerKind;
 }
 
 // comingUp lists, soonest first, the reminders that fire and the rules that
-// post in the seven days from now's date. A paused reminder (one that
-// won't be sent) and a rule with no next date are left out.
+// post in the seven days from now's date. A reminder that won't be sent
+// (no notification target, or its card is done or archived) and a rule
+// with no next date are left out.
 export function comingUp(
   reminders: { id: string; message: string; next_fire_at: string | null; paused: string | null }[],
-  rules: { id: string; kind: "expense" | "income"; description: string; amount: number; currency: string; next: string | undefined }[],
+  rules: { id: string; kind: LedgerKind; description: string; amount: number; currency: string; next: string | undefined }[],
   now: Date,
 ): ComingItem[] {
   const from = format(now, "yyyy-MM-dd");
@@ -149,4 +142,13 @@ export interface MonthSummary {
 export function monthSummary(r: { total_income: number; total_expense: number; remaining: number }): MonthSummary {
   const pct = r.total_income > 0 ? Math.min(100, Math.round((r.total_expense / r.total_income) * 100)) : undefined;
   return { spent: r.total_expense, received: r.total_income, left: r.remaining, pct };
+}
+
+// shortNet is a day's net as a calendar cell fits it: "+500", "−1.3k",
+// "−12k".
+export function shortNet(n: number): string {
+  const sign = n < 0 ? "\u2212" : "+";
+  const a = Math.abs(n);
+  if (a < 1000) return sign + String(Math.round(a));
+  return sign + (a / 1000).toFixed(a >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k";
 }

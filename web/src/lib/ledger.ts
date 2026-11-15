@@ -213,6 +213,23 @@ export function splitUpcoming(entries: Entry[], from: string = today()): { upcom
 // counted tells an entry that adds to a total: a skipped one doesn't.
 export const counted = (e: Entry) => e.status !== "skipped";
 
+// canSkip tells a record that can be skipped for its date alone: a rule
+// entry. A record typed by hand is deleted instead.
+export const canSkip = (r: { source_rule_id?: string | null }) => !!r.source_rule_id;
+
+// skipStatus is the status to save to skip an entry, or to undo a skip:
+// undefined lets its date decide between posted and pending.
+export const skipStatus = (current: Entry["status"] | undefined): Entry["status"] | undefined =>
+  current === "skipped" ? undefined : "skipped";
+
+// nextDates is each rule's next date (nextDue), given the entries it has
+// made so far.
+export function nextDates(rules: Rule[], entries: Entry[], from: string = today()): Map<string, string | undefined> {
+  const made = new Map<string, Set<string>>();
+  for (const e of entries) if (e.ruleId) made.set(e.ruleId, (made.get(e.ruleId) ?? new Set()).add(e.date));
+  return new Map(rules.map((r) => [r.id, nextDue(r, made.get(r.id) ?? new Set(), from)]));
+}
+
 export interface DayGroup {
   date: string;
   total: number;

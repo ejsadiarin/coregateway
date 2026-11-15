@@ -1,12 +1,9 @@
 import { useMemo, type ReactNode } from "react";
 import { Repeat } from "lucide-react";
-import { useToast } from "@/components/ui/toast";
-import { GuestBlockedError } from "@/hooks/use-budget";
-import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
+import { useToggleSkip } from "@/hooks/use-ledger";
 import { useRuleReview } from "@/hooks/use-rule-review";
 import { cadenceLabel, type Entry, type LedgerKind, type Rule } from "@/lib/ledger";
 import { groupNewByRule } from "@/lib/rule-review";
-import { skipStatus } from "@/lib/feed-rail";
 
 // NewFromRules is the top of a ledger: the rule entries written since the
 // owner last marked them reviewed on this device, grouped by rule (#13).
@@ -26,20 +23,9 @@ export function NewFromRules({
 }) {
   const { ids, markReviewed } = useRuleReview(kind);
   const groups = useMemo(() => groupNewByRule(ids, entries, rules), [ids, entries, rules]);
-  const save = useSaveEntry(kind);
-  const { showToast } = useToast();
+  const skip = useToggleSkip();
   if (groups.length === 0) return null;
   const count = groups.reduce((n, g) => n + g.entries.length, 0);
-
-  // Skipping keeps the entry, marked skipped; bringing it back lets its
-  // date decide whether it is posted or still pending.
-  const toggleSkip = async (e: Entry) => {
-    try {
-      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipStatus(e.status) }) });
-    } catch (err) {
-      showToast(err instanceof GuestBlockedError ? err.message : `Couldn't do that: ${(err as Error).message}`, "error");
-    }
-  };
 
   return (
     <section aria-labelledby="new-from-rules-h" className="flex flex-col gap-2.5 px-4 pt-3.5 pb-1 lg:px-1">
@@ -63,8 +49,8 @@ export function NewFromRules({
                 <div className="min-w-0 flex-1">{row(e)}</div>
                 <button
                   type="button"
-                  disabled={save.isPending}
-                  onClick={() => toggleSkip(e)}
+                  disabled={skip.pending}
+                  onClick={() => skip.toggle(e)}
                   className="mr-3 min-h-[34px] shrink-0 rounded-full border border-foreground/15 px-3 text-xs font-medium disabled:opacity-50"
                 >
                   {e.status === "skipped" ? "Undo skip" : "Skip"}

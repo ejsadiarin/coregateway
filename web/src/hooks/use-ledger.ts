@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes } from "@/lib/api";
 import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { feedKey } from "@/lib/feed";
-import { entryOf, ruleOf, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
+import { entryOf, ruleOf, skipStatus, today, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
 import { ruleReviewKey } from "@/hooks/use-rule-review";
 import { addTag, createRule, fetchRules, fetchTagLinks, removeTag, updateRule, type RuleInput } from "@/lib/ledger-api";
 import {
@@ -17,6 +17,7 @@ import {
   useUpdateIncome,
 } from "@/hooks/use-budget";
 import { useAuth } from "@/contexts/auth-context";
+import { useToast } from "@/components/ui/toast";
 import type { Category, Expense, Income, Tag } from "@/types/api";
 
 // The data behind the Expenses and Incomes pages: every entry of one kind,
@@ -99,7 +100,7 @@ function body(kind: LedgerKind, e: EntryInput) {
     notes: [e.marker, e.notes].filter(Boolean).join(" ") || undefined,
     priority: e.priority,
     recurring_type: "one-time" as const,
-    status: e.status ?? (e.date > new Date().toISOString().slice(0, 10) ? "pending" : "posted"),
+    status: e.status ?? (e.date > today() ? "pending" : "posted"),
     source_rule_id: e.ruleId,
   };
   return kind === "expense" ? { ...shared, expense_date: e.date, is_debt: false } : { ...shared, date: e.date };
@@ -235,6 +236,29 @@ export function entryInput(e: Entry, change: Partial<EntryInput> = {}): EntryInp
     ruleId: e.ruleId,
     ...change,
   };
+}
+
+// useToggleSkip skips a rule entry for its date alone, or undoes that
+// (skipStatus), from any page: the Feed, an entry's popup, "New from your
+// rules". It says what went wrong itself and resolves whether it worked.
+export function useToggleSkip() {
+  const qc = useQueryClient();
+  const { showToast } = useToast();
+  const saveExpense = useSaveEntry("expense");
+  const saveIncome = useSaveEntry("income");
+  const toggle = async (e: Entry): Promise<boolean> => {
+    const save = e.kind === "expense" ? saveExpense : saveIncome;
+    try {
+      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipStatus(e.status) }) });
+      // The note shows the record's new status even if its sync is slow.
+      qc.invalidateQueries({ queryKey: feedKey });
+      return true;
+    } catch (err) {
+      showToast(err instanceof GuestBlockedError ? err.message : `Couldn't do that: ${(err as Error).message}`, "error");
+      return false;
+    }
+  };
+  return { toggle, pending: saveExpense.isPending || saveIncome.isPending };
 }
 
 // tagsOf names the tags of an entry.

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { entryInput, useEntryTags, useKindCategories, useRules, useSaveEntry } from "@/hooks/use-ledger";
-import { entryOf } from "@/lib/ledger";
-import { budgetChips, canSkip, skipStatus } from "@/lib/feed-rail";
+import { useEntryTags, useKindCategories, useRules, useToggleSkip } from "@/hooks/use-ledger";
+import { canSkip, entryOf } from "@/lib/ledger";
+import { budgetChips } from "@/lib/feed-rail";
 import { CategoryChip, RuleChip, StatusChip, TagChip } from "@/components/budget/ledger/chips";
 import { FeedRail } from "./feed-rail";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -24,7 +24,6 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import type { Expense, Income } from "@/types/api";
 import {
   appendNote,
   archivePrompt,
@@ -545,8 +544,10 @@ export default function FeedPage() {
     );
   }, [isGuest, queryClient]);
 
-  // Tapping a day in the rail's calendar moves the chat there, loading
-  // older pages until that day (or the first day after it) is in.
+  // Tapping a day in the rail's calendar moves the Feed there, loading
+  // older pages until that day (or the first day after it) is in. The jump
+  // is instant: a smooth scroll could pass the top and load another page
+  // mid-way, which keeps the view where the scroll had got to.
   const noteDays = useMemo(() => new Set(days.map((d) => d.key)), [days]);
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   useEffect(() => {
@@ -557,7 +558,7 @@ export default function FeedPage() {
       return;
     }
     const target = days.find((d) => d.key >= jumpTo) ?? days[days.length - 1];
-    if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start" });
     setJumpTo(null);
   }, [jumpTo, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
@@ -722,17 +723,7 @@ export default function FeedPage() {
 
   // Skipping a rule entry from its note sets that one record's status,
   // as the ledger does; the note then shows the record as skipped.
-  const saveExpense = useSaveEntry("expense");
-  const saveIncome = useSaveEntry("income");
-  const skipMutation = useMutation({
-    mutationFn: async ({ kind, record }: { kind: "expense" | "income"; record: Expense | Income }) => {
-      const save = kind === "expense" ? saveExpense : saveIncome;
-      const entry = entryOf(kind, record);
-      return save.mutateAsync({ id: record.id, input: entryInput(entry, { status: skipStatus(entry.status) }) });
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: feedKey }),
-    onError: fail("Couldn't skip this date"),
-  });
+  const skip = useToggleSkip();
   const skipActionFor = (note: Note): NoteActions["toggleSkip"] => {
     const link = note.link;
     if (!isBudgetLink(link) || link.deleted) return undefined;
@@ -740,7 +731,7 @@ export default function FeedPage() {
     if (!record || !canSkip(record)) return undefined;
     return {
       skipped: record.status === "skipped",
-      run: () => skipMutation.mutate({ kind: link.kind === "income" ? "income" : "expense", record }),
+      run: () => void skip.toggle(entryOf(link.kind, record)),
     };
   };
 
@@ -845,7 +836,7 @@ export default function FeedPage() {
   const captureText = draft.trim();
 
   return (
-    // A wide screen gives the chat two thirds and the rail the rest (#22).
+    // A wide screen gives the Feed two thirds and the rail the rest (#22).
     <div className="mx-auto flex h-full w-full max-w-3xl gap-6 lg:max-w-[1400px] lg:pr-6">
     <div className="flex min-w-0 flex-[2] flex-col">
       <div className="px-4 pt-4 md:px-6 md:pt-6">

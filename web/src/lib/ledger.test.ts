@@ -3,15 +3,18 @@ import {
   applyFilter,
   byMonth,
   cadencePhrase,
+  canSkip,
   cleanNotes,
   ended,
   hueOf,
   money,
+  nextDates,
   nextDue,
   recents,
   ruleLabel,
   ruleTotals,
   signed,
+  skipStatus,
   splitUpcoming,
   usualPriority,
   withHues,
@@ -184,5 +187,31 @@ describe("ruleLabel", () => {
 
   it("says just rule when the rule is gone", () => {
     expect(ruleLabel("deleted", new Map())).toBe("rule");
+  });
+});
+
+describe("skipping one date", () => {
+  it("is offered for rule entries only", () => {
+    expect(canSkip({ source_rule_id: "r1" })).toBe(true);
+    expect(canSkip({ source_rule_id: undefined })).toBe(false);
+    expect(canSkip({})).toBe(false);
+  });
+
+  it("skips a posted or pending entry, and undoing lets its date decide", () => {
+    expect(skipStatus("posted")).toBe("skipped");
+    expect(skipStatus("pending")).toBe("skipped");
+    expect(skipStatus(undefined)).toBe("skipped");
+    expect(skipStatus("skipped")).toBeUndefined();
+  });
+});
+
+
+describe("nextDates", () => {
+  it("gives each rule its next date from the entries it has made", () => {
+    const monthly = rule({ id: "m", cadence: "monthly", startDate: "2026-09-05" });
+    const daily = rule({ id: "d", cadence: "daily", startDate: "2026-11-14" });
+    const next = nextDates([monthly, daily], [entry({ ruleId: "d", date: "2026-11-15" })], "2026-11-15");
+    expect(next.get("m")).toBe("2026-12-05");
+    expect(next.get("d")).toBe("2026-11-16");
   });
 });

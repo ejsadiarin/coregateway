@@ -1,20 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetChips, canSkip, comingUp, monthDays, monthSummary, skipStatus } from "./feed-rail";
-
-describe("skipping one date", () => {
-  it("is offered for rule entries only", () => {
-    expect(canSkip({ source_rule_id: "r1" })).toBe(true);
-    expect(canSkip({ source_rule_id: undefined })).toBe(false);
-    expect(canSkip({})).toBe(false);
-  });
-
-  it("skips a posted or pending entry, and undoing lets its date decide", () => {
-    expect(skipStatus("posted")).toBe("skipped");
-    expect(skipStatus("pending")).toBe("skipped");
-    expect(skipStatus(undefined)).toBe("skipped");
-    expect(skipStatus("skipped")).toBeUndefined();
-  });
-});
+import { budgetChips, comingUp, monthDays, monthSummary, shortNet } from "./feed-rail";
 
 describe("budgetChips", () => {
   const subs = { id: "c1", name: "subscriptions" };
@@ -67,6 +52,12 @@ describe("monthDays", () => {
     expect(cells[9]).toMatchObject({ dot: false });
     expect(cells[14]).toMatchObject({ today: true, future: false });
     expect(cells[15]).toMatchObject({ future: true });
+  });
+
+  it("counts posted records only, as the Feed's day heading does", () => {
+    const cells = monthDays("2026-11", [e("2026-11-20", "expense", 85), { date: "2026-11-21", kind: "expense", amount: 85, status: "pending" }], new Set(), "2026-11-15");
+    expect(cells[19]?.net).toBe(-85);
+    expect(cells[20]).toMatchObject({ net: undefined, dot: false });
   });
 
   it("pads the first week with blanks", () => {
@@ -126,5 +117,15 @@ describe("monthSummary", () => {
   it("has no share when nothing came in, and caps it when spending passed income", () => {
     expect(monthSummary({ total_income: 0, total_expense: 300, remaining: -300 }).pct).toBeUndefined();
     expect(monthSummary({ total_income: 100, total_expense: 250, remaining: -150 }).pct).toBe(100);
+  });
+});
+
+describe("shortNet", () => {
+  it("fits a day's net in a calendar cell", () => {
+    expect(shortNet(500)).toBe("+500");
+    expect(shortNet(-85.5)).toBe("\u221286");
+    expect(shortNet(-1300)).toBe("\u22121.3k");
+    expect(shortNet(2000)).toBe("+2k");
+    expect(shortNet(-12500)).toBe("\u221213k");
   });
 });
