@@ -6,6 +6,7 @@ import { BottomSheet } from "./bottom-sheet";
 import { CategoryBadge, CategoryChip, NeedChip, RuleChip, StatusChip, TagChip, categoryIcon, hueClasses } from "./chips";
 import { EntryDetails } from "./entry-details";
 import { EntrySheet, type SheetTarget } from "./entry-sheet";
+import { NewFromRules } from "./new-from-rules";
 import { RuleSheet } from "./rule-sheet";
 import { StaleReviewSheet } from "./stale-review-sheet";
 import type { StaleReport } from "@/lib/rule-review";
@@ -199,6 +200,8 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
           </button>
         </div>
       </section>
+
+      <NewFromRules kind={kind} entries={entries} rules={rules} row={(e) => <EntryRow {...rowProps(e)} />} />
 
       {/* Upcoming */}
       {upcoming.length > 0 && (

@@ -1,6 +1,6 @@
 import { apiBaseUrl } from "@/lib/api";
 import type { Cadence, LedgerKind, Priority, RawRule } from "@/lib/ledger";
-import type { StaleEntry } from "@/lib/rule-review";
+import type { FeedPage, StaleEntry } from "@/lib/rule-review";
 
 // Reads and writes the Expenses and Incomes pages need beyond lib/api:
 // rules (paused ones too), every record's tags at once, and tagging.
@@ -49,6 +49,15 @@ export const createRule = (kind: LedgerKind, rule: RuleInput) =>
 
 export const updateRule = (kind: LedgerKind, id: string, rule: RuleInput) =>
   call<SavedRule>(`${rulesPath(kind)}/${id}`, { method: "PUT", body: JSON.stringify(rule) });
+
+// RULE_FEED_PAGE is the most entries one page of the rule-entry feed
+// returns (corefinance caps page_size at 500).
+export const RULE_FEED_PAGE = 500;
+
+// fetchRuleFeed reads one page of the "what's new" feed of rule entries,
+// after the cursor (from the start without one), with no filters.
+export const fetchRuleFeed = (after?: string) =>
+  call<FeedPage>(`/rule-entries/feed?page_size=${RULE_FEED_PAGE}${after ? `&after=${encodeURIComponent(after)}` : ""}`);
 
 export interface TagLink {
   record_id: string;

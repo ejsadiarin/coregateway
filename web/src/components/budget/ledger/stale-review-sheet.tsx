@@ -3,7 +3,7 @@ import { format, parseISO } from "date-fns";
 import { BottomSheet } from "./bottom-sheet";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
-import { useSaveEntry } from "@/hooks/use-ledger";
+import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
 import { signed, type Entry, type Rule } from "@/lib/ledger";
 import type { StaleReport } from "@/lib/rule-review";
 
@@ -36,21 +36,7 @@ export function StaleReviewSheet({
     const e = entries.get(id);
     if (!e) return settle(id);
     try {
-      await save.mutateAsync({
-        id,
-        input: {
-          description: e.description,
-          amount: e.amount,
-          currency: e.currency,
-          date: e.date,
-          categoryId: e.categoryId,
-          priority: e.priority,
-          notes: e.notes,
-          marker: e.marker,
-          status: "skipped",
-          ruleId: e.ruleId,
-        },
-      });
+      await save.mutateAsync({ id, input: entryInput(e, { status: "skipped" }) });
       settle(id);
     } catch (err) {
       showToast(err instanceof GuestBlockedError ? err.message : `Couldn't skip it: ${(err as Error).message}`, "error");

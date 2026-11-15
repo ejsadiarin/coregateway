@@ -216,6 +216,24 @@ export function ruleInput(r: Rule, change: Partial<RuleInput> = {}): RuleInput {
   };
 }
 
+// entryInput is the whole of an entry to save back with some fields
+// changed, such as its status to skip it.
+export function entryInput(e: Entry, change: Partial<EntryInput> = {}): EntryInput {
+  return {
+    description: e.description,
+    amount: e.amount,
+    currency: e.currency,
+    date: e.date,
+    categoryId: e.categoryId,
+    priority: e.priority,
+    notes: e.notes,
+    marker: e.marker,
+    status: e.status,
+    ruleId: e.ruleId,
+    ...change,
+  };
+}
+
 // tagsOf names the tags of an entry.
 export function tagsOf(ids: string[] | undefined, tags: Tag[] | undefined): Tag[] {
   if (!ids?.length || !tags) return [];
