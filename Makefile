@@ -26,6 +26,12 @@
 #
 # ==============================================================================
 
+# Load .env when present so the migrate-* targets see DATABASE_URL and
+# MIGRATION_URL. Not exported: GOOSE_DRIVER/GOOSE_MIGRATION_DIR below would
+# then reach goose as env vars and change how it parses its arguments.
+# Override on the command line: make migrate-up MIGRATION_URL=...
+-include .env
+
 # Colors for output
 RED = \033[0;31m
 GREEN = \033[0;32m
