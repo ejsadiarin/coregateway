@@ -264,7 +264,6 @@ const lunch: Expense = {
   currency: "PHP",
   category_id: "food",
   expense_date: "2026-11-12",
-  recurring_type: "one-time",
   priority: "need",
   status: "posted",
   is_debt: false,
@@ -278,7 +277,6 @@ const salary: Income = {
   amount: "20000.00" as unknown as number,
   currency: "PHP",
   date: "2026-11-15",
-  recurring_type: "monthly",
   priority: "need",
   status: "posted",
   created_at: "2026-11-12T04:00:00Z",
@@ -298,10 +296,10 @@ describe("linkSummary for budget records", () => {
     });
   });
 
-  it("shows how a recurring income repeats, and amounts corefinance sends as text", () => {
+  it("shows an income's amount and date, including amounts corefinance sends as text", () => {
     expect(linkSummary({ kind: "income", deleted: false, record_id: "i1", income: salary }, 2026)).toEqual({
       title: "₱20,000.00 · Salary",
-      detail: "Sun 15 Nov · monthly",
+      detail: "Sun 15 Nov",
     });
   });
 

@@ -299,7 +299,6 @@ export function linkSummary(
       detail = [
         r.category_id && categoryName(r.category_id),
         day && budgetDay(day, currentYear),
-        r.recurring_type !== "one-time" && r.recurring_type,
       ]
         .filter(Boolean)
         .join(" · ");

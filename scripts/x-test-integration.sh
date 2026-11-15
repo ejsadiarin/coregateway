@@ -15,8 +15,8 @@
 #   X3  cookie session chain reaches downstream (remaining 200)
 #   X4  anonymous budget access is 401 with the exact error body
 #   X5  forged X-User-ID is ignored (byte-identical data)
-#   X6  Admin API key: owned scopes=["admin"] key 200 at edge (remaining +
-#       admin backfill dry-run) and 404s on removed endpoints
+#   X6  Admin API key: owned scopes=["admin"] key 200 at edge (remaining),
+#       passes the /api/budget/admin/* gate, and 404s on removed endpoints
 #       (/api/auth/token, /api/auth/keys/service, /internal/*);
 #       unknown scope → 400 on create
 #   X7  rotation overlap (2 kids, old session passes) + cut (1 kid)
@@ -190,9 +190,11 @@ expect_eq "unknown scope 400 on create" "400" \
 expect_eq "admin key 200 at edge (remaining)" "200" \
   "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
     "$GW/api/budget/remaining")"
-expect_eq "admin key 200 admin backfill dry-run" "200" \
+# corefinance has no admin routes left (#17), so passing the gate is a 404
+# from corefinance rather than the gateway's 403.
+expect_eq "admin key passes the admin gate" "404" \
   "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN_KEY" \
-    -X POST "$GW/api/budget/admin/backfill?dry_run=true")"
+    -X POST "$GW/api/budget/admin/anything")"
 expect_eq "removed exchange 404" "404" \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/token" \
     -H 'Content-Type: application/json' -d '{"key":"cgw_live_dead"}')"
