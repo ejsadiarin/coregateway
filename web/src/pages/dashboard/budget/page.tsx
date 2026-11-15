@@ -344,7 +344,7 @@ export default function BudgetDashboard() {
                           currency: occ.currency,
                           date: occ.date,
                           description: occ.description,
-                          recurring_type: (occ.recurring_type as "one-time" | "daily" | "weekly" | "monthly" | "yearly") || "one-time",
+                          source_rule_id: occ.source_rule_id,
                           priority: "need",
                           status: "posted",
                           created_at: '',
@@ -483,9 +483,7 @@ export default function BudgetDashboard() {
                 currency: editingIncome.currency,
                 date: editingIncome.date,
                 description: editingIncome.description,
-                recurring_type: editingIncome.recurring_type,
-                start_date: editingIncome.start_date,
-                end_date: editingIncome.end_date,
+                source_rule_id: editingIncome.source_rule_id,
               }}
               onSubmit={handleUpdateIncome}
               onCancel={() => setEditingIncome(null)}

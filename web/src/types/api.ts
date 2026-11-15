@@ -115,12 +115,9 @@ export interface Expense {
     category_id?: string;
     expense_date: string;
     notes?: string;
-    recurring_type: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority: "need" | "want" | "savings";
     status: "pending" | "posted" | "skipped";
     is_debt: boolean;
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
     created_at: string;
     updated_at: string;
@@ -155,12 +152,9 @@ export interface CreateExpenseRequest {
     category_id?: string;
     expense_date: string;
     notes?: string;
-    recurring_type: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority: "need" | "want" | "savings";
     status: "pending" | "posted" | "skipped";
     is_debt: boolean;
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
 }
 
@@ -171,12 +165,9 @@ export interface UpdateExpenseRequest {
     category_id?: string;
     expense_date?: string;
     notes?: string;
-    recurring_type?: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";
     is_debt?: boolean;
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
 }
 
@@ -184,7 +175,6 @@ export interface ExpenseFilters {
     start_date?: string;
     end_date?: string;
     category_id?: string;
-    recurring_type?: string;
 }
 
 // Pagination Types
@@ -215,11 +205,8 @@ export interface Income {
     description?: string;
     category_id?: string;
     notes?: string;
-    recurring_type: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority: "need" | "want" | "savings";
     status: "pending" | "posted" | "skipped";
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
     created_at: string;
     updated_at: string;
@@ -267,11 +254,8 @@ export interface CreateIncomeRequest {
     date: string;
     description?: string;
     notes?: string;
-    recurring_type: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
 }
 
@@ -281,11 +265,8 @@ export interface UpdateIncomeRequest {
     date?: string;
     description?: string;
     notes?: string;
-    recurring_type?: "one-time" | "daily" | "weekly" | "monthly" | "yearly";
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";
-    start_date?: string;
-    end_date?: string;
     source_rule_id?: string;
 }
 
@@ -605,20 +586,3 @@ export interface SkipExpenseRequest {
     id: string;
 }
 
-export interface BackfillRequest {
-    userId?: string;
-    dryRun: boolean;
-}
-
-export interface BackfillResponse {
-    dry_run: boolean;
-    target_user_id: string;
-    legacy_expenses?: number;
-    legacy_incomes?: number;
-    legacy_total?: number;
-    expense_rules?: number;
-    income_rules?: number;
-    expense_instances?: number;
-    income_instances?: number;
-    legacy_remaining?: number;
-}

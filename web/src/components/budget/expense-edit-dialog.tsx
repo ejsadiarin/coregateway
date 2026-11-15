@@ -26,12 +26,10 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onSubmit }: Edi
     category_id: expense.category_id,
     expense_date: expense.expense_date,
     notes: expense.notes,
-    recurring_type: expense.recurring_type,
     priority: expense.priority,
     status: expense.status,
     is_debt: expense.is_debt,
-    start_date: expense.start_date,
-    end_date: expense.end_date,
+    source_rule_id: expense.source_rule_id,
   };
 
   return (

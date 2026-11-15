@@ -41,9 +41,7 @@ import type {
   BudgetExportPayload,
   BudgetImportResult,
   SkipIncomeRequest,
-  SkipExpenseRequest,
-  BackfillRequest,
-  BackfillResponse
+  SkipExpenseRequest
 } from '@/types/api';
 
 // Same-origin ('') in production builds: nginx proxies /api/ to the backends,
@@ -427,7 +425,6 @@ export async function fetchExpenses(
   if (params.start_date) searchParams.append('start_date', params.start_date);
   if (params.end_date) searchParams.append('end_date', params.end_date);
   if (params.category_id) searchParams.append('category_id', params.category_id);
-  if (params.recurring_type) searchParams.append('recurring_type', params.recurring_type);
 
   const res = await fetch(url + `/api/budget/expenses?${searchParams.toString()}`, {
     credentials: 'include'
@@ -698,7 +695,6 @@ export async function fetchIncomes(
   params: PaginationParams & {
     start_date?: string;
     end_date?: string;
-    recurring_type?: string;
   }
 ): Promise<PaginatedResponse<Income>> {
   const searchParams = new URLSearchParams();
@@ -706,7 +702,6 @@ export async function fetchIncomes(
   if (params.page_size) searchParams.append('page_size', params.page_size.toString());
   if (params.start_date) searchParams.append('start_date', params.start_date);
   if (params.end_date) searchParams.append('end_date', params.end_date);
-  if (params.recurring_type) searchParams.append('recurring_type', params.recurring_type);
 
   const res = await fetch(url + `/api/budget/incomes?${searchParams.toString()}`, {
     credentials: 'include'
@@ -857,26 +852,6 @@ export async function importBudgetJSON(payload: BudgetExportPayload): Promise<Bu
   return res.json();
 }
 
-export async function backfillBudget({ userId, dryRun }: BackfillRequest): Promise<BackfillResponse> {
-  const params = new URLSearchParams();
-  if (dryRun) {
-    params.set('dry_run', 'true');
-  }
-  if (userId) {
-    params.set('user_id', userId);
-  }
-  const query = params.toString();
-  const res = await fetch(url + `/api/budget/admin/backfill${query ? `?${query}` : ''}`, {
-    method: 'POST',
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Backfill failed' }));
-    throw new Error(error.error || 'Backfill failed');
-  }
-  return res.json();
-}
-
 export async function skipIncome(data: SkipIncomeRequest): Promise<{ status: string }> {
   const res = await fetch(url + '/api/budget/incomes/skip', {
     method: 'POST',
@@ -907,16 +882,6 @@ export async function skipExpense(data: SkipExpenseRequest): Promise<{ status: s
     throw new Error(error.error || 'Failed to skip expense occurrence');
   }
   return res.json();
-}
-
-export async function cancelRecurringExpense(id: string): Promise<Expense> {
-  const today = new Date().toISOString().split('T')[0];
-  return updateExpense(id, { end_date: today });
-}
-
-export async function cancelRecurringIncome(id: string): Promise<Income> {
-  const today = new Date().toISOString().split('T')[0];
-  return updateIncome(id, { end_date: today });
 }
 
 export async function fetchBudgetRemaining(): Promise<BudgetRemainingResponse> {

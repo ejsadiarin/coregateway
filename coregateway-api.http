@@ -369,17 +369,9 @@ Content-Type: application/json
 
 GET {{host}}/api/budget/remaining
 
-### Admin path without admin scope (expect 403)
+### Admin path without admin scope (expect 403; the gateway gates /api/budget/admin/*)
 
-POST {{host}}/api/budget/admin/backfill?dry_run=true
-
-### Admin backfill dry-run (admin session, expect counts, no mutation)
-
-POST {{host}}/api/budget/admin/backfill?dry_run=true
-
-### Admin backfill execute for another user (admin session)
-
-POST {{host}}/api/budget/admin/backfill?user_id=PASTE_TARGET_USER_UUID_HERE
+POST {{host}}/api/budget/admin/anything
 
 
 # ─── Boards (reverse-proxied to coredraw) ──────────────────────────────────

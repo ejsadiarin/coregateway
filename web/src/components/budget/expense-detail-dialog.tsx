@@ -17,7 +17,7 @@ import { Edit, Trash2, Calendar, Repeat } from "lucide-react";
 import type { Expense, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 import { format } from "date-fns";
 import { safeFormat } from "@/lib/utils";
-import { formatSigned, isRecurringType, getRecurringLabel } from "@/lib/format";
+import { formatSigned } from "@/lib/format";
 import { EditExpenseDialog } from "./expense-edit-dialog";
 
 interface ExpenseDetailDialogProps {
@@ -44,7 +44,8 @@ export function ExpenseDetailDialog({
 
   if (!expense) return null;
 
-  const isRecurring = isRecurringType(expense.recurring_type);
+  // A rule entry is one occurrence of a recurring rule; anything else is one-time.
+  const isRecurring = Boolean(expense.source_rule_id);
 
   const handleEditClick = () => {
     if (isGuest && showToast) {
@@ -90,7 +91,7 @@ export function ExpenseDetailDialog({
                 className="text-sm"
               >
                 {isRecurring && <Repeat className="h-3 w-3 mr-1" />}
-                {getRecurringLabel(expense.recurring_type)}
+                {isRecurring ? "From a recurring rule" : "One-time"}
               </Badge>
             </div>
 
@@ -123,18 +124,7 @@ export function ExpenseDetailDialog({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4 shrink-0" />
               <span>
-                {isRecurring ? (
-                  <>
-                    {safeFormat(expense.start_date, (d) => format(d, "MMMM dd, yyyy"))}
-                    {expense.end_date ? (
-                      <> - {safeFormat(expense.end_date, (d) => format(d, "MMMM dd, yyyy"))}</>
-                    ) : (
-                      <> - Ongoing</>
-                    )}
-                  </>
-                ) : (
-                  safeFormat(expense.expense_date, (d) => format(d, "MMMM dd, yyyy"))
-                )}
+                {safeFormat(expense.expense_date, (d) => format(d, "MMMM dd, yyyy"))}
               </span>
             </div>
 
