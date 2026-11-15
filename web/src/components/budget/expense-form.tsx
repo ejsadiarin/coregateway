@@ -5,7 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCategories } from "@/hooks/use-budget";
+import { useExpenseCategories } from "@/hooks/use-budget";
+import { CategorySelect } from "./category-select";
+import { isUnknownCategoryError } from "@/lib/api";
+import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import type { CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 
 interface ExpenseFormProps {
@@ -15,8 +18,10 @@ interface ExpenseFormProps {
 }
 
 export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProps) {
-  const { data: categories } = useCategories();
+  const categoriesQuery = useExpenseCategories();
+  const categories = categoriesQuery.data;
 
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState<CreateExpenseRequest>({
     description: initialData?.description || "",
     // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
@@ -33,7 +38,18 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    setError("");
+    try {
+      await onSubmit(formData);
+    } catch (err) {
+      if (isUnknownCategoryError(err)) {
+        await categoriesQuery.refetch();
+        setFormData((current) => ({ ...current, category_id: undefined }));
+        setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Couldn't save this expense");
+    }
   };
 
   return (
@@ -77,28 +93,12 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
       </div>
 
       {/* Category */}
-      <div className="space-y-2">
-        <Label htmlFor="category">Category</Label>
-        <Select
-          value={formData.category_id || "none"}
-          onValueChange={(value) =>
-            setFormData({ ...formData, category_id: value === "none" ? undefined : value })
-          }
-        >
-          <SelectTrigger id="category">
-            <SelectValue placeholder="Select a category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">None</SelectItem>
-            {categories?.map((category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.icon && <span className="mr-2">{category.icon}</span>}
-                {category.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <CategorySelect
+        id="expense-category"
+        categories={categories}
+        value={formData.category_id}
+        onChange={(category_id) => setFormData({ ...formData, category_id })}
+      />
 
       {/* Priority */}
       <div className="space-y-2">
@@ -143,6 +143,12 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
           rows={3}
         />
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3 justify-end">

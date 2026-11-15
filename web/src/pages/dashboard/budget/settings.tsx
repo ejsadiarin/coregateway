@@ -1,11 +1,9 @@
 import { motion } from "motion/react";
 import { useState, type ChangeEvent } from "react";
 import {
-  useCategories,
+  useExpenseCategories,
+  useIncomeCategories,
   useTags,
-  useCreateCategory,
-  useUpdateCategory,
-  useDeleteCategory,
   useCreateTag,
   useUpdateTag,
   useDeleteTag,
@@ -16,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit2, Save, X, ArrowLeft, Download } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, ArrowLeft, Download, Tags } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Category, Tag, BudgetExportPayload, BudgetImportResult } from "@/types/api";
 import { Link } from "react-router-dom";
@@ -25,23 +23,54 @@ import { GuestBlockedError } from "@/hooks/use-budget";
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
+function CategoryList({ categories, isLoading }: { categories?: Category[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="flex flex-wrap gap-2" aria-label="Loading categories">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className="h-6 w-24 animate-pulse rounded-full bg-muted" />
+        ))}
+      </div>
+    );
+  }
+  if (!categories?.length) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+        <Tags className="h-4 w-4" aria-hidden />
+        No categories came back from corefinance.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {categories.map((category) => (
+        <Badge
+          key={category.id}
+          style={{
+            backgroundColor: category.color ? `${category.color}20` : undefined,
+            borderColor: category.color || undefined,
+            color: category.color || "inherit",
+          }}
+        >
+          {category.icon && <span className="mr-1">{category.icon}</span>}
+          {category.name}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
-  const { data: categories, isLoading: categoriesLoading } = useCategories();
+  const { data: expenseCategories, isLoading: expenseCategoriesLoading } = useExpenseCategories();
+  const { data: incomeCategories, isLoading: incomeCategoriesLoading } = useIncomeCategories();
   const { data: tags, isLoading: tagsLoading } = useTags();
 
-  const createCategory = useCreateCategory();
-  const updateCategory = useUpdateCategory();
-  const deleteCategory = useDeleteCategory();
   const createTag = useCreateTag();
   const updateTag = useUpdateTag();
   const deleteTag = useDeleteTag();
   const exportBudget = useExportBudgetJSON();
   const importBudget = useImportBudgetJSON();
   const { showToast } = useToast();
-
-  // Category form state
-  const [newCategory, setNewCategory] = useState({ name: "", color: "#3b82f6", icon: "" });
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
   // Tag form state
   const [newTag, setNewTag] = useState({ name: "", color: "#8b5cf6" });
@@ -129,59 +158,6 @@ export default function SettingsPage() {
     }
   };
 
-  // Category handlers
-  const handleCreateCategory = async () => {
-    if (!newCategory.name.trim()) return;
-    try {
-      await createCategory.mutateAsync(newCategory);
-      showToast("Category created successfully", "success");
-      setNewCategory({ name: "", color: "#3b82f6", icon: "" });
-    } catch (error) {
-      if (error instanceof GuestBlockedError) {
-        showToast(error.message, "warning");
-      } else {
-        showToast("Failed to create category", "error");
-      }
-    }
-  };
-
-  const handleUpdateCategory = async () => {
-    if (!editingCategory) return;
-    try {
-      await updateCategory.mutateAsync({
-        id: editingCategory.id,
-        data: {
-          name: editingCategory.name,
-          color: editingCategory.color,
-          icon: editingCategory.icon,
-        },
-      });
-      showToast("Category updated successfully", "success");
-      setEditingCategory(null);
-    } catch (error) {
-      if (error instanceof GuestBlockedError) {
-        showToast(error.message, "warning");
-      } else {
-        showToast("Failed to update category", "error");
-      }
-    }
-  };
-
-  const handleDeleteCategory = async (id: string) => {
-    if (confirm("Delete this category? This will not delete expenses.")) {
-      try {
-        await deleteCategory.mutateAsync(id);
-        showToast("Category deleted successfully", "success");
-      } catch (error) {
-        if (error instanceof GuestBlockedError) {
-          showToast(error.message, "warning");
-        } else {
-          showToast("Failed to delete category", "error");
-        }
-      }
-    }
-  };
-
   // Tag handlers
   const handleCreateTag = async () => {
     if (!newTag.name.trim()) return;
@@ -251,7 +227,7 @@ export default function SettingsPage() {
         </Link>
         <h1 className="text-primary mb-2">BUDGET SETTINGS</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your categories and tags
+          The fixed category lists, and your tags
         </p>
       </motion.div>
 
@@ -317,141 +293,39 @@ export default function SettingsPage() {
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Categories Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <Card>
-            <CardHeader>
-              <CardTitle>Categories</CardTitle>
-              <CardDescription>Organize expenses by category</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Add Category Form */}
-              <div className="space-y-3 p-4 border rounded-lg">
-                <Label>Add New Category</Label>
-                <div className="grid gap-2">
-                  <Input
-                    placeholder="Category name"
-                    value={newCategory.name}
-                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      placeholder="Icon (emoji)"
-                      value={newCategory.icon}
-                      onChange={(e) => setNewCategory({ ...newCategory, icon: e.target.value })}
-                    />
-                    <Input
-                      type="color"
-                      value={newCategory.color}
-                      onChange={(e) => setNewCategory({ ...newCategory, color: e.target.value })}
-                    />
-                  </div>
-                  <Button
-                    onClick={handleCreateCategory}
-                    disabled={!newCategory.name.trim() || createCategory.isPending}
-                    size="sm"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Category
-                  </Button>
-                </div>
-              </div>
+        <div className="space-y-8">
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: 0.1 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Expense categories</CardTitle>
+                <CardDescription>The fixed list every expense picks from</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CategoryList categories={expenseCategories} isLoading={expenseCategoriesLoading} />
+              </CardContent>
+            </Card>
+          </motion.div>
 
-              {/* Categories List */}
-              <div className="space-y-2">
-                {categoriesLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading...</p>
-                ) : categories && categories.length > 0 ? (
-                  categories.map((category) => (
-                    <div
-                      key={category.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      {editingCategory?.id === category.id ? (
-                        <div className="flex-1 grid gap-2">
-                          <Input
-                            value={editingCategory.name}
-                            onChange={(e) =>
-                              setEditingCategory({ ...editingCategory, name: e.target.value })
-                            }
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <Input
-                              value={editingCategory.icon || ""}
-                              onChange={(e) =>
-                                setEditingCategory({ ...editingCategory, icon: e.target.value })
-                              }
-                            />
-                            <Input
-                              type="color"
-                              value={editingCategory.color || "#3b82f6"}
-                              onChange={(e) =>
-                                setEditingCategory({ ...editingCategory, color: e.target.value })
-                              }
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleUpdateCategory}>
-                              <Save className="h-4 w-4" />
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setEditingCategory(null)}
-                            >
-                              <X className="mr-2 h-4 w-4" />
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              style={{
-                                backgroundColor: category.color ? `${category.color}20` : undefined,
-                                borderColor: category.color || undefined,
-                                color: category.color || "inherit",
-                              }}
-                            >
-                              {category.icon && <span className="mr-1">{category.icon}</span>}
-                              {category.name}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setEditingCategory(category)}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => handleDeleteCategory(category.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No categories yet
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: 0.15 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>Income categories</CardTitle>
+                <CardDescription>The fixed list every income picks from</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CategoryList categories={incomeCategories} isLoading={incomeCategoriesLoading} />
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
 
         {/* Tags Section */}
         <motion.div

@@ -1,14 +1,17 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes } from "@/lib/api";
+import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes, isUnknownCategoryError } from "@/lib/api";
 import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { feedKey } from "@/lib/feed";
 import { entryOf, ruleOf, skipStatus, today, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
 import { ruleReviewKey } from "@/hooks/use-rule-review";
+import { editToPickCategory } from "@/lib/category-error";
 import { addTag, createRule, fetchRules, fetchTagLinks, removeTag, updateRule, type RuleInput } from "@/lib/ledger-api";
 import {
   budgetKeys,
+  categoryListKey,
   GuestBlockedError,
+  saveFailureMessage,
   useCreateExpense,
   useCreateIncome,
   useDeleteExpense,
@@ -53,7 +56,7 @@ export function useRules(kind: LedgerKind) {
 
 export function useKindCategories(kind: LedgerKind) {
   return useQuery<Category[]>({
-    queryKey: [...budgetKeys.categories(), kind],
+    queryKey: categoryListKey(kind),
     queryFn: async () => (await (kind === "expense" ? fetchExpenseCategories() : fetchIncomeCategories())) ?? [],
     // Each category gets a color of its own here, so every chip agrees.
     select: withHues,
@@ -155,6 +158,11 @@ export function useSaveEntry(kind: LedgerKind) {
       }
       return record;
     },
+    onError: (error) => {
+      // A refused category is gone from the fixed list; read it again so the
+      // next pick can only name a current one.
+      if (isUnknownCategoryError(error)) qc.invalidateQueries({ queryKey: categoryListKey(kind) });
+    },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: budgetKeys.tags() });
     },
@@ -177,6 +185,9 @@ export function useSaveRule(kind: LedgerKind) {
     mutationFn: ({ id, rule }: { id?: string; rule: RuleInput }) => {
       if (isGuest) throw new GuestBlockedError();
       return id ? updateRule(kind, id, rule) : createRule(kind, rule);
+    },
+    onError: (error) => {
+      if (isUnknownCategoryError(error)) qc.invalidateQueries({ queryKey: categoryListKey(kind) });
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: kind === "expense" ? budgetKeys.recurringExpenses() : budgetKeys.recurringIncomes() });
@@ -254,7 +265,7 @@ export function useToggleSkip() {
       qc.invalidateQueries({ queryKey: feedKey });
       return true;
     } catch (err) {
-      showToast(err instanceof GuestBlockedError ? err.message : `Couldn't do that: ${(err as Error).message}`, "error");
+      showToast(saveFailureMessage(err, "Couldn't do that: ", editToPickCategory("entry")), "error");
       return false;
     }
   };

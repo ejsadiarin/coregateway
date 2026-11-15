@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/lib/api";
+import { apiBaseUrl, throwApiError } from "@/lib/api";
 import type { Cadence, LedgerKind, Priority, RawRule } from "@/lib/ledger";
 import type { FeedPage, StaleEntry } from "@/lib/rule-review";
 
@@ -14,8 +14,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: init.body ? { "Content-Type": "application/json", ...init.headers } : init.headers,
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error || body?.message || `Request failed (error ${res.status})`);
+    return throwApiError(res, `Request failed (error ${res.status})`);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;

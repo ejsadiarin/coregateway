@@ -5,7 +5,8 @@ import { BottomSheet } from "./bottom-sheet";
 import { CategoryChip, NeedChip } from "./chips";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
-import { GuestBlockedError } from "@/hooks/use-budget";
+import { saveFailureMessage } from "@/hooks/use-budget";
+import { editToPickCategory } from "@/lib/category-error";
 import { ruleInput, useDeleteEntry, useSaveEntry, useSaveRule } from "@/hooks/use-ledger";
 import { cadencePhrase, counted, ended, money, signed, today, type Entry, type Rule } from "@/lib/ledger";
 import { staleReport, type StaleReport } from "@/lib/rule-review";
@@ -52,7 +53,7 @@ export function RuleSheet({
       await what();
       showToast(done, "success");
     } catch (e) {
-      showToast(e instanceof GuestBlockedError ? e.message : `Couldn't do that: ${(e as Error).message}`, "error");
+      showToast(saveFailureMessage(e, "Couldn't do that: ", editToPickCategory("rule")), "error");
     }
   };
 

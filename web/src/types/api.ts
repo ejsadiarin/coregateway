@@ -123,18 +123,6 @@ export interface Expense {
     updated_at: string;
 }
 
-export interface CreateCategoryRequest {
-    name: string;
-    color?: string;
-    icon?: string;
-}
-
-export interface UpdateCategoryRequest {
-    name: string;
-    color?: string;
-    icon?: string;
-}
-
 export interface CreateTagRequest {
     name: string;
     color?: string;
@@ -253,6 +241,7 @@ export interface CreateIncomeRequest {
     currency: string;
     date: string;
     description?: string;
+    category_id?: string;
     notes?: string;
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";
@@ -264,6 +253,7 @@ export interface UpdateIncomeRequest {
     currency?: string;
     date?: string;
     description?: string;
+    category_id?: string;
     notes?: string;
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";

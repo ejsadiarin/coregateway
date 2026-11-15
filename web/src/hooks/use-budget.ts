@@ -3,10 +3,9 @@ import { deleteBudgetNote, syncBudgetNotes, syncRecordOf } from '@/lib/budget-sy
 import { feedKey } from '@/lib/feed';
 import type { BudgetKind } from '@/types/feed';
 import {
-  fetchCategories,
-  createCategory,
-  updateCategory,
-  deleteCategory,
+  fetchExpenseCategories,
+  fetchIncomeCategories,
+  isUnknownCategoryError,
   fetchTags,
   fetchTag,
   createTag,
@@ -47,8 +46,6 @@ import type {
   Category,
   Tag,
   Expense,
-  CreateCategoryRequest,
-  UpdateCategoryRequest,
   CreateTagRequest,
   UpdateTagRequest,
   CreateExpenseRequest,
@@ -87,6 +84,15 @@ export class GuestBlockedError extends Error {
     super(message);
     this.name = 'GuestBlockedError';
   }
+}
+
+// saveFailureMessage explains a failed write: a stale category says how to
+// pick another, a guest gets the read-only reason, anything else the caller's
+// summary and the API's message.
+export function saveFailureMessage(error: unknown, fallback: string, staleCategory: string): string {
+  if (isUnknownCategoryError(error)) return staleCategory;
+  if (error instanceof GuestBlockedError) return error.message;
+  return `${fallback}${(error as Error).message}`;
 }
 
 // query keys for cache management
@@ -137,57 +143,22 @@ export const budgetKeys = {
 
 // Categories
 
-export function useCategories() {
+export const categoryListKey = (kind: 'expense' | 'income') =>
+  [...budgetKeys.categories(), kind] as const;
+
+export function useExpenseCategories() {
   return useQuery<Category[]>({
-    queryKey: budgetKeys.categoriesList(),
-    queryFn: fetchCategories,
+    queryKey: categoryListKey('expense'),
+    queryFn: fetchExpenseCategories,
     staleTime: 300000
   });
 }
 
-export function useCreateCategory() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: (data: CreateCategoryRequest) => {
-      if (isGuest) throw new GuestBlockedError();
-      return createCategory(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.categories() });
-    }
-  });
-}
-
-export function useUpdateCategory() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateCategoryRequest }) => {
-      if (isGuest) throw new GuestBlockedError();
-      return updateCategory(id, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.categories() });
-    }
-  });
-}
-
-export function useDeleteCategory() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: (id: string) => {
-      if (isGuest) throw new GuestBlockedError();
-      return deleteCategory(id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.categories() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
-    }
+export function useIncomeCategories() {
+  return useQuery<Category[]>({
+    queryKey: categoryListKey('income'),
+    queryFn: fetchIncomeCategories,
+    staleTime: 300000
   });
 }
 

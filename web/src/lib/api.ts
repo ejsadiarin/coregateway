@@ -8,8 +8,6 @@ import type {
   PriorityGroup,
   Tag,
   Expense,
-  CreateCategoryRequest,
-  UpdateCategoryRequest,
   CreateTagRequest,
   UpdateTagRequest,
   CreateExpenseRequest,
@@ -50,6 +48,36 @@ import type {
 const url = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:8080');
 
 export const apiBaseUrl = url;
+
+// ApiError is a refusal the owner can act on, carrying the status and
+// corefinance's own explanation.
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: string
+  ) {
+    super(detail || `Request failed (error ${status})`);
+    this.name = 'ApiError';
+  }
+}
+
+// corefinance answers 400 with this wording for a category id that is not in
+// the fixed list, such as one kept from before its ADR-0002.
+export function isUnknownCategoryError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    /^unknown category\b/i.test(error.detail)
+  );
+}
+
+// throwApiError carries corefinance's own explanation for a refusal the owner
+// can fix (400); other failures keep the caller's summary.
+export async function throwApiError(res: Response, fallback: string): Promise<never> {
+  const body = res.status === 400 ? await res.json().catch(() => null) : null;
+  const detail = typeof body?.error === 'string' ? body.error : fallback;
+  throw new ApiError(res.status, detail);
+}
 
 function wrapPaginated<T>(data: T[], page: number = 1, pageSize: number = 50): PaginatedResponse<T> {
   const total = data.length;
@@ -218,46 +246,6 @@ export async function fetchExpenseCategories(): Promise<Category[]> {
   return res.json();
 }
 
-export async function createExpenseCategory(data: CreateCategoryRequest): Promise<Category> {
-  const res = await fetch(url + '/api/budget/expense-categories', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) {
-    throw new Error(`Error creating expense category: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function updateExpenseCategory(id: string, data: UpdateCategoryRequest): Promise<Category> {
-  const res = await fetch(url + `/api/budget/expense-categories/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) {
-    throw new Error(`Error updating expense category: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function deleteExpenseCategory(id: string): Promise<void> {
-  const res = await fetch(url + `/api/budget/expense-categories/${id}`, {
-    method: 'DELETE',
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error deleting expense category: ${res.status}`);
-  }
-}
-
 // Income Categories
 
 export async function fetchIncomeCategories(): Promise<Category[]> {
@@ -270,48 +258,8 @@ export async function fetchIncomeCategories(): Promise<Category[]> {
   return res.json();
 }
 
-export async function createIncomeCategory(data: CreateCategoryRequest): Promise<Category> {
-  const res = await fetch(url + '/api/budget/income-categories', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) {
-    throw new Error(`Error creating income category: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function updateIncomeCategory(id: string, data: UpdateCategoryRequest): Promise<Category> {
-  const res = await fetch(url + `/api/budget/income-categories/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) {
-    throw new Error(`Error updating income category: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function deleteIncomeCategory(id: string): Promise<void> {
-  const res = await fetch(url + `/api/budget/income-categories/${id}`, {
-    method: 'DELETE',
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error deleting income category: ${res.status}`);
-  }
-}
-
-// Unified category helpers (for backward compat in hooks)
-// These combine both expense and income categories
+// Both fixed lists at once, for naming a Feed note's category whichever kind
+// the record it links to has.
 export async function fetchCategories(): Promise<Category[]> {
   const [expense, income] = await Promise.all([
     fetchExpenseCategories(),
@@ -326,18 +274,6 @@ export async function fetchCategories(): Promise<Category[]> {
     }
   }
   return all;
-}
-
-export async function createCategory(data: CreateCategoryRequest): Promise<Category> {
-  return createExpenseCategory(data);
-}
-
-export async function updateCategory(id: string, data: UpdateCategoryRequest): Promise<Category> {
-  return updateExpenseCategory(id, data);
-}
-
-export async function deleteCategory(id: string): Promise<void> {
-  return deleteExpenseCategory(id);
 }
 
 // Priority Groups
@@ -478,7 +414,7 @@ export async function createExpense(data: CreateExpenseRequest): Promise<Expense
     body: JSON.stringify(data)
   });
   if (!res.ok) {
-    throw new Error(`Error creating expense: ${res.status}`);
+    return throwApiError(res, `Error creating expense: ${res.status}`);
   }
   return res.json();
 }
@@ -493,7 +429,7 @@ export async function updateExpense(id: string, data: UpdateExpenseRequest): Pro
     body: JSON.stringify(data)
   });
   if (!res.ok) {
-    throw new Error(`Error updating expense: ${res.status}`);
+    return throwApiError(res, `Error updating expense: ${res.status}`);
   }
   return res.json();
 }
@@ -733,7 +669,7 @@ export async function createIncome(data: CreateIncomeRequest): Promise<Income> {
     body: JSON.stringify(data)
   });
   if (!res.ok) {
-    throw new Error(`Error creating income: ${res.status}`);
+    return throwApiError(res, `Error creating income: ${res.status}`);
   }
   return res.json();
 }
@@ -748,7 +684,7 @@ export async function updateIncome(id: string, data: UpdateIncomeRequest): Promi
     body: JSON.stringify(data)
   });
   if (!res.ok) {
-    throw new Error(`Error updating income: ${res.status}`);
+    return throwApiError(res, `Error updating income: ${res.status}`);
   }
   return res.json();
 }

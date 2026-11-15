@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
-import { CalendarDays, Plus, Repeat, X } from "lucide-react";
+import { CalendarDays, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { categoryIcon, hueClasses } from "./chips";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { isUnknownCategoryError } from "@/lib/api";
+import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import { GuestBlockedError, useTags } from "@/hooks/use-budget";
 import {
   ruleInput,
@@ -103,7 +105,8 @@ function EntryForm({
   const [tags, setTags] = useState<TagPick[] | null>(null);
   const [error, setError] = useState("");
 
-  const { data: categories = [] } = useKindCategories(kind);
+  const categoriesQuery = useKindCategories(kind);
+  const categories = categoriesQuery.data ?? [];
   const { data: entries = [] } = useEntries(kind);
   const { data: allTags = [] } = useTags();
   const tagIds = useEntryTags(kind);
@@ -182,6 +185,12 @@ function EntryForm({
       }
       onClose();
     } catch (e) {
+      if (isUnknownCategoryError(e)) {
+        await categoriesQuery.refetch();
+        setCategoryId(undefined);
+        setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
       setError(e instanceof GuestBlockedError ? e.message : `Couldn't save: ${(e as Error).message}`);
     }
   };
@@ -379,7 +388,12 @@ function EntryForm({
                   </button>
                 );
               })}
-            {categories.length === 0 && <span className="text-sm text-muted-foreground">No categories yet. Add them in Budget settings.</span>}
+            {categories.length === 0 && (
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Tags className="h-4 w-4" aria-hidden />
+                No categories available.
+              </span>
+            )}
           </div>
         </Field>
 

@@ -3,6 +3,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useIncomeCategories } from "@/hooks/use-budget";
+import { CategorySelect } from "./category-select";
+import { isUnknownCategoryError } from "@/lib/api";
+import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import type { CreateIncomeRequest, UpdateIncomeRequest } from "@/types/api";
 
 interface IncomeFormProps {
@@ -13,12 +17,17 @@ interface IncomeFormProps {
 }
 
 export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: IncomeFormProps) {
+  const categoriesQuery = useIncomeCategories();
+  const categories = categoriesQuery.data;
+  const [error, setError] = useState("");
+
   const [formData, setFormData] = useState<CreateIncomeRequest>({
     // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
     amount: Number(initialData?.amount) || 0,
     currency: initialData?.currency || "PHP",
     date: initialData?.date || new Date().toISOString().split('T')[0],
     description: initialData?.description || "",
+    category_id: initialData?.category_id,
     // corefinance requires both; the form doesn't ask, so keep what an
     // edited income has, as the expense form does.
     priority: initialData?.priority || "need",
@@ -28,7 +37,18 @@ export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: Incom
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    setError("");
+    try {
+      await onSubmit(formData);
+    } catch (err) {
+      if (isUnknownCategoryError(err)) {
+        await categoriesQuery.refetch();
+        setFormData((current) => ({ ...current, category_id: undefined }));
+        setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Couldn't save this income");
+    }
   };
 
   return (
@@ -70,6 +90,14 @@ export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: Incom
         />
       </div>
 
+      {/* Category */}
+      <CategorySelect
+        id="income-category"
+        categories={categories}
+        value={formData.category_id}
+        onChange={(category_id) => setFormData({ ...formData, category_id })}
+      />
+
       {/* Date */}
       <div className="space-y-2">
         <Label htmlFor="date">Date *</Label>
@@ -81,6 +109,12 @@ export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: Incom
           onChange={(e) => setFormData({ ...formData, date: e.target.value })}
         />
       </div>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2 pt-4">

@@ -101,18 +101,20 @@ export default function BudgetDashboard() {
   };
 
   const handleEditExpense = async (data: CreateExpenseRequest | UpdateExpenseRequest) => {
+    if (!viewingExpense) return;
     try {
-      if (!viewingExpense) return;
       await updateExpense.mutateAsync({ id: viewingExpense.id, data });
-      showToast("Expense updated successfully", "success");
-      setViewingExpense(null);
     } catch (error) {
       if (error instanceof GuestBlockedError) {
         showToast(error.message, "warning");
-      } else {
-        showToast("Failed to update expense", "error");
+        return;
       }
+      // ExpenseForm shows the failure and keeps the form open so the owner
+      // can fix it.
+      throw error;
     }
+    showToast("Expense updated successfully", "success");
+    setViewingExpense(null);
   };
 
   const handleDeleteExpense = async (id: string) => {
@@ -130,18 +132,20 @@ export default function BudgetDashboard() {
   };
 
   const handleUpdateIncome = async (data: UpdateIncomeRequest) => {
+    if (!editingIncome) return;
     try {
-      if (!editingIncome) return;
       await updateIncome.mutateAsync({ id: editingIncome.id, data });
-      showToast("Income updated successfully", "success");
-      setEditingIncome(null);
     } catch (error) {
       if (error instanceof GuestBlockedError) {
         showToast(error.message, "warning");
-      } else {
-        showToast("Failed to update income", "error");
+        return;
       }
+      // IncomeForm shows the failure and keeps the form open so the owner
+      // can fix it.
+      throw error;
     }
+    showToast("Income updated successfully", "success");
+    setEditingIncome(null);
   };
 
   const handleDeleteIncome = async (income: Income) => {
@@ -483,6 +487,7 @@ export default function BudgetDashboard() {
                 currency: editingIncome.currency,
                 date: editingIncome.date,
                 description: editingIncome.description,
+                category_id: editingIncome.category_id,
                 source_rule_id: editingIncome.source_rule_id,
               }}
               onSubmit={handleUpdateIncome}

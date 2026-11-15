@@ -12,8 +12,8 @@ interface EditExpenseDialogProps {
 
 export function EditExpenseDialog({ expense, open, onOpenChange, onSubmit }: EditExpenseDialogProps) {
   const handleSubmit = async (data: CreateExpenseRequest | UpdateExpenseRequest) => {
-    onOpenChange(false);
     await onSubmit(data);
+    onOpenChange(false);
   };
 
   if (!expense) return null;

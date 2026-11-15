@@ -2,8 +2,9 @@ import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { BottomSheet } from "./bottom-sheet";
 import { useToast } from "@/components/ui/toast";
-import { GuestBlockedError } from "@/hooks/use-budget";
+import { saveFailureMessage } from "@/hooks/use-budget";
 import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
+import { editToPickCategory } from "@/lib/category-error";
 import { signed, type Entry, type Rule } from "@/lib/ledger";
 import type { StaleReport } from "@/lib/rule-review";
 
@@ -43,7 +44,7 @@ export function StaleReviewSheet({
       await save.mutateAsync({ id, input: entryInput(e, { status: "skipped" }) });
       settle(id);
     } catch (err) {
-      showToast(err instanceof GuestBlockedError ? err.message : `Couldn't skip it: ${(err as Error).message}`, "error");
+      showToast(saveFailureMessage(err, "Couldn't skip it: ", editToPickCategory("entry")), "error");
     }
   };
 

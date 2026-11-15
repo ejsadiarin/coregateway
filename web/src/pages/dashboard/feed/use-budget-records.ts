@@ -10,7 +10,7 @@ import {
   saveShown,
   showBudget,
 } from "@/lib/feed-records";
-import { budgetKeys } from "@/hooks/use-budget";
+import { budgetKeys, categoryListKey } from "@/hooks/use-budget";
 import type { Note, ShownRecord } from "@/types/feed";
 
 // Names a budget record's category from its id, when it has one.
@@ -45,7 +45,7 @@ export function useBudgetRecords(
     enabled,
   });
   const incomeCategories = useQuery({
-    queryKey: [...budgetKeys.categories(), "income"],
+    queryKey: categoryListKey("income"),
     queryFn: fetchIncomeCategories,
     staleTime: 300000,
     enabled,
