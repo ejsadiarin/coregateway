@@ -59,7 +59,9 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/api/auth/register" \
   -H 'Content-Type: application/json' -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
 [ "$code" = 201 ] || die "register returned $code"
 USER_ID=$(api POST /api/auth/login "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" | jq -r .id)
-expect "timezone saved" "$TZNAME" "$(api PUT /api/budget/settings "{\"timezone\":\"$TZNAME\"}" | jq -r .timezone)"
+# The gateway owns the timezone (ADR-0005); corefinance reads it from the token.
+expect "timezone saved at the gateway" "$TZNAME" \
+  "$(api PUT "/api/users/$USER_ID/timezone" "{\"timezone\":\"$TZNAME\"}" | jq -r .timezone)"
 
 TODAY=$(TZ=$TZNAME date +%F)
 printf '[smoke] user %s, today in %s is %s (UTC: %s)\n' "$EMAIL" "$TZNAME" "$TODAY" "$(date -u +%F)"
