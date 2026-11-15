@@ -117,14 +117,11 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	// claim (user authority stays in the gateway; downstream never looks up
 	// users). Shared by every proxy.
 	userLookup := func(ctx context.Context, id uuid.UUID) (middleware.UserRecord, bool, error) {
-		role, tz, err := s.AuthService.LookupUser(ctx, id)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return middleware.UserRecord{}, false, nil
-			}
-			return middleware.UserRecord{}, false, err
+		user, err := s.AuthService.LookupUser(ctx, id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return middleware.UserRecord{}, false, nil
 		}
-		return middleware.UserRecord{Role: role, Timezone: tz}, true, nil
+		return user, err == nil, err
 	}
 
 	// budget — authenticated at the edge, streamed to corefinance-api.

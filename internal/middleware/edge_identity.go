@@ -21,12 +21,9 @@ type APIKeyValidator interface {
 	ValidateKey(ctx context.Context, presented string) (userID uuid.UUID, keyID string, scopes []string, err error)
 }
 
-// UserRecord is what the edge needs to know about a user: their role and
-// their timezone (an IANA zone, already defaulted to UTC when unset).
-type UserRecord struct {
-	Role     string
-	Timezone string
-}
+// UserRecord is what the gateway needs to know about a user to mint their
+// internal token (auth.UserRecord).
+type UserRecord = auth.UserRecord
 
 // UserLookupFunc reports a user's record, and whether the user exists. It
 // backs ?user_id= validation, gives a key its owner's restrictions, and

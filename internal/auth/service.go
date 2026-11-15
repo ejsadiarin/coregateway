@@ -139,14 +139,22 @@ func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.
 	}, nil
 }
 
-// LookupUser reports a user's role and timezone (timezone.Default when
-// unset) for the edge. A missing user is pgx.ErrNoRows, wrapped.
-func (s *Service) LookupUser(ctx context.Context, id uuid.UUID) (role, tz string, err error) {
+// UserRecord is what the gateway needs to know about a user to mint their
+// internal token: their role and their timezone (an IANA zone, already
+// defaulted to UTC when unset).
+type UserRecord struct {
+	Role     string
+	Timezone string
+}
+
+// LookupUser reports a user's record. A missing user is pgx.ErrNoRows,
+// wrapped.
+func (s *Service) LookupUser(ctx context.Context, id uuid.UUID) (UserRecord, error) {
 	user, err := s.queries.GetUser(ctx, id)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to look up user: %w", err)
+		return UserRecord{}, fmt.Errorf("failed to look up user: %w", err)
 	}
-	return user.Role, timezone.Effective(user.Timezone), nil
+	return UserRecord{Role: user.Role, Timezone: timezone.Effective(user.Timezone)}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*usertypes.User, error) {
