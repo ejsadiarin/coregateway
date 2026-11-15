@@ -81,6 +81,12 @@ help:
 	@echo "  make local-check      Only check submodules, Dockerfiles and compose file"
 	@echo "  make local-smoke      Smoke-test the cron worker end to end (stack must be up)"
 	@echo ""
+	@echo -e "${GREEN}Stack (compose.yml: every service on the .env databases, bound to localhost + tailnet)${NC}"
+	@echo "  make stack-up         Build and start the stack, bound to this host's tailnet IP"
+	@echo "  make stack-down       Stop the stack"
+	@echo "  make stack-logs       Follow logs (S=<service> for one)"
+	@echo "  make stack-ps         List the stack's containers"
+	@echo ""
 	@echo -e "${GREEN}Building${NC}"
 	@echo "  make build            Build binary to $(BUILD_DIR)/$(BINARY_NAME)"
 	@echo "  make build-docker     Build Docker image"
@@ -309,6 +315,30 @@ watch-test:
 	fi
 
 # ==============================================================================
+# Stack (compose.yml)
+# ==============================================================================
+#
+# compose.yml binds the web and gateway to localhost and to this host's
+# tailnet IP, read from `tailscale ip -4` on every run so a changed IP needs
+# no edit. Without tailscale, the second binding falls back to 127.0.0.2
+# (loopback). It runs on the databases in .env and each service's .env.
+
+STACK = TAILSCALE_IP=$$(tailscale ip -4 2>/dev/null | head -n1) docker compose -f compose.yml
+
+stack-up:
+	@$(STACK) up -d --build
+	@ip=$$(tailscale ip -4 2>/dev/null | head -n1); echo -e "${GREEN}Web: http://$${ip:-127.0.0.1}:3000${NC}"
+
+stack-down:
+	@$(STACK) down
+
+stack-logs:
+	@$(STACK) logs -f $(S)
+
+stack-ps:
+	@$(STACK) ps
+
+# ==============================================================================
 # Cross-Service (x-*)
 # ==============================================================================
 #
@@ -436,6 +466,7 @@ env-check:
 # Phony targets
 .PHONY: help run dev build build-docker start run-background \
         local-up local-down local-reset local-logs local-ps local-migrate local-check local-smoke \
+        stack-up stack-down stack-logs stack-ps \
         migrate-up migrate-down migrate-redo migrate-status \
         migrate-create migrate-baseline migrate-fix \
         sqlc sqlc-check swagger generate \
