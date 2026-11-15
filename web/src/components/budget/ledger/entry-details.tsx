@@ -5,12 +5,13 @@ import { BottomSheet } from "./bottom-sheet";
 import { CategoryBadge, CategoryChip, NeedChip, StatusChip, TagChip } from "./chips";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
-import { useDeleteEntry } from "@/hooks/use-ledger";
+import { entryInput, useDeleteEntry, useSaveEntry } from "@/hooks/use-ledger";
+import { skipStatus } from "@/lib/feed-rail";
 import { cadenceLabel, signed, today, type Entry, type Rule } from "@/lib/ledger";
 import type { Category, Tag } from "@/types/api";
 
 // EntryDetails is what a tap on a row opens: the whole entry, and Edit and
-// Delete.
+// Delete. A rule entry can also be skipped for its date alone.
 export function EntryDetails({
   entry,
   category,
@@ -32,6 +33,17 @@ export function EntryDetails({
   const { showToast } = useToast();
   const [confirm, setConfirm] = useState(false);
   const noun = entry.kind === "expense" ? "expense" : "income";
+
+  const save = useSaveEntry(entry.kind);
+  const skipped = entry.status === "skipped";
+  const toggleSkip = async () => {
+    try {
+      await save.mutateAsync({ id: entry.id, input: entryInput(entry, { status: skipStatus(entry.status) }) });
+      showToast(skipped ? "It counts again" : "Skipped this date", "success");
+    } catch (e) {
+      showToast(e instanceof GuestBlockedError ? e.message : `Couldn't do that: ${(e as Error).message}`, "error");
+    }
+  };
 
   const del = async () => {
     try {
@@ -80,6 +92,24 @@ export function EntryDetails({
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden />
         </button>
+      )}
+
+      {entry.ruleId && !confirm && (
+        <div className="flex flex-col gap-2.5 rounded-2xl border border-primary/25 bg-primary/[0.06] p-3.5">
+          <p className="text-sm leading-relaxed">
+            {skipped
+              ? "Skipped: it stays in your history, crossed out, and doesn't count."
+              : "Not paying this one? Skip just this date. It stays in your history, crossed out, and stops counting. The rule carries on."}
+          </p>
+          <button
+            type="button"
+            disabled={save.isPending}
+            onClick={toggleSkip}
+            className="min-h-11 rounded-xl border border-primary/40 bg-primary/10 text-[15px] font-semibold text-[#f4a084] disabled:opacity-50"
+          >
+            {skipped ? "Undo skip" : "Skip this date"}
+          </button>
+        </div>
       )}
 
       {confirm ? (

@@ -6,6 +6,7 @@ import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
 import { useRuleReview } from "@/hooks/use-rule-review";
 import { cadenceLabel, type Entry, type LedgerKind, type Rule } from "@/lib/ledger";
 import { groupNewByRule } from "@/lib/rule-review";
+import { skipStatus } from "@/lib/feed-rail";
 
 // NewFromRules is the top of a ledger: the rule entries written since the
 // owner last marked them reviewed on this device, grouped by rule (#13).
@@ -33,9 +34,8 @@ export function NewFromRules({
   // Skipping keeps the entry, marked skipped; bringing it back lets its
   // date decide whether it is posted or still pending.
   const toggleSkip = async (e: Entry) => {
-    const skipped = e.status === "skipped";
     try {
-      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipped ? undefined : "skipped" }) });
+      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipStatus(e.status) }) });
     } catch (err) {
       showToast(err instanceof GuestBlockedError ? err.message : `Couldn't do that: ${(err as Error).message}`, "error");
     }

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRules } from "@/hooks/use-ledger";
-import { ruleLabel } from "@/lib/ledger";
+import { entryInput, useRules, useSaveEntry } from "@/hooks/use-ledger";
+import { entryOf, ruleLabel } from "@/lib/ledger";
+import { canSkip, skipStatus } from "@/lib/feed-rail";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,9 +19,11 @@ import {
   Repeat,
   SendHorizontal,
   SquareKanban,
+  SkipForward,
   Trash2,
   Wallet,
 } from "lucide-react";
+import type { Expense, Income } from "@/types/api";
 import {
   appendNote,
   archivePrompt,
@@ -208,6 +211,9 @@ interface NoteActions {
   // Deletes a live expense or income from corefinance; its note stays,
   // marked deleted (coreban ADR-0006).
   deleteRecord: () => void;
+  // Skips a rule entry for its date alone, or undoes that; undefined for
+  // a note that isn't a live rule entry.
+  toggleSkip?: { skipped: boolean; run: () => void };
   erase: () => void;
 }
 
@@ -254,6 +260,12 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
           <DropdownMenuItem className={item} onSelect={actions.openRecord}>
             <Pencil className="h-4 w-4" aria-hidden />
             Edit {link.kind}
+          </DropdownMenuItem>
+        )}
+        {actions.toggleSkip && (
+          <DropdownMenuItem className={item} onSelect={actions.toggleSkip.run}>
+            <SkipForward className="h-4 w-4" aria-hidden />
+            {actions.toggleSkip.skipped ? "Undo skip" : "Skip this date"}
           </DropdownMenuItem>
         )}
         {isBudgetLink(link) && !link.deleted ? (
@@ -679,6 +691,30 @@ export default function FeedPage() {
     onError: fail("Couldn't delete this record"),
   });
 
+  // Skipping a rule entry from its note sets that one record's status,
+  // as the ledger does; the note then shows the record as skipped.
+  const saveExpense = useSaveEntry("expense");
+  const saveIncome = useSaveEntry("income");
+  const skipMutation = useMutation({
+    mutationFn: async ({ kind, record }: { kind: "expense" | "income"; record: Expense | Income }) => {
+      const save = kind === "expense" ? saveExpense : saveIncome;
+      const entry = entryOf(kind, record);
+      return save.mutateAsync({ id: record.id, input: entryInput(entry, { status: skipStatus(entry.status) }) });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: feedKey }),
+    onError: fail("Couldn't skip this date"),
+  });
+  const skipActionFor = (note: Note): NoteActions["toggleSkip"] => {
+    const link = note.link;
+    if (!isBudgetLink(link) || link.deleted) return undefined;
+    const record = budgetRecordOf(link);
+    if (!record || !canSkip(record)) return undefined;
+    return {
+      skipped: record.status === "skipped",
+      run: () => skipMutation.mutate({ kind: link.kind === "income" ? "income" : "expense", record }),
+    };
+  };
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteNote(id),
     onSuccess: (_, id) => {
@@ -772,6 +808,7 @@ export default function FeedPage() {
       const prompt = deleteRecordPrompt(note);
       if (prompt) setRemoving({ note, prompt });
     },
+    toggleSkip: skipActionFor(note),
     erase: () => setDeleting(note),
   });
 
