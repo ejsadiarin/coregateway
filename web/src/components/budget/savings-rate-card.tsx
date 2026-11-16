@@ -4,6 +4,7 @@ import { useSavingsRate } from '@/hooks/use-budget';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatPeso, formatRate } from '@/lib/format';
+import { Reimbursements } from './reimbursements';
 
 interface SavingsRateCardProps {
   startDate?: string;
@@ -92,6 +93,7 @@ export function SavingsRateCard({ startDate, endDate, className }: SavingsRateCa
             <span className="text-muted-foreground">Income</span>
             <span className="font-medium font-mono tabular-nums">{formatPeso(income)}</span>
           </div>
+          <Reimbursements amount={data.total_reimbursements} className="flex justify-between" />
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Expenses</span>
             <span className="font-medium font-mono tabular-nums">{formatPeso(expenses)}</span>

@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Terminal, ArrowRight } from "lucide-react";
 import {
   PeriodPresetFilter,
+  Reimbursements,
   type PeriodPresetFilterValue,
 } from "@/components/budget";
 import {
@@ -86,6 +87,7 @@ export default function BudgetSignalDeck() {
               <p className="font-mono tabular-nums text-xl text-[var(--chart-2)]">
                 {formatPeso(income)}
               </p>
+              <Reimbursements amount={stats?.total_reimbursements} className="mt-1 block" />
             </div>
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">

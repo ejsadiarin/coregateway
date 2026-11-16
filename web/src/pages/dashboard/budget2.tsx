@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Crosshair, ArrowRight } from "lucide-react";
 import {
   PeriodPresetFilter,
+  Reimbursements,
   type PeriodPresetFilterValue,
 } from "@/components/budget";
 import {
@@ -51,15 +52,22 @@ export default function BudgetTacticalDeck() {
 
   const spent = Number(stats?.total_expenses) || 0;
   const income = Number(stats?.total_incomes) || 0;
+  const reimbursements = Number(stats?.total_reimbursements) || 0;
   const left = Number(remaining?.remaining) || 0;
   const burn = Number(velocity?.avg_monthly_spending) || 0;
   const usedPct = spent + left > 0 ? Math.min(100, (spent / (spent + left)) * 100) : 0;
   const feed = expenses?.data ?? [];
   const ops = Array.isArray(bills) ? bills.slice(0, 5) : [];
 
-  const tiles = [
+  const tiles: {
+    label: string;
+    value: string;
+    color: string;
+    sub: string;
+    reimbursements?: number;
+  }[] = [
     { label: "Spent", value: formatPeso(spent), color: "var(--primary)", sub: `${stats?.expense_count ?? 0} ops logged` },
-    { label: "Income", value: formatPeso(income), color: "var(--chart-2)", sub: `${stats?.income_count ?? 0} inflows` },
+    { label: "Income", value: formatPeso(income), color: "var(--chart-2)", sub: `${stats?.income_count ?? 0} inflows`, reimbursements },
     { label: "Remaining", value: formatPeso(left), color: "var(--accent)", sub: `period ${remaining?.period_start ?? "—"} → ${remaining?.period_end ?? "—"}` },
     { label: "Burn / mo", value: formatPeso(burn), color: "var(--chart-3)", sub: `${velocity?.months_with_data ?? 0} mo sampled` },
   ];
@@ -117,6 +125,9 @@ export default function BudgetTacticalDeck() {
                   {t.value}
                 </p>
                 <p className="font-mono text-[10px] text-muted-foreground mt-1 truncate">{t.sub}</p>
+                {t.reimbursements !== undefined && (
+                  <Reimbursements amount={t.reimbursements} className="mt-1 block" />
+                )}
               </motion.div>
             ))}
       </div>

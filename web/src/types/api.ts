@@ -270,6 +270,7 @@ export interface BudgetRemainingResponse {
 
 export interface SummaryStats {
     total_incomes: number;
+    total_reimbursements: number;
     total_expenses: number;
     expense_count: number;
     income_count: number;
@@ -287,6 +288,7 @@ export interface TrendItem {
     month: string;
     total_expenses: number;
     total_incomes: number;
+    total_reimbursements: number;
 }
 
 // Auth Types
@@ -327,6 +329,7 @@ export interface UpdateUserRequest {
 
 export interface SavingsRateResponse {
     total_incomes: number;
+    total_reimbursements: number;
     total_expenses: number;
     savings_rate: number;
 }
@@ -360,6 +363,7 @@ export type UpcomingBillsResponse = UpcomingBill[];
 
 export interface FiftyThirtyTwentyResponse {
     total_incomes: number;
+    total_reimbursements: number;
     total_expenses: number;
     needs: number;
     wants: number;

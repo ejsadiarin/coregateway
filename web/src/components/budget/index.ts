@@ -3,6 +3,7 @@ export { SpendingVelocityCard } from './spending-velocity-card';
 export { UpcomingBillsCard } from './upcoming-bills-card';
 export { RecurringSummaryCard } from './recurring-summary-card';
 export { RecurringIncomeList } from './recurring-income-list';
+export { Reimbursements } from './reimbursements';
 export { SkipOccurrenceDialog } from './skip-occurrence-dialog';
 export { CurrentTotalMoneyCard } from './current-total-money-card';
 export { PeriodPresetFilter } from './period-preset-filter';

@@ -1,7 +1,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, Receipt, ArrowDownLeft } from "lucide-react";
+import { DollarSign, TrendingUp, Receipt, ArrowDownLeft, type LucideIcon } from "lucide-react";
 import { formatPeso, formatCount } from "@/lib/format";
+import { Reimbursements } from "./reimbursements";
 import type { SummaryStats } from "@/types/api";
 
 interface ExpenseStatsProps {
@@ -35,15 +36,24 @@ export function ExpenseStats({ stats, isLoading }: ExpenseStatsProps) {
 
   const totalExpense = Number(stats.total_expenses) || 0;
   const totalIncome = Number(stats.total_incomes) || 0;
+  const reimbursements = Number(stats.total_reimbursements) || 0;
   const expenseCount = stats.expense_count ?? 0;
   const incomeCount = stats.income_count ?? 0;
   const remaining = totalIncome - totalExpense;
 
-  const statCards = [
+  const statCards: {
+    title: string;
+    value: string;
+    description: string;
+    reimbursements?: number;
+    icon: LucideIcon;
+    iconColor: string;
+  }[] = [
     {
       title: "Total Income",
       value: formatPeso(totalIncome),
       description: `${formatCount(incomeCount)} transactions`,
+      reimbursements,
       icon: ArrowDownLeft,
       iconColor: "text-green-500",
     },
@@ -87,6 +97,9 @@ export function ExpenseStats({ stats, isLoading }: ExpenseStatsProps) {
               <p className="text-xs text-muted-foreground">
                 {stat.description}
               </p>
+              {stat.reimbursements !== undefined && (
+                <Reimbursements amount={stat.reimbursements} className="mt-1 block" />
+              )}
             </CardContent>
           </Card>
         );

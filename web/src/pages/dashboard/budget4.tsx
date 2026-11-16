@@ -20,6 +20,7 @@ import {
   useUpcomingBills,
 } from "@/hooks/use-budget";
 import { formatPeso } from "@/lib/format";
+import { Reimbursements } from "@/components/budget";
 
 const MONTHLY_FACTOR: Record<string, number> = {
   daily: 30,
@@ -45,8 +46,9 @@ export default function BudgetAdvisorDeck() {
   const { data: bills } = useUpcomingBills();
 
   const free = num(remaining?.remaining);
-  const series = [...(trends ?? [])].slice(-2);
-  const [prev, cur] = [series[series.length - 2], series[series.length - 1]];
+  // corefinance returns months newest first; compare the latest two.
+  const series = [...(trends ?? [])].sort((a, b) => a.month.localeCompare(b.month));
+  const [prev, cur] = series.slice(-2);
   const dIncome = num(cur?.total_incomes) - num(prev?.total_incomes);
   const dSpend = num(cur?.total_expenses) - num(prev?.total_expenses);
   const net = num(cur?.total_incomes) - num(cur?.total_expenses);
@@ -104,8 +106,14 @@ export default function BudgetAdvisorDeck() {
     });
   }
 
-  const deltas = [
-    { label: "Income", delta: dIncome, month: cur?.month },
+  const deltas: {
+    label: string;
+    delta: number;
+    month?: string;
+    invert?: boolean;
+    reimbursements?: number;
+  }[] = [
+    { label: "Income", delta: dIncome, month: cur?.month, reimbursements: num(cur?.total_reimbursements) },
     { label: "Spending", delta: dSpend, month: cur?.month, invert: true },
   ];
 
@@ -163,6 +171,12 @@ export default function BudgetAdvisorDeck() {
                 {formatPeso(Math.abs(d.delta))}
               </p>
               <p className="font-mono text-[10px] text-muted-foreground mt-1">vs prior month</p>
+              {d.reimbursements !== undefined && (
+                <p className="font-mono text-[10px] text-muted-foreground mt-1">
+                  Income this month: {formatPeso(num(cur?.total_incomes))}
+                  <Reimbursements amount={d.reimbursements} className="ml-2" />
+                </p>
+              )}
             </motion.div>
           );
         })}
@@ -177,9 +191,13 @@ export default function BudgetAdvisorDeck() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: 0.1 }}
           >
-            <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-foreground mb-3">
+            <h2 className="font-mono text-[11px] uppercase tracking-[0.22em] text-foreground mb-1">
               50 / 30 / 20 allocation
             </h2>
+            <p className="mb-3 font-mono text-[10px] text-muted-foreground">
+              Income (all time) {formatPeso(num(split?.total_incomes))}
+              <Reimbursements amount={split?.total_reimbursements} className="ml-2" />
+            </p>
             <ul className="space-y-3">
               {alloc.map((a, i) => (
                 <li key={a.label}>
