@@ -7,8 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useExpenseCategories } from "@/hooks/use-budget";
 import { CategorySelect } from "./category-select";
-import { isUnknownCategoryError } from "@/lib/api";
+import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
+import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import type { CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 
 interface ExpenseFormProps {
@@ -46,6 +47,14 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
         await categoriesQuery.refetch();
         setFormData((current) => ({ ...current, category_id: undefined }));
         setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
+      if (isUnsupportedCurrencyError(err)) {
+        setError(UNSUPPORTED_CURRENCY);
+        return;
+      }
+      if (isRateUnavailableError(err)) {
+        setError(RATE_UNAVAILABLE);
         return;
       }
       setError(err instanceof Error ? err.message : "Couldn't save this expense");

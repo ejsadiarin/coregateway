@@ -7,6 +7,7 @@ import {
   canSkip,
   cleanNotes,
   ended,
+  entryOf,
   hueOf,
   money,
   nextDue,
@@ -56,6 +57,47 @@ describe("cleanNotes", () => {
     expect(cleanNotes("[backfill:messenger-2026-11] dump L846")).toBe("");
     expect(cleanNotes(undefined)).toBe("");
     expect(cleanNotes("plain note")).toBe("plain note");
+  });
+});
+
+describe("entryOf", () => {
+  it("maps the fixed conversion fields", () => {
+    const e = entryOf("expense", {
+      id: "e1",
+      description: "gift",
+      amount: 100,
+      currency: "USD",
+      exchange_rate: "61.573",
+      amount_php: "6157.3",
+      rate_date: "2026-07-10T00:00:00Z",
+      expense_date: "2026-07-12",
+      priority: "want",
+      status: "posted",
+      is_debt: false,
+      created_at: "2026-07-12T10:00:00Z",
+      updated_at: "2026-07-12T10:00:00Z",
+    });
+    expect(e.conversion?.exchangeRate).toBe(61.573);
+    expect(e.conversion?.amountPHP).toBe(6157.3);
+    expect(e.conversion?.rateDate).toBe("2026-07-10");
+  });
+
+  it("leaves a PHP response without conversion fields undefined", () => {
+    const e = entryOf("income", {
+      id: "i1",
+      amount: 500,
+      currency: "PHP",
+      exchange_rate: "1",
+      amount_php: "500",
+      rate_date: "2026-11-01T00:00:00Z",
+      date: "2026-11-01",
+      description: "pay",
+      priority: "need",
+      status: "posted",
+      created_at: "2026-11-01T10:00:00Z",
+      updated_at: "2026-11-01T10:00:00Z",
+    });
+    expect(e.conversion).toBeUndefined();
   });
 });
 

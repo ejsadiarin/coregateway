@@ -9,6 +9,14 @@ export type LedgerKind = "expense" | "income";
 export type Cadence = "daily" | "weekly" | "monthly" | "yearly";
 export type Priority = "need" | "want" | "savings";
 
+// Conversion is the fixed rate and PHP amount corefinance set when it saved a
+// non-PHP entry (ADR-0003). Old responses can lack it.
+export interface Conversion {
+  exchangeRate: number;
+  amountPHP: number;
+  rateDate: string; // YYYY-MM-DD
+}
+
 // Entry is an expense or an income as these pages show it.
 export interface Entry {
   id: string;
@@ -16,6 +24,7 @@ export interface Entry {
   description: string;
   amount: number;
   currency: string;
+  conversion?: Conversion;
   date: string; // YYYY-MM-DD
   categoryId?: string;
   notes: string; // without the backfill marker
@@ -56,12 +65,28 @@ export function cleanNotes(notes?: string | null): string {
 }
 
 export function entryOf(kind: LedgerKind, r: Expense | Income): Entry {
+  const currency = r.currency || "PHP";
+  const exchangeRate = Number(r.exchange_rate);
+  const amountPHP = Number(r.amount_php);
+  const rateDate = day(r.rate_date);
+  const conversion =
+    currency !== "PHP" &&
+    r.exchange_rate !== undefined &&
+    r.amount_php !== undefined &&
+    rateDate &&
+    Number.isFinite(exchangeRate) &&
+    exchangeRate > 0 &&
+    Number.isFinite(amountPHP) &&
+    amountPHP > 0
+      ? { exchangeRate, amountPHP, rateDate }
+      : undefined;
   return {
     id: r.id,
     kind,
     description: r.description ?? "",
     amount: Number(r.amount),
-    currency: r.currency || "PHP",
+    currency,
+    conversion,
     date: day("expense_date" in r ? r.expense_date : r.date),
     categoryId: r.category_id || undefined,
     notes: cleanNotes(r.notes),

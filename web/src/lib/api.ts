@@ -71,10 +71,30 @@ export function isUnknownCategoryError(error: unknown): boolean {
   );
 }
 
+// corefinance answers 400 for a currency the provider does not publish
+// (ADR-0003).
+export function isUnsupportedCurrencyError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    /^unsupported currency\b/i.test(error.detail)
+  );
+}
+
+// corefinance answers 502 when the exchange-rate provider cannot price a
+// non-PHP save (ADR-0003).
+export function isRateUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 502 &&
+    /^exchange rate unavailable\b/i.test(error.detail)
+  );
+}
+
 // throwApiError carries corefinance's own explanation for a refusal the owner
-// can fix (400); other failures keep the caller's summary.
+// can fix (400) or retry (502); other failures keep the caller's summary.
 export async function throwApiError(res: Response, fallback: string): Promise<never> {
-  const body = res.status === 400 ? await res.json().catch(() => null) : null;
+  const body = res.status === 400 || res.status === 502 ? await res.json().catch(() => null) : null;
   const detail = typeof body?.error === 'string' ? body.error : fallback;
   throw new ApiError(res.status, detail);
 }

@@ -112,6 +112,9 @@ export interface Expense {
     description: string;
     amount: number;
     currency: string;
+    exchange_rate?: string | number;
+    amount_php?: string | number;
+    rate_date?: string;
     category_id?: string;
     expense_date: string;
     notes?: string;
@@ -189,6 +192,9 @@ export interface Income {
     id: string;
     amount: number;
     currency: string;
+    exchange_rate?: string | number;
+    amount_php?: string | number;
+    rate_date?: string;
     date: string;
     description?: string;
     category_id?: string;

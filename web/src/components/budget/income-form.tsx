@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useIncomeCategories } from "@/hooks/use-budget";
 import { CategorySelect } from "./category-select";
-import { isUnknownCategoryError } from "@/lib/api";
+import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
+import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import type { CreateIncomeRequest, UpdateIncomeRequest } from "@/types/api";
 
 interface IncomeFormProps {
@@ -45,6 +46,14 @@ export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: Incom
         await categoriesQuery.refetch();
         setFormData((current) => ({ ...current, category_id: undefined }));
         setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
+      if (isUnsupportedCurrencyError(err)) {
+        setError(UNSUPPORTED_CURRENCY);
+        return;
+      }
+      if (isRateUnavailableError(err)) {
+        setError(RATE_UNAVAILABLE);
         return;
       }
       setError(err instanceof Error ? err.message : "Couldn't save this income");

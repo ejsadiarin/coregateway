@@ -5,8 +5,9 @@ import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { categoryIcon, hueClasses } from "./chips";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
-import { isUnknownCategoryError } from "@/lib/api";
+import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
+import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import { GuestBlockedError, useTags } from "@/hooks/use-budget";
 import {
   ruleInput,
@@ -189,6 +190,14 @@ function EntryForm({
         await categoriesQuery.refetch();
         setCategoryId(undefined);
         setError(PICK_ANOTHER_CATEGORY);
+        return;
+      }
+      if (isUnsupportedCurrencyError(e)) {
+        setError(UNSUPPORTED_CURRENCY);
+        return;
+      }
+      if (isRateUnavailableError(e)) {
+        setError(RATE_UNAVAILABLE);
         return;
       }
       setError(e instanceof GuestBlockedError ? e.message : `Couldn't save: ${(e as Error).message}`);

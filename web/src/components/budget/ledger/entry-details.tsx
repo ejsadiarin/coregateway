@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { useDeleteEntry, useToggleSkip } from "@/hooks/use-ledger";
 import { cadenceLabel, signed, today, type Entry, type Rule } from "@/lib/ledger";
+import { conversionLabel } from "@/lib/conversion";
 import type { Category, Tag } from "@/types/api";
 
 // EntryDetails is what a tap on a row opens: the whole entry, and Edit and
@@ -35,6 +36,7 @@ export function EntryDetails({
 
   const skip = useToggleSkip();
   const skipped = entry.status === "skipped";
+  const conversion = conversionLabel(entry);
   const toggleSkip = async () => {
     if (await skip.toggle(entry)) showToast(skipped ? "It counts again" : "Skipped this date", "success");
   };
@@ -59,6 +61,15 @@ export function EntryDetails({
         </div>
         <span className="font-mono text-xl">{signed(entry.kind, entry.amount, entry.currency)}</span>
       </div>
+
+      {conversion && (
+        <p
+          data-testid="conversion"
+          className="rounded-2xl bg-background px-3.5 py-2.5 font-mono text-sm tabular-nums text-muted-foreground"
+        >
+          {conversion}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         <CategoryChip category={category} />
