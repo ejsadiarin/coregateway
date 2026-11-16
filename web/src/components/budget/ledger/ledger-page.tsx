@@ -23,12 +23,14 @@ import {
   money,
   nextDue,
   ruleTotals,
+  ruleTotalsText,
   signed,
   splitUpcoming,
   type Entry,
   type Filter,
   type LedgerKind,
   type Rule,
+  type RuleTotals,
   type Source,
 } from "@/lib/ledger";
 import type { Category, Tag } from "@/types/api";
@@ -82,6 +84,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
     [rules, nextOf],
   );
   const totals = ruleTotals(shownRules.filter((r) => r.active));
+  const totalsText = ruleTotalsText(totals);
 
   const { upcoming, past } = useMemo(() => splitUpcoming(entries), [entries]);
   const months = useMemo(() => byMonth(applyFilter(past, filter)), [past, filter]);
@@ -148,10 +151,8 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
           <h2 id="rules-h" className="text-[15px] font-semibold text-foreground/85">
             Rules {shownRules.length > 0 && <span className="font-normal text-muted-foreground">· {shownRules.filter((r) => r.active).length} active</span>}
           </h2>
-          {(totals.perMonth > 0 || totals.perYear > 0) && (
-            <span className="text-[13px] text-muted-foreground">
-              {[totals.perMonth && `${money(totals.perMonth)}/mo`, totals.perYear && `${money(totals.perYear)}/yr`].filter(Boolean).join(" + ")}
-            </span>
+          {totalsText && (
+            <span className="text-[13px] text-muted-foreground">{totalsText}</span>
           )}
         </div>
         <div className="flex gap-2.5 overflow-x-auto px-4 pb-1 md:grid md:grid-cols-4 md:overflow-visible">
@@ -525,20 +526,19 @@ function SideRules({
   rules: Rule[];
   loading: boolean;
   nextOf: Map<string, string | undefined>;
-  totals: { perMonth: number; perYear: number };
+  totals: RuleTotals;
   onOpen: (id: string) => void;
   onAdd: () => void;
 }) {
+  const totalsText = ruleTotalsText(totals);
   return (
     <section aria-labelledby="side-rules-h" className="flex flex-col gap-2.5">
       <div className="flex items-baseline justify-between">
         <h2 id="side-rules-h" className="text-[15px] font-semibold text-foreground/85">
           Rules {rules.length > 0 && <span className="font-normal text-muted-foreground">· {rules.filter((r) => r.active).length} active</span>}
         </h2>
-        {(totals.perMonth > 0 || totals.perYear > 0) && (
-          <span className="text-[13px] text-muted-foreground">
-            {[totals.perMonth && `${money(totals.perMonth)}/mo`, totals.perYear && `${money(totals.perYear)}/yr`].filter(Boolean).join(" + ")}
-          </span>
+        {totalsText && (
+          <span className="text-[13px] text-muted-foreground">{totalsText}</span>
         )}
       </div>
       <ul className="overflow-hidden rounded-2xl border border-foreground/[0.08] bg-popover">

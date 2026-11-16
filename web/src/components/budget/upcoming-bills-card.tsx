@@ -4,7 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { useUpcomingBills } from '@/hooks/use-budget';
 import { Calendar, Clock, DollarSign } from 'lucide-react';
 import { cn, safeFormat } from '@/lib/utils';
-import { formatPeso } from '@/lib/format';
+import { formatPeso, totalsByCurrency } from '@/lib/format';
+import { CurrencyAmounts } from './currency-amounts';
 import { format, parseISO, isWithinInterval, addDays, startOfDay } from 'date-fns';
 
 interface UpcomingBillsCardProps {
@@ -64,7 +65,7 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
       return false;
     }
   });
-  const totalAmount = inWindow.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const totalDue = totalsByCurrency(inWindow);
 
   const getDueStatus = (dueDate: string) => {
     const date = parseISO(dueDate);
@@ -88,7 +89,7 @@ export function UpcomingBillsCard({ days = 30, className }: UpcomingBillsCardPro
           </div>
           <div className="text-right">
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Total due</p>
-            <div className="text-2xl font-bold font-mono tabular-nums">{formatPeso(totalAmount)}</div>
+            <CurrencyAmounts totals={totalDue} className="text-2xl font-bold font-mono tabular-nums" />
           </div>
         </div>
       </CardHeader>

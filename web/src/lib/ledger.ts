@@ -1,5 +1,5 @@
 import { addDays, addMonths, addYears, format, getDate, getDaysInMonth, parseISO, setDate } from "date-fns";
-import { phpAmount } from "./format";
+import { addCurrencyAmount, currencyTotals, phpAmount, type CurrencyTotal } from "./format";
 import type { Category, Expense, Income } from "@/types/api";
 
 // The Expenses and Incomes pages share one layout: the rules on top, the
@@ -219,15 +219,38 @@ export function cadencePhrase(c: Cadence, start: string): string {
   }
 }
 
-// perMonth and perYear add up what the active rules come to.
-export function ruleTotals(rules: Rule[]): { perMonth: number; perYear: number } {
-  let perMonth = 0;
-  let perYear = 0;
+export interface RuleTotals {
+  perMonth: CurrencyTotal[];
+  perYear: CurrencyTotal[];
+}
+
+// perMonth and perYear add up what the active rules come to, one currency at
+// a time. PHP-only sets keep the single line they had before.
+export function ruleTotals(rules: Rule[]): RuleTotals {
+  const perMonth = new Map<string, number>();
+  const perYear = new Map<string, number>();
   for (const r of rules) {
-    if (r.cadence === "yearly") perYear += r.amount;
-    else perMonth += r.amount * { daily: 30, weekly: 52 / 12, monthly: 1 }[r.cadence];
+    const amount = Number(r.amount) || 0;
+    if (r.cadence === "yearly") {
+      addCurrencyAmount(perYear, r.currency, amount);
+      continue;
+    }
+    const factor = { daily: 30, weekly: 52 / 12, monthly: 1 }[r.cadence];
+    if (factor !== undefined) addCurrencyAmount(perMonth, r.currency, amount * factor);
   }
-  return { perMonth: Math.round(perMonth), perYear: Math.round(perYear) };
+  const rounded = (totals: CurrencyTotal[]) =>
+    totals.map((t) => ({ ...t, amount: Math.round(t.amount) })).filter((t) => t.amount !== 0);
+  return { perMonth: rounded(currencyTotals(perMonth)), perYear: rounded(currencyTotals(perYear)) };
+}
+
+// ruleTotalsText says what those totals come to: one line per currency,
+// monthly rules first, then yearly ones. It keeps the ledger's money
+// formatting so PHP-only rules look exactly as they did before.
+export function ruleTotalsText(totals: RuleTotals): string {
+  return [
+    ...totals.perMonth.map((t) => `${money(t.amount, t.currency)}/mo`),
+    ...totals.perYear.map((t) => `${money(t.amount, t.currency)}/yr`),
+  ].join(" + ");
 }
 
 export type Source = "all" | "rule" | "hand";

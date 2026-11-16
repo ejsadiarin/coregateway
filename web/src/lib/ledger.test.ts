@@ -16,6 +16,7 @@ import {
   recents,
   ruleLabel,
   ruleTotals,
+  ruleTotalsText,
   signed,
   skipStatus,
   splitUpcoming,
@@ -190,10 +191,51 @@ describe("cadencePhrase", () => {
 
 describe("ruleTotals", () => {
   it("adds monthly-ish rules per month and yearly ones per year", () => {
-    expect(ruleTotals([rule({ amount: 85 }), rule({ amount: 1300 }), rule({ cadence: "yearly", amount: 759 })])).toEqual({
-      perMonth: 1385,
-      perYear: 759,
+    expect(
+      ruleTotals([rule({ amount: 85 }), rule({ amount: 1300 }), rule({ cadence: "yearly", amount: 759 })]),
+    ).toEqual({
+      perMonth: [{ currency: "PHP", amount: 1385 }],
+      perYear: [{ currency: "PHP", amount: 759 }],
     });
+  });
+
+  it("keeps each currency separate, PHP first then alphabetical", () => {
+    expect(
+      ruleTotals([
+        rule({ amount: 1000, currency: "PHP" }),
+        rule({ amount: 5, currency: "USD" }),
+        rule({ amount: 3000, currency: "JPY" }),
+      ]),
+    ).toEqual({
+      perMonth: [
+        { currency: "PHP", amount: 1000 },
+        { currency: "JPY", amount: 3000 },
+        { currency: "USD", amount: 5 },
+      ],
+      perYear: [],
+    });
+  });
+
+  it("keeps yearly rules in their own currency", () => {
+    expect(ruleTotals([rule({ amount: 1000, currency: "PHP" }), rule({ cadence: "yearly", amount: 759, currency: "USD" })])).toEqual({
+      perMonth: [{ currency: "PHP", amount: 1000 }],
+      perYear: [{ currency: "USD", amount: 759 }],
+    });
+  });
+
+  it("renders one subtotal per currency, monthly first then yearly", () => {
+    expect(
+      ruleTotalsText({
+        perMonth: [
+          { currency: "PHP", amount: 1000 },
+          { currency: "JPY", amount: 3000 },
+          { currency: "USD", amount: 5 },
+        ],
+        perYear: [{ currency: "PHP", amount: 759 }],
+      }),
+    ).toBe("₱1,000/mo + ¥3,000/mo + $5/mo + ₱759/yr");
+    expect(ruleTotalsText({ perMonth: [{ currency: "PHP", amount: 1385 }], perYear: [] })).toBe("₱1,385/mo");
+    expect(ruleTotalsText({ perMonth: [], perYear: [] })).toBe("");
   });
 });
 

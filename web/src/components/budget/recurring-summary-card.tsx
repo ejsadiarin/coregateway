@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useRecurringIncomes, useRecurringExpenses } from '@/hooks/use-budget';
 import { Repeat, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatPeso, formatCount, formatSigned } from '@/lib/format';
+import { formatCount, formatSigned, netCurrencyTotals, totalsByCurrency } from '@/lib/format';
+import { CurrencyAmounts } from './currency-amounts';
 
 interface RecurringSummaryCardProps {
   className?: string;
@@ -32,17 +33,11 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
     );
   }
 
-  const totalRecurringIncome = recurringIncomes?.reduce(
-    (sum, inc) => sum + (Number(inc.amount) || 0),
-    0
-  ) || 0;
-
+  const incomeTotals = totalsByCurrency(recurringIncomes ?? []);
   const activeExpenses = (recurringExpenses || []).filter((r) => r.is_active !== false);
-  const totalRecurringExpenses = activeExpenses.reduce(
-    (sum, r) => sum + (Number(r.amount) || 0),
-    0
-  );
-  const netRecurringCashFlow = totalRecurringIncome - totalRecurringExpenses;
+  const expenseTotals = totalsByCurrency(activeExpenses);
+  const netTotals = netCurrencyTotals(incomeTotals, expenseTotals);
+  const netPositive = netTotals.every((t) => t.amount >= 0);
 
   const recurringIncomeCount = recurringIncomes?.length || 0;
   const recurringExpenseCount = activeExpenses.length;
@@ -62,9 +57,10 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Income</p>
-                <div className="text-lg font-semibold font-mono tabular-nums text-green-600">
-                  {formatPeso(totalRecurringIncome)}
-                </div>
+                <CurrencyAmounts
+                  totals={incomeTotals}
+                  className="text-lg font-semibold font-mono tabular-nums text-green-600"
+                />
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -79,9 +75,10 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Expenses</p>
-                <div className="text-lg font-semibold font-mono tabular-nums text-red-600">
-                  {formatPeso(totalRecurringExpenses)}
-                </div>
+                <CurrencyAmounts
+                  totals={expenseTotals}
+                  className="text-lg font-semibold font-mono tabular-nums text-red-600"
+                />
               </div>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -94,21 +91,23 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
               <div className="flex items-center gap-2">
                 <div className={cn(
                   "p-2 rounded-full",
-                  netRecurringCashFlow >= 0 ? "bg-green-500/10" : "bg-red-500/10"
+                  netPositive ? "bg-green-500/10" : "bg-red-500/10"
                 )}>
                   <Repeat className={cn(
                     "h-4 w-4",
-                    netRecurringCashFlow >= 0 ? "text-green-500" : "text-red-500"
+                    netPositive ? "text-green-500" : "text-red-500"
                   )} />
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Net cash flow</p>
-                  <div className={cn(
-                    "text-xl font-bold font-mono tabular-nums",
-                    netRecurringCashFlow >= 0 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {formatSigned(netRecurringCashFlow, netRecurringCashFlow >= 0 ? 'income' : 'expense')}
-                  </div>
+                  <CurrencyAmounts
+                    totals={netTotals}
+                    className="text-xl font-bold font-mono tabular-nums"
+                    format={(amount, currency) =>
+                      formatSigned(amount, amount >= 0 ? 'income' : 'expense', currency)
+                    }
+                    tone={(total) => (total.amount >= 0 ? "text-green-600" : "text-red-600")}
+                  />
                 </div>
               </div>
             </div>

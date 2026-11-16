@@ -7,6 +7,7 @@
  * - formatRate: percentages with 1 decimal
  * - formatCount: plain grouped integers
  * - phpAmount: the PHP amount a record contributes to a total
+ * - currency totals: per-currency grouping for rule projections
  *
  * The API sometimes returns amounts as strings (e.g. "100.00"), so every
  * helper coerces via Number() first and renders "—" on NaN.
@@ -77,6 +78,70 @@ export function phpAmount(record: PHPAmountSource): number {
   }
   const currency = (record.currency?.trim() || "PHP").toUpperCase();
   return currency === "PHP" ? Number(record.amount) : Number.NaN;
+}
+
+/** One currency's subtotal in a projection. */
+export interface CurrencyTotal {
+  currency: string;
+  amount: number;
+}
+
+/**
+ * Adds one amount to its currency's running total. A blank currency means
+ * PHP; a non-finite amount is ignored.
+ */
+export function addCurrencyAmount(
+  byCurrency: Map<string, number>,
+  currency: string | undefined,
+  amount: number | string,
+): void {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return;
+  const code = (currency?.trim() || "PHP").toUpperCase();
+  byCurrency.set(code, (byCurrency.get(code) ?? 0) + value);
+}
+
+/**
+ * Reads the running totals back PHP first, then alphabetically by ISO code.
+ * A zero subtotal is left out.
+ */
+export function currencyTotals(byCurrency: Map<string, number>): CurrencyTotal[] {
+  return [...byCurrency.entries()]
+    .filter(([, amount]) => amount !== 0)
+    .map(([currency, amount]) => ({ currency, amount }))
+    .sort((a, b) => {
+      if (a.currency === "PHP") return -1;
+      if (b.currency === "PHP") return 1;
+      return a.currency.localeCompare(b.currency);
+    });
+}
+
+/**
+ * Groups rows that carry an amount and currency into one subtotal per
+ * currency, PHP first then alphabetical. Rule projections use this because a
+ * rule has no fixed PHP amount until it materialises (ADR-0003); saved
+ * records still total through phpAmount.
+ */
+export function totalsByCurrency(
+  rows: { amount: number | string; currency?: string }[],
+): CurrencyTotal[] {
+  const byCurrency = new Map<string, number>();
+  for (const row of rows) addCurrencyAmount(byCurrency, row.currency, row.amount);
+  return currencyTotals(byCurrency);
+}
+
+/**
+ * Subtracts the expense totals from the income totals, keeping each
+ * currency on its own line.
+ */
+export function netCurrencyTotals(
+  income: CurrencyTotal[],
+  expenses: CurrencyTotal[],
+): CurrencyTotal[] {
+  const byCurrency = new Map<string, number>();
+  for (const t of income) addCurrencyAmount(byCurrency, t.currency, t.amount);
+  for (const t of expenses) addCurrencyAmount(byCurrency, t.currency, -t.amount);
+  return currencyTotals(byCurrency);
 }
 
 /** Signed ledger amount: income → "+₱10,000.00", expense → "-₱10,000.00". */
