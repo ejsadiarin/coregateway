@@ -103,11 +103,11 @@ export function addCurrencyAmount(
 
 /**
  * Reads the running totals back PHP first, then alphabetically by ISO code.
- * A zero subtotal is left out.
+ * A zero subtotal is left out unless keepZero is set.
  */
-export function currencyTotals(byCurrency: Map<string, number>): CurrencyTotal[] {
+export function currencyTotals(byCurrency: Map<string, number>, keepZero = false): CurrencyTotal[] {
   return [...byCurrency.entries()]
-    .filter(([, amount]) => amount !== 0)
+    .filter(([, amount]) => keepZero || amount !== 0)
     .map(([currency, amount]) => ({ currency, amount }))
     .sort((a, b) => {
       if (a.currency === "PHP") return -1;
@@ -141,7 +141,9 @@ export function netCurrencyTotals(
   const byCurrency = new Map<string, number>();
   for (const t of income) addCurrencyAmount(byCurrency, t.currency, t.amount);
   for (const t of expenses) addCurrencyAmount(byCurrency, t.currency, -t.amount);
-  return currencyTotals(byCurrency);
+  // Keep a currency that appears on either side even when its net is zero,
+  // so a mixed projection does not collapse to one line.
+  return currencyTotals(byCurrency, true);
 }
 
 /** Signed ledger amount: income → "+₱10,000.00", expense → "-₱10,000.00". */

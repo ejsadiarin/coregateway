@@ -60,6 +60,12 @@ describe("currency totals", () => {
     ]);
   });
 
+  it("keeps a PHP-only list on one line", () => {
+    expect(totalsByCurrency([{ amount: 1000 }, { amount: 200 }])).toEqual([
+      { currency: "PHP", amount: 1200 },
+    ]);
+  });
+
   it("nets income and expenses by currency", () => {
     expect(
       netCurrencyTotals(
@@ -76,6 +82,21 @@ describe("currency totals", () => {
       { currency: "PHP", amount: 800 },
       { currency: "JPY", amount: -3000 },
       { currency: "USD", amount: 5 },
+    ]);
+  });
+
+  it("keeps a currency that nets to zero when it appears on either side", () => {
+    expect(
+      netCurrencyTotals(
+        [
+          { currency: "PHP", amount: 1000 },
+          { currency: "USD", amount: 5 },
+        ],
+        [{ currency: "USD", amount: 5 }],
+      ),
+    ).toEqual([
+      { currency: "PHP", amount: 1000 },
+      { currency: "USD", amount: 0 },
     ]);
   });
 });

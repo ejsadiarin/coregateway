@@ -216,6 +216,26 @@ describe("ruleTotals", () => {
     });
   });
 
+  it("keeps a PHP and JPY set on two lines", () => {
+    expect(ruleTotals([rule({ amount: 1000, currency: "PHP" }), rule({ amount: 3000, currency: "JPY" })])).toEqual({
+      perMonth: [
+        { currency: "PHP", amount: 1000 },
+        { currency: "JPY", amount: 3000 },
+      ],
+      perYear: [],
+    });
+  });
+
+  it("keeps a PHP and USD set on two lines", () => {
+    expect(ruleTotals([rule({ amount: 1000, currency: "PHP" }), rule({ amount: 5, currency: "USD" })])).toEqual({
+      perMonth: [
+        { currency: "PHP", amount: 1000 },
+        { currency: "USD", amount: 5 },
+      ],
+      perYear: [],
+    });
+  });
+
   it("keeps yearly rules in their own currency", () => {
     expect(ruleTotals([rule({ amount: 1000, currency: "PHP" }), rule({ cadence: "yearly", amount: 759, currency: "USD" })])).toEqual({
       perMonth: [{ currency: "PHP", amount: 1000 }],
@@ -233,8 +253,11 @@ describe("ruleTotals", () => {
         ],
         perYear: [{ currency: "PHP", amount: 759 }],
       }),
-    ).toBe("₱1,000/mo + ¥3,000/mo + $5/mo + ₱759/yr");
+    ).toBe("₱1,000/mo + ₱759/yr + ¥3,000/mo + $5/mo");
     expect(ruleTotalsText({ perMonth: [{ currency: "PHP", amount: 1385 }], perYear: [] })).toBe("₱1,385/mo");
+    expect(ruleTotalsText({ perMonth: [{ currency: "USD", amount: 5 }], perYear: [{ currency: "PHP", amount: 759 }] })).toBe(
+      "₱759/yr + $5/mo",
+    );
     expect(ruleTotalsText({ perMonth: [], perYear: [] })).toBe("");
   });
 });

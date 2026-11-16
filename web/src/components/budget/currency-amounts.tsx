@@ -14,11 +14,10 @@ export function CurrencyAmounts({
   format?: (amount: number, currency: string) => string;
   tone?: (total: CurrencyTotal) => string | undefined;
 }) {
-  // Keep the zero these cards showed before when there is nothing to total.
-  const rows = totals.length ? totals : [{ currency: "PHP", amount: 0 }];
+  if (!totals.length) return <div className={className}>—</div>;
   return (
     <div className={cn("flex flex-col", className)}>
-      {rows.map((total) => (
+      {totals.map((total) => (
         <span key={total.currency} className={tone?.(total)}>
           {format(total.amount, total.currency)}
         </span>

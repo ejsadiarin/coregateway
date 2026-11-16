@@ -230,13 +230,12 @@ export function ruleTotals(rules: Rule[]): RuleTotals {
   const perMonth = new Map<string, number>();
   const perYear = new Map<string, number>();
   for (const r of rules) {
-    const amount = Number(r.amount) || 0;
     if (r.cadence === "yearly") {
-      addCurrencyAmount(perYear, r.currency, amount);
+      addCurrencyAmount(perYear, r.currency, r.amount);
       continue;
     }
     const factor = { daily: 30, weekly: 52 / 12, monthly: 1 }[r.cadence];
-    if (factor !== undefined) addCurrencyAmount(perMonth, r.currency, amount * factor);
+    if (factor !== undefined) addCurrencyAmount(perMonth, r.currency, r.amount * factor);
   }
   const rounded = (totals: CurrencyTotal[]) =>
     totals.map((t) => ({ ...t, amount: Math.round(t.amount) })).filter((t) => t.amount !== 0);
@@ -248,9 +247,19 @@ export function ruleTotals(rules: Rule[]): RuleTotals {
 // formatting so PHP-only rules look exactly as they did before.
 export function ruleTotalsText(totals: RuleTotals): string {
   return [
-    ...totals.perMonth.map((t) => `${money(t.amount, t.currency)}/mo`),
-    ...totals.perYear.map((t) => `${money(t.amount, t.currency)}/yr`),
-  ].join(" + ");
+    ...totals.perMonth.map((t) => ({ ...t, suffix: "/mo", period: 0 })),
+    ...totals.perYear.map((t) => ({ ...t, suffix: "/yr", period: 1 })),
+  ]
+    .sort((a, b) => {
+      if (a.currency !== b.currency) {
+        if (a.currency === "PHP") return -1;
+        if (b.currency === "PHP") return 1;
+        return a.currency.localeCompare(b.currency);
+      }
+      return a.period - b.period;
+    })
+    .map((t) => `${money(t.amount, t.currency)}${t.suffix}`)
+    .join(" + ");
 }
 
 export type Source = "all" | "rule" | "hand";

@@ -38,6 +38,12 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
   const expenseTotals = totalsByCurrency(activeExpenses);
   const netTotals = netCurrencyTotals(incomeTotals, expenseTotals);
   const netPositive = netTotals.every((t) => t.amount >= 0);
+  const netNegative = netTotals.every((t) => t.amount <= 0);
+  const netIcon = netPositive
+    ? "bg-green-500/10 text-green-500"
+    : netNegative
+      ? "bg-red-500/10 text-red-500"
+      : "bg-muted text-muted-foreground";
 
   const recurringIncomeCount = recurringIncomes?.length || 0;
   const recurringExpenseCount = activeExpenses.length;
@@ -89,14 +95,8 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
           <div className="pt-3 border-t">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  "p-2 rounded-full",
-                  netPositive ? "bg-green-500/10" : "bg-red-500/10"
-                )}>
-                  <Repeat className={cn(
-                    "h-4 w-4",
-                    netPositive ? "text-green-500" : "text-red-500"
-                  )} />
+                <div className={cn("p-2 rounded-full", netIcon)}>
+                  <Repeat className="h-4 w-4" />
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">Net cash flow</p>
