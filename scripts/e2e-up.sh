@@ -13,6 +13,7 @@
 #   gateway   127.0.0.1:18080   COREBAN_URL -> :16972
 #   coreban   127.0.0.1:16972   REMINDER_CAP=5 (low, so the cap is testable)
 #   corefinance 127.0.0.1:16969 (the Feed's expense and income notes)
+#   rates      127.0.0.1:16970   fake ECB rates for corefinance (corefinance ADR-0003)
 #   S3        127.0.0.1:19070   versitygw: coreban's attachment bucket,
 #                                CORS open to the web's origins
 #   web       http://localhost:3001  (VITE_API_URL -> :18080)
@@ -53,11 +54,11 @@ wait_for() {
   die "timed out waiting for $what (logs: $E2E/*.log)"
 }
 
-for cmd in docker goose go pnpm curl openssl; do
+for cmd in docker goose go pnpm curl openssl node; do
   command -v "$cmd" >/dev/null || die "missing $cmd"
 done
 [ -f "$E2E/pids" ] && die "a stack is already up; run scripts/e2e-down.sh first"
-for port in 55432 18090 19070 18080 16972 16969 3001; do
+for port in 55432 18090 19070 18080 16972 16969 16970 3001; do
   ss -ltn "sport = :$port" | grep -q LISTEN && die "port $port is in use"
 done
 
@@ -121,6 +122,11 @@ wait_for "the S3 bucket" 30 "$E2E/bin/s3setup" -endpoint http://localhost:19070 
 
 [ -f "$E2E/jwt.pem" ] || openssl genpkey -algorithm ed25519 -out "$E2E/jwt.pem"
 
+log "starting fake exchange rates :16970"
+PORT=16970 node "$ROOT/scripts/e2e-fake-rates.mjs" > "$E2E/rates.log" 2>&1 &
+echo "rates $!" >> "$E2E/pids"
+wait_for "fake exchange rates" 10 curl -sf http://localhost:16970/currencies
+
 log "starting gateway :18080"
 env -i PATH="$PATH" HOME="$HOME" \
   DATABASE_URL="postgresql://coregateway_role:gwpw@localhost:55432/coredb?sslmode=disable" \
@@ -158,6 +164,7 @@ wait_for coreban 30 curl -sf http://localhost:16972/health
 log "starting corefinance :16969"
 env -i PATH="$PATH" HOME="$HOME" PORT=16969 ENV=development \
   DATABASE_URL="postgresql://corefinance_role:cfpw@localhost:55432/coredb?sslmode=disable" \
+  RATE_URL=http://localhost:16970 \
   JWT_ISSUER=https://gateway.internal JWT_AUDIENCE=corefinance \
   JWT_JWKS_URL=http://localhost:18080/.well-known/jwks.json \
   "$E2E/bin/corefinance" > "$E2E/corefinance.log" 2>&1 &
