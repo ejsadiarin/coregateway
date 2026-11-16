@@ -45,13 +45,17 @@ async function totalMoney(page: import("@playwright/test").Page) {
 async function allTimeSplit(page: import("@playwright/test").Page) {
   const res = await page.request.get(`${api}/api/budget/analysis/503020`);
   expect(res.ok()).toBe(true);
-  return (await res.json()) as { total_reimbursements: number };
+  return (await res.json()) as { total_incomes: number; total_reimbursements: number };
 }
 
 async function monthlyTrends(page: import("@playwright/test").Page) {
   const res = await page.request.get(`${api}/api/budget/stats/trends`);
   expect(res.ok()).toBe(true);
-  return (await res.json()) as { month: string; total_reimbursements: number }[];
+  return (await res.json()) as {
+    month: string;
+    total_incomes: number;
+    total_reimbursements: number;
+  }[];
 }
 
 test.beforeEach(async ({ page }) => {
@@ -101,8 +105,10 @@ test("income excludes reimbursements and shows them beside it", async ({ page })
     const expectedIncome = Number(beforeWeek.total_incomes) + 20000;
     const expectedWeekReimbursements = Number(beforeWeek.total_reimbursements) + 500;
     const expectedMonthReimbursements = Number(beforeMonth.total_reimbursements) + 500;
+    const expectedAllIncome = Number(beforeAll.total_incomes) + 20000;
     const expectedAllReimbursements = Number(beforeAll.total_reimbursements) + 500;
     const currentMonth = beforeTrends.find((t) => t.month === endDate.slice(0, 7));
+    const expectedTrendIncome = Number(currentMonth?.total_incomes ?? 0) + 20000;
     const expectedTrendReimbursements = Number(currentMonth?.total_reimbursements ?? 0) + 500;
     const expectedMoney = Number(beforeMoney.total_money) + 20500;
 
@@ -129,9 +135,15 @@ test("income excludes reimbursements and shows them beside it", async ({ page })
       await expect(page.getByText(peso(expectedMonthReimbursements)).first()).toBeVisible();
     }
     await page.goto("/dashboard/budget4");
-    await expect(page.getByText("Reimbursements").first()).toBeVisible();
-    await expect(page.getByText(peso(expectedTrendReimbursements)).first()).toBeVisible();
-    await expect(page.getByText(peso(expectedAllReimbursements)).first()).toBeVisible();
+    const latestMonthCard = page.getByText(/^Income · /).locator("..");
+    await expect(latestMonthCard).toContainText(`Latest month income: ${peso(expectedTrendIncome)}`);
+    await expect(latestMonthCard).toContainText("Reimbursements");
+    await expect(latestMonthCard).toContainText(peso(expectedTrendReimbursements));
+
+    const splitSection = page.getByRole("heading", { name: "50 / 30 / 20 allocation" }).locator("..");
+    await expect(splitSection).toContainText(`Income (all time) ${peso(expectedAllIncome)}`);
+    await expect(splitSection).toContainText("Reimbursements");
+    await expect(splitSection).toContainText(peso(expectedAllReimbursements));
 
     // With no reimbursement left in the period, the figure hides.
     await remove(reimbursementRow.id);

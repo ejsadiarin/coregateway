@@ -15,7 +15,7 @@ export function Reimbursements({
   const value = Number(amount);
   if (!Number.isFinite(value) || value <= 0) return null;
   return (
-    <span className={cn("font-mono text-xs text-muted-foreground", className)}>
+    <span className={cn("font-mono text-[11px] text-muted-foreground", className)}>
       Reimbursements{" "}
       <span className="font-medium tabular-nums text-foreground">{formatPeso(value)}</span>
     </span>

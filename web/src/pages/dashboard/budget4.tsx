@@ -20,6 +20,7 @@ import {
   useUpcomingBills,
 } from "@/hooks/use-budget";
 import { formatPeso } from "@/lib/format";
+import { latestTwo } from "@/lib/trends";
 import { Reimbursements } from "@/components/budget";
 
 const MONTHLY_FACTOR: Record<string, number> = {
@@ -46,9 +47,7 @@ export default function BudgetAdvisorDeck() {
   const { data: bills } = useUpcomingBills();
 
   const free = num(remaining?.remaining);
-  // corefinance returns months newest first; compare the latest two.
-  const series = [...(trends ?? [])].sort((a, b) => a.month.localeCompare(b.month));
-  const [prev, cur] = series.slice(-2);
+  const { latest: cur, previous: prev } = latestTwo(trends);
   const dIncome = num(cur?.total_incomes) - num(prev?.total_incomes);
   const dSpend = num(cur?.total_expenses) - num(prev?.total_expenses);
   const net = num(cur?.total_incomes) - num(cur?.total_expenses);
@@ -173,7 +172,7 @@ export default function BudgetAdvisorDeck() {
               <p className="font-mono text-[10px] text-muted-foreground mt-1">vs prior month</p>
               {d.reimbursements !== undefined && (
                 <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                  Income this month: {formatPeso(num(cur?.total_incomes))}
+                  Latest month income: {formatPeso(num(cur?.total_incomes))}
                   <Reimbursements amount={d.reimbursements} className="ml-2" />
                 </p>
               )}
