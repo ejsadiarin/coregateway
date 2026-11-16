@@ -5,7 +5,7 @@ import type { Expense, Income } from "@/types/api";
 import { budgetRecordOf, isBudgetLink } from "@/lib/feed-records";
 import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
 import { columnOption } from "@/lib/kanban-columns";
-import { formatPeso } from "@/lib/format";
+import { formatPeso, phpAmount } from "@/lib/format";
 import { apiBaseUrl } from "@/lib/api";
 
 const notesUrl = `${apiBaseUrl}/api/coreban/notes`;
@@ -198,7 +198,7 @@ export function dayNet(notes: Note[]): { net: number; any: boolean } {
     const r = budgetRecordOf(l);
     if (!r || (r.status ?? "posted") !== "posted") continue;
     any = true;
-    net += (l.kind === "income" ? 1 : -1) * Number(r.amount);
+    net += (l.kind === "income" ? 1 : -1) * phpAmount(r);
   }
   return { net, any };
 }

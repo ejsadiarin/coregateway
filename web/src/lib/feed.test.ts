@@ -409,4 +409,15 @@ describe("feedDays", () => {
     expect(dayNet(notes)).toEqual({ net: 350, any: true });
     expect(dayNet([at("t", "2026-11-13T09:00:00")])).toEqual({ net: 0, any: false });
   });
+
+  it("nets live posted records at their fixed PHP amount, keeping deleted snapshots out", () => {
+    const exp = { amount: 100, currency: "USD", amount_php: "6157.30", status: "posted" } as unknown as Expense;
+    const inc = { amount: 500, currency: "PHP", amount_php: "500", status: "posted" } as unknown as Income;
+    const notes = [
+      at("e", "2026-11-13T09:00:00", { kind: "expense", deleted: false, record_id: "e", expense: exp }),
+      at("i", "2026-11-13T09:00:00", { kind: "income", deleted: false, record_id: "i", income: inc }),
+      at("d", "2026-11-13T09:00:00", { kind: "expense", deleted: true, record_id: "d", expense: exp }),
+    ];
+    expect(dayNet(notes)).toEqual({ net: -5657.3, any: true });
+  });
 });

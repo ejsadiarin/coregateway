@@ -6,6 +6,7 @@
  * - formatSigned: +/- prefix for income/expense ledger amounts
  * - formatRate: percentages with 1 decimal
  * - formatCount: plain grouped integers
+ * - phpAmount: the PHP amount a record contributes to a total
  *
  * The API sometimes returns amounts as strings (e.g. "100.00"), so every
  * helper coerces via Number() first and renders "—" on NaN.
@@ -51,6 +52,31 @@ export function formatPeso(value: unknown, currency = "PHP"): string {
   // Fallback path (unknown code) has no symbol — prefix manually.
   if (/^[0-9]/.test(formatted.trim())) return `₱${formatted}`;
   return formatted;
+}
+
+export interface PHPAmountSource {
+  amount: number | string;
+  currency?: string;
+  amountPHP?: number;
+  amount_php?: number | string | null;
+  conversion?: { amountPHP: number };
+}
+
+/**
+ * The PHP amount a record counts as in a total: its fixed conversion, or its
+ * original amount when it is already PHP. A non-PHP record without a fixed
+ * amount is a data error; return NaN rather than count its original number
+ * as pesos.
+ */
+export function phpAmount(record: PHPAmountSource): number {
+  if (record.conversion) return record.conversion.amountPHP;
+  if (record.amountPHP !== undefined && Number.isFinite(record.amountPHP)) return record.amountPHP;
+  if (record.amount_php !== undefined && record.amount_php !== null) {
+    const php = Number(record.amount_php);
+    if (Number.isFinite(php)) return php;
+  }
+  const currency = (record.currency?.trim() || "PHP").toUpperCase();
+  return currency === "PHP" ? Number(record.amount) : Number.NaN;
 }
 
 /** Signed ledger amount: income → "+₱10,000.00", expense → "-₱10,000.00". */

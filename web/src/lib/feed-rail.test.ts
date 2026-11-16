@@ -28,10 +28,17 @@ describe("budgetChips", () => {
 });
 
 describe("monthDays", () => {
-  const e = (date: string, kind: "expense" | "income", amount: number, status: "posted" | "skipped" = "posted") => ({
+  const e = (
+    date: string,
+    kind: "expense" | "income",
+    amount: number,
+    status: "posted" | "skipped" | "pending" = "posted",
+    currency = "PHP",
+  ) => ({
     date,
     kind,
     amount,
+    currency,
     status,
   });
 
@@ -54,8 +61,18 @@ describe("monthDays", () => {
     expect(cells[15]).toMatchObject({ future: true });
   });
 
+  it("nets a mixed-currency day at each record's fixed PHP amount", () => {
+    const usd = {
+      ...e("2026-11-13", "expense", 100),
+      currency: "USD",
+      conversion: { amountPHP: 6157.3, exchangeRate: 61.573, rateDate: "2026-07-10" },
+    };
+    const cells = monthDays("2026-11", [usd, e("2026-11-13", "income", 500)], new Set(), "2026-11-15");
+    expect(cells[12]?.net).toBe(-5657.3);
+  });
+
   it("counts posted records only, as the Feed's day heading does", () => {
-    const cells = monthDays("2026-11", [e("2026-11-20", "expense", 85), { date: "2026-11-21", kind: "expense", amount: 85, status: "pending" }], new Set(), "2026-11-15");
+    const cells = monthDays("2026-11", [e("2026-11-20", "expense", 85), e("2026-11-21", "expense", 85, "pending")], new Set(), "2026-11-15");
     expect(cells[19]?.net).toBe(-85);
     expect(cells[20]).toMatchObject({ net: undefined, dot: false });
   });
@@ -126,6 +143,7 @@ describe("shortNet", () => {
     expect(shortNet(-1300)).toBe("\u22121.3k");
     expect(shortNet(2000)).toBe("+2k");
     expect(shortNet(-12500)).toBe("\u221213k");
+    expect(shortNet(Number.NaN)).toBe("—");
   });
 });
 

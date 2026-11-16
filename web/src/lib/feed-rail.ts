@@ -3,6 +3,7 @@
 // summary.
 
 import { addDays, format, getDay, getDaysInMonth, parseISO } from "date-fns";
+import { phpAmount } from "@/lib/format";
 import { cadenceLabel, ruleLabel, type Cadence, type Entry, type LedgerKind } from "@/lib/ledger";
 
 type Status = Entry["status"];
@@ -59,7 +60,7 @@ export interface DayCell {
 // before its first day, then each day.
 export function monthDays(
   month: string,
-  entries: { date: string; kind: LedgerKind; amount: number; status: Status }[],
+  entries: Pick<Entry, "date" | "kind" | "amount" | "currency" | "status" | "conversion">[],
   noteDays: Set<string>,
   today: string,
 ): (DayCell | null)[] {
@@ -67,7 +68,8 @@ export function monthDays(
   const nets = new Map<string, number>();
   for (const e of entries) {
     if (e.status !== "posted" || !e.date.startsWith(month)) continue;
-    nets.set(e.date, (nets.get(e.date) ?? 0) + (e.kind === "income" ? e.amount : -e.amount));
+    const amount = phpAmount(e);
+    nets.set(e.date, (nets.get(e.date) ?? 0) + (e.kind === "income" ? amount : -amount));
   }
   const cells: (DayCell | null)[] = Array.from({ length: getDay(first) }, () => null);
   for (let day = 1; day <= getDaysInMonth(first); day++) {
@@ -153,6 +155,7 @@ export function monthSummary(r: { total_income: number; total_expense: number; r
 // shortNet is a day's net as a calendar cell fits it: "+500", "−1.3k",
 // "−12k".
 export function shortNet(n: number): string {
+  if (!Number.isFinite(n)) return "—";
   const sign = n < 0 ? "\u2212" : "+";
   const a = Math.abs(n);
   if (a < 1000) return sign + String(Math.round(a));

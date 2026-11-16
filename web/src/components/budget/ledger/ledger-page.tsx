@@ -15,6 +15,7 @@ import { useTags } from "@/hooks/use-budget";
 import { tagsOf, useEntries, useEntryTags, useKindCategories, useRules } from "@/hooks/use-ledger";
 import {
   applyFilter,
+  byCategory,
   byMonth,
   cadenceLabel,
   counted,
@@ -586,18 +587,10 @@ function MonthBreakdown({
   onPick: (id: string) => void;
 }) {
   const month = format(new Date(), "yyyy-MM");
-  const rows = useMemo(() => {
-    const by = new Map<string, number>();
-    for (const e of entries) {
-      if (!counted(e) || !e.date.startsWith(month)) continue;
-      const k = e.categoryId ?? "";
-      by.set(k, (by.get(k) ?? 0) + e.amount);
-    }
-    return [...by.entries()].sort((a, b) => b[1] - a[1]);
-  }, [entries, month]);
+  const rows = useMemo(() => byCategory(entries, month), [entries, month]);
   if (rows.length === 0) return null;
-  const total = rows.reduce((s, [, v]) => s + v, 0);
-  const max = rows[0][1];
+  const total = rows.reduce((s, row) => s + row.total, 0);
+  const max = rows[0].total;
   return (
     <section aria-labelledby="breakdown-h" className="flex flex-col gap-2.5">
       <div className="flex items-baseline justify-between">
@@ -607,7 +600,7 @@ function MonthBreakdown({
         <span className="font-mono text-[13px] text-muted-foreground">{signed(kind, total)}</span>
       </div>
       <ul className="flex flex-col gap-1 rounded-2xl border border-foreground/[0.08] bg-popover p-2">
-        {rows.map(([id, amount]) => {
+        {rows.map(({ categoryId: id, total: amount }) => {
           const c = id ? categoryById.get(id) : undefined;
           const hue = hueClasses(c);
           const Icon = categoryIcon(c);

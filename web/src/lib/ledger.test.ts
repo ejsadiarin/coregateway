@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFilter,
+  byCategory,
   byMonth,
   cadencePhrase,
   dueDatesWithin,
@@ -11,6 +12,7 @@ import {
   hueOf,
   money,
   nextDue,
+  phpTotal,
   recents,
   ruleLabel,
   ruleTotals,
@@ -35,6 +37,12 @@ const entry = (over: Partial<Entry>): Entry => ({
   status: "posted",
   createdAt: "2026-11-01T10:00:00Z",
   ...over,
+});
+
+const fixedConversion = (amountPHP = 6157.3) => ({
+  amountPHP,
+  exchangeRate: 61.573,
+  rateDate: "2026-07-10",
 });
 
 const rule = (over: Partial<Rule>): Rule => ({
@@ -82,6 +90,24 @@ describe("entryOf", () => {
     expect(e.conversion?.rateDate).toBe("2026-07-10");
   });
 
+  it("keeps the fixed PHP amount when the rate metadata is incomplete", () => {
+    const e = entryOf("expense", {
+      id: "e1",
+      description: "gift",
+      amount: 100,
+      currency: "USD",
+      amount_php: "6157.3",
+      expense_date: "2026-07-12",
+      priority: "want",
+      status: "posted",
+      is_debt: false,
+      created_at: "2026-07-12T10:00:00Z",
+      updated_at: "2026-07-12T10:00:00Z",
+    });
+    expect(e.conversion).toBeUndefined();
+    expect(e.amountPHP).toBe(6157.3);
+  });
+
   it("leaves a PHP response without conversion fields undefined", () => {
     const e = entryOf("income", {
       id: "i1",
@@ -98,6 +124,32 @@ describe("entryOf", () => {
       updated_at: "2026-11-01T10:00:00Z",
     });
     expect(e.conversion).toBeUndefined();
+  });
+});
+
+describe("byCategory", () => {
+  const usd = entry({
+    date: "2026-11-13",
+    categoryId: "gift",
+    amount: 100,
+    currency: "USD",
+    conversion: fixedConversion(),
+  });
+  const php = entry({ date: "2026-11-13", categoryId: "food", amount: 500 });
+  const skipped = entry({ date: "2026-11-10", categoryId: "food", amount: 999, status: "skipped" });
+  const otherMonth = entry({ date: "2026-10-10", categoryId: "food", amount: 50 });
+
+  it("totals this month's counted entries at their fixed PHP amount", () => {
+    expect(byCategory([usd, php, skipped, otherMonth], "2026-11")).toEqual([
+      { categoryId: "gift", total: 6157.3 },
+      { categoryId: "food", total: 500 },
+    ]);
+  });
+
+  it("keeps an entry with no category under undefined", () => {
+    expect(byCategory([entry({ date: "2026-11-13", amount: 85 })], "2026-11")).toEqual([
+      { categoryId: undefined, total: 85 },
+    ]);
   });
 });
 
@@ -177,6 +229,30 @@ describe("filters and groups", () => {
     expect(months[0].days[0].entries[0]).toBe(hand2);
   });
 
+  it("totals a mixed-currency month and day at each record's fixed PHP amount", () => {
+    const usd = entry({
+      date: "2026-11-13",
+      amount: 100,
+      currency: "USD",
+      conversion: fixedConversion(),
+    });
+    const php = entry({ date: "2026-11-13", amount: 500 });
+    const months = byMonth([usd, php]);
+    expect(months[0].total).toBe(6657.3);
+    expect(months[0].days[0].total).toBe(6657.3);
+  });
+
+  it("totals a rule's made entries at their fixed PHP amount", () => {
+    const usd = entry({
+      amount: 100,
+      currency: "USD",
+      conversion: fixedConversion(),
+    });
+    const php = entry({ amount: 500 });
+    const skipped = entry({ amount: 999, status: "skipped" });
+    expect(phpTotal([usd, php, skipped])).toBe(6657.3);
+  });
+
   it("offers the latest distinct hand-made descriptions", () => {
     const r = recents([
       entry({ description: "bus", date: "2026-11-10" }),
@@ -216,6 +292,7 @@ describe("colors and money", () => {
   it("formats amounts", () => {
     expect(money(1300)).toBe("₱1,300");
     expect(money(85.5)).toBe("₱85.50");
+    expect(money(Number.NaN)).toBe("—");
     expect(signed("expense", 85)).toBe("−₱85");
     expect(signed("income", 500, "USD")).toBe("+$500");
   });

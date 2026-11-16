@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { saveFailureMessage } from "@/hooks/use-budget";
 import { editToPickCategory } from "@/lib/category-error";
 import { ruleInput, useDeleteEntry, useSaveEntry, useSaveRule } from "@/hooks/use-ledger";
-import { cadencePhrase, counted, ended, money, signed, today, type Entry, type Rule } from "@/lib/ledger";
+import { cadencePhrase, ended, money, phpTotal, signed, today, type Entry, type Rule } from "@/lib/ledger";
 import { staleReport, type StaleReport } from "@/lib/rule-review";
 import type { Category } from "@/types/api";
 
@@ -45,7 +45,7 @@ export function RuleSheet({
   const isEnded = ended(rule);
   const status = isEnded ? "ended" : rule.active ? "active" : "paused";
   const entries = [...made].sort((a, b) => b.date.localeCompare(a.date));
-  const total = entries.filter(counted).reduce((s, e) => s + e.amount, 0);
+  const total = phpTotal(entries);
   const busy = save.isPending || skip.isPending || unskip.isPending;
 
   const run = async (what: () => Promise<unknown>, done: string) => {
@@ -158,7 +158,7 @@ export function RuleSheet({
         <div className="flex items-baseline justify-between pb-2">
           <h3 className="text-[15px] font-semibold text-foreground/85">Entries this rule made</h3>
           <span className="text-[13px] text-muted-foreground">
-            {entries.length} {entries.length === 1 ? "entry" : "entries"} · <span className="font-mono text-foreground">{money(total, rule.currency)}</span>
+            {entries.length} {entries.length === 1 ? "entry" : "entries"} · <span className="font-mono text-foreground">{money(total)}</span>
           </span>
         </div>
         <ol className="flex flex-col border-t border-border">

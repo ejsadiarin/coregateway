@@ -1,4 +1,5 @@
 import { addDays, addMonths, addYears, format, getDate, getDaysInMonth, parseISO, setDate } from "date-fns";
+import { phpAmount } from "./format";
 import type { Category, Expense, Income } from "@/types/api";
 
 // The Expenses and Incomes pages share one layout: the rules on top, the
@@ -24,6 +25,9 @@ export interface Entry {
   description: string;
   amount: number;
   currency: string;
+  // amountPHP is what totals count, even when the rate metadata needed for
+  // the conversion label is missing.
+  amountPHP?: number;
   conversion?: Conversion;
   date: string; // YYYY-MM-DD
   categoryId?: string;
@@ -69,15 +73,14 @@ export function entryOf(kind: LedgerKind, r: Expense | Income): Entry {
   const exchangeRate = Number(r.exchange_rate);
   const amountPHP = Number(r.amount_php);
   const rateDate = day(r.rate_date);
+  const hasAmountPHP = r.amount_php !== undefined && Number.isFinite(amountPHP) && amountPHP > 0;
   const conversion =
     currency !== "PHP" &&
+    hasAmountPHP &&
     r.exchange_rate !== undefined &&
-    r.amount_php !== undefined &&
     rateDate &&
     Number.isFinite(exchangeRate) &&
-    exchangeRate > 0 &&
-    Number.isFinite(amountPHP) &&
-    amountPHP > 0
+    exchangeRate > 0
       ? { exchangeRate, amountPHP, rateDate }
       : undefined;
   return {
@@ -86,6 +89,7 @@ export function entryOf(kind: LedgerKind, r: Expense | Income): Entry {
     description: r.description ?? "",
     amount: Number(r.amount),
     currency,
+    amountPHP: hasAmountPHP ? amountPHP : undefined,
     conversion,
     date: day("expense_date" in r ? r.expense_date : r.date),
     categoryId: r.category_id || undefined,
@@ -253,6 +257,13 @@ export function splitUpcoming(entries: Entry[], from: string = today()): { upcom
 // counted tells an entry that adds to a total: a skipped one doesn't.
 export const counted = (e: Entry) => e.status !== "skipped";
 
+// phpTotal adds what the counted entries come to in PHP.
+export function phpTotal(entries: Entry[]): number {
+  let total = 0;
+  for (const e of entries) if (counted(e)) total += phpAmount(e);
+  return total;
+}
+
 // canSkip tells a record that can be skipped for its date alone: a rule
 // entry. A record typed by hand is deleted instead.
 export const canSkip = (r: { source_rule_id?: string | null }) => !!r.source_rule_id;
@@ -290,12 +301,32 @@ export function byMonth(entries: Entry[]): MonthGroup[] {
     if (!d || d.date !== e.date) m.days.push((d = { date: e.date, total: 0, entries: [] }));
     d.entries.push(e);
     if (counted(e)) {
-      d.total += e.amount;
-      m.total += e.amount;
+      const amount = phpAmount(e);
+      d.total += amount;
+      m.total += amount;
       m.count++;
     }
   }
   return months;
+}
+
+export interface CategoryTotal {
+  categoryId?: string;
+  total: number;
+}
+
+// byCategory groups one month's counted entries by category, biggest PHP
+// total first. An entry without a category stays under undefined.
+export function byCategory(entries: Entry[], month: string): CategoryTotal[] {
+  const by = new Map<string, number>();
+  for (const e of entries) {
+    if (!counted(e) || !e.date.startsWith(month)) continue;
+    const key = e.categoryId ?? "";
+    by.set(key, (by.get(key) ?? 0) + phpAmount(e));
+  }
+  return [...by.entries()]
+    .map(([id, total]) => ({ categoryId: id || undefined, total }))
+    .sort((a, b) => b.total - a.total);
 }
 
 export interface Recent {
@@ -383,6 +414,7 @@ export function hueOf(category?: Pick<Category, "name" | "color">): Hue | undefi
 
 // money formats an amount the way these pages show it: ₱1,300 or ₱85.50.
 export function money(amount: number, currency = "PHP"): string {
+  if (!Number.isFinite(amount)) return "—";
   const symbol = { PHP: "₱", USD: "$", EUR: "€", JPY: "¥" }[currency] ?? `${currency} `;
   const whole = Number.isInteger(Math.round(amount * 100) / 100) && amount % 1 === 0;
   return (

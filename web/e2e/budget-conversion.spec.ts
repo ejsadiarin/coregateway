@@ -11,6 +11,28 @@ async function incomeCategory(page: import("@playwright/test").Page, name: strin
   return category!;
 }
 
+// peso matches the ledger's money(): grouped, two decimals unless whole.
+const peso = (value: number) => {
+  const whole = Number.isInteger(Math.round(value * 100) / 100) && value % 1 === 0;
+  return "₱" + Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 });
+};
+
+async function incomes(page: import("@playwright/test").Page) {
+  const res = await page.request.get(`${api}/api/budget/incomes?page=1&page_size=1000`);
+  expect(res.ok()).toBe(true);
+  return (await res.json()) as {
+    amount: number | string;
+    amount_php?: number | string;
+    date: string;
+    status?: string;
+  }[];
+}
+
+const totalPHP = (rows: Awaited<ReturnType<typeof incomes>>) =>
+  rows
+    .filter((i) => (i.status ?? "posted") !== "skipped")
+    .reduce((sum, i) => sum + Number(i.amount_php ?? i.amount), 0);
+
 test.beforeEach(async ({ page }) => {
   await login(page);
 });
@@ -19,10 +41,16 @@ test("entry details show a non-PHP record's fixed PHP conversion", async ({ page
   const salary = await incomeCategory(page, "salary");
   const usdDescription = unique("USD gift");
   const phpDescription = unique("PHP gift");
-  const today = new Date().toISOString().slice(0, 10);
-  const rateDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
-    new Date(`${today}T00:00:00`),
-  );
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const at = new Date(`${today}T00:00:00`);
+  const rateDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(at);
+  const monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(at);
+  const dayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric" }).format(at);
+  // The ledger totals only entries dated today or earlier.
+  const past = (await incomes(page)).filter((i) => i.date <= today);
+  const expectedMonth = totalPHP(past.filter((i) => i.date.startsWith(today.slice(0, 7)))) + 6157.3 + 500;
+  const expectedDay = totalPHP(past.filter((i) => i.date === today)) + 6157.3 + 500;
   const created: string[] = [];
   const remove = async (id: string) => {
     const res = await page.request.delete(`${api}/api/budget/incomes/${id}`);
@@ -64,6 +92,13 @@ test("entry details show a non-PHP record's fixed PHP conversion", async ({ page
 
     await page.goto("/dashboard/budget/incomes");
     await expect(page.getByRole("heading", { level: 1, name: "Incomes" })).toBeVisible();
+
+    const monthSection = page.getByRole("region", { name: monthLabel });
+    await expect(monthSection).toBeVisible();
+    await expect(monthSection.getByRole("button").first()).toContainText(`+${peso(expectedMonth)}`);
+    await expect(monthSection.getByText(dayLabel, { exact: true }).locator("..")).toContainText(
+      `+${peso(expectedDay)}`,
+    );
 
     await page.getByText(usdDescription, { exact: true }).click();
     const usdDialog = page.getByRole("dialog", { name: usdDescription });
