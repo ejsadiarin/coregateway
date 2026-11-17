@@ -39,7 +39,8 @@ import {
   fetchPriorityGroups,
   fetchFiftyThirtyTwenty,
   fetchMonthOverMonth,
-  fetchCurrentTotalMoney
+  fetchCurrentTotalMoney,
+  fetchPeriodBudget
 } from '@/lib/api';
 import type { ExpenseSearchParams } from '@/lib/api';
 import type {
@@ -73,6 +74,8 @@ import type {
   FiftyThirtyTwentyResponse,
   MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
+  PeriodBudgetResponse,
+  BudgetPeriod,
   MerchantAnalysisResponse,
   HealthScoreResponse,
   WeekdayPatternResponse
@@ -138,7 +141,10 @@ export const budgetKeys = {
   monthOverMonth: () => [...budgetKeys.stats(), 'monthOverMonth'] as const,
 
   currentTotalMoney: () =>
-    [...budgetKeys.all, 'currentTotalMoney'] as const
+    [...budgetKeys.all, 'currentTotalMoney'] as const,
+
+  periodBudget: (period: BudgetPeriod, date: string) =>
+    [...budgetKeys.all, 'periodBudget', { period, date }] as const
 };
 
 // Categories
@@ -588,6 +594,14 @@ export function useCurrentTotalMoney() {
     queryKey: budgetKeys.currentTotalMoney(),
     queryFn: () => fetchCurrentTotalMoney(),
     staleTime: 300000
+  });
+}
+
+export function usePeriodBudget(period: BudgetPeriod, date: string) {
+  return useQuery<PeriodBudgetResponse>({
+    queryKey: budgetKeys.periodBudget(period, date),
+    queryFn: () => fetchPeriodBudget(period, date),
+    staleTime: 30000
   });
 }
 

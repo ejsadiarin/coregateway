@@ -35,6 +35,8 @@ import type {
   FiftyThirtyTwentyResponse,
   MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
+  PeriodBudgetResponse,
+  BudgetPeriod,
   IncomeOccurrence,
   BudgetExportPayload,
   BudgetImportResult,
@@ -935,6 +937,21 @@ export async function fetchCurrentTotalMoney(): Promise<CurrentTotalMoneyRespons
   });
   if (!res.ok) {
     throw new Error(`Error fetching current total money: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchPeriodBudget(
+  period: BudgetPeriod,
+  date?: string
+): Promise<PeriodBudgetResponse> {
+  const params = new URLSearchParams({ period });
+  if (date) params.append('date', date);
+  const res = await fetch(url + `/api/budget/period-budget?${params}`, {
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    throw new Error(`Error fetching period budget: ${res.status}`);
   }
   return res.json();
 }

@@ -388,6 +388,27 @@ export type MonthOverMonthResponse = MonthOverMonthItem[];
 
 export interface CurrentTotalMoneyResponse {
     total_money: number;
+    committed: number;
+    average_daily_spend: number;
+    runway_days: number | null;
+}
+
+export type BudgetPeriod = "day" | "week" | "month";
+
+export interface PeriodBudgetResponse {
+    period: BudgetPeriod;
+    start_date: string;
+    end_date: string;
+    funded: number;
+    projected_income: number;
+    spent: number;
+    bills_still_due: number;
+    left: number;
+    safe_to_spend_per_day: number | null;
+    previous_period_start: string;
+    previous_period_end: string;
+    previous_spent_to_point: number;
+    previous_spent_total: number;
 }
 
 export interface IncomeOccurrence {

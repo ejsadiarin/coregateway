@@ -1,29 +1,28 @@
 import { motion } from "motion/react";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ExpenseStats } from "@/components/budget/expense-stats";
 import { IncomeForm } from "@/components/budget/income-form";
 import { EntrySheet } from "@/components/budget/ledger/entry-sheet";
 import {
-  SavingsRateCard,
-  SpendingVelocityCard,
-  UpcomingBillsCard,
-  RecurringSummaryCard,
-  RecurringIncomeList,
-  CurrentTotalMoneyCard,
-  PeriodPresetFilter
+  MoneyOnHandCard,
+  BudgetPeriodSelector,
+  PeriodBudgetCard,
 } from "@/components/budget";
-import type { PeriodPresetFilterValue } from "@/components/budget";
 import {
-  useSummaryStats,
+  usePeriodBudget,
   useExpenses,
   useIncomeOccurrences,
   useUpdateIncome,
   useDeleteIncome,
   useUpdateExpense,
   useDeleteExpense,
-  useBudgetRemaining,
 } from "@/hooks/use-budget";
+import {
+  budgetDateFrom,
+  budgetPeriodBounds,
+  budgetPeriodFrom,
+  todayISODate,
+} from "@/lib/budget-period";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { Button } from "@/components/ui/button";
 import { Plus, ArrowRight } from "lucide-react";
@@ -41,31 +40,25 @@ import type { Expense, Income, UpdateIncomeRequest, CreateExpenseRequest, Update
 
 export default function BudgetDashboard() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  // Single global period filter (7D default); all period-scoped cards derive from this.
-  // Total Money is lifetime-scoped and does not consume dateRange.
-  const [dateRange, setDateRange] = useState<PeriodPresetFilterValue>(() => {
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(start.getDate() - 6);
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-    return { startDate: fmt(start), endDate: fmt(today), preset: '7d' };
-  });
+  const [searchParams, setSearchParams] = useSearchParams();
+  // The selected period lives in the URL so it survives a reload and shared
+  // links open the same day, week or month.
+  const period = budgetPeriodFrom(searchParams.get("period"));
+  const anchor = budgetDateFrom(searchParams.get("date"));
+  const bounds = budgetPeriodBounds(period, anchor);
+  const today = todayISODate();
+  const { data: periodBudget, isLoading: periodBudgetLoading } = usePeriodBudget(period, anchor);
 
-  const { data: summaryStats, isLoading: statsLoading } = useSummaryStats(dateRange.startDate, dateRange.endDate);
   const { data: expensesData, isLoading: expensesLoading } = useExpenses(
-    dateRange.startDate && dateRange.endDate
-      ? { start_date: dateRange.startDate, end_date: dateRange.endDate }
-      : undefined,
+    { start_date: bounds.start_date, end_date: bounds.end_date },
     1,
     5
   );
-  const { data: budgetRemainingData } = useBudgetRemaining();
 
-  // recent incomes follow the same global period filter as everything else
+  // recent incomes follow the same selected period
   const { data: recentOccurrences, isLoading: occurrencesLoading } = useIncomeOccurrences(
-    dateRange.startDate,
-    dateRange.endDate,
+    bounds.start_date,
+    bounds.end_date,
     1,
     10
   );
@@ -77,13 +70,22 @@ export default function BudgetDashboard() {
   const [newEntry, setNewEntry] = useState<"expense" | "income" | null>(null);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
 
+  const selectPeriod = (nextPeriod: typeof period, nextDate: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("period", nextPeriod);
+    params.set("date", nextDate);
+    setSearchParams(params);
+  };
+
   // check for query param to open expense dialog (deep linking support)
   useEffect(() => {
     const openExpense = searchParams.get("openExpense");
     if (openExpense === "true") {
       setNewEntry("expense");
-      // remove query param from URL
-      navigate("/dashboard/budget", { replace: true });
+      // remove the sheet param but keep the selected period
+      const params = new URLSearchParams(searchParams);
+      params.delete("openExpense");
+      navigate({ pathname: "/dashboard/budget", search: params.toString() }, { replace: true });
     }
   }, [searchParams, navigate]);
 
@@ -206,79 +208,35 @@ export default function BudgetDashboard() {
         </div>
       </motion.div>
 
-      {/* Budget Remaining (current month — lifetime scope shown on Total Money card) */}
-      <motion.div
-        className="mb-4 flex items-center justify-between"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-      >
-        <div className="flex items-center gap-3">
-          {budgetRemainingData && (
-            <>
-              <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-mono">
-                Remaining · {budgetRemainingData.period_start} → {budgetRemainingData.period_end}
-              </p>
-              <span className={`font-mono tabular-nums text-sm font-semibold ${
-                budgetRemainingData.remaining < 0 ? 'text-red-500' :
-                budgetRemainingData.remaining > 0 ? 'text-green-600' :
-                'text-gray-600'
-              }`}>
-                {formatPeso(budgetRemainingData.remaining)}
-              </span>
-              {budgetRemainingData.remaining < 0 && (
-                <Badge variant="destructive" className="text-xs">Over Budget</Badge>
-              )}
-              {budgetRemainingData.remaining > 0 && (
-                <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/30">On Track</Badge>
-              )}
-            </>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Global Period Filter — controls every period-scoped card below */}
       <motion.div
         className="mb-4"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15 }}
+        transition={{ duration: 0.25 }}
       >
-        <PeriodPresetFilter value={dateRange} onChange={setDateRange} />
+        <MoneyOnHandCard />
       </motion.div>
 
-      {/* Summary Statistics */}
+      <motion.div
+        className="mb-4"
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.05 }}
+      >
+        <BudgetPeriodSelector period={period} date={anchor} onChange={selectPeriod} />
+      </motion.div>
+
       <motion.div
         className="mb-8"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.18 }}
+        transition={{ duration: 0.25, delay: 0.1 }}
       >
-        <ExpenseStats stats={summaryStats} isLoading={statsLoading} />
-      </motion.div>
-
-      {/* Budget Analytics Cards */}
-      <motion.div
-        className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-      >
-        <CurrentTotalMoneyCard />
-        <SavingsRateCard startDate={dateRange.startDate || undefined} endDate={dateRange.endDate || undefined} />
-        <SpendingVelocityCard startDate={dateRange.startDate || undefined} endDate={dateRange.endDate || undefined} />
-        <RecurringSummaryCard />
-      </motion.div>
-
-      {/* Recurring Income and Bills */}
-      <motion.div
-        className="mb-8 grid gap-6 lg:grid-cols-2"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-      >
-        <RecurringIncomeList />
-        <UpcomingBillsCard days={7} />
+        <PeriodBudgetCard
+          data={periodBudget}
+          isLoading={periodBudgetLoading}
+          isPast={(periodBudget?.end_date ?? bounds.end_date) < today}
+        />
       </motion.div>
 
       {/* Recent Transactions */}
@@ -394,7 +352,7 @@ export default function BudgetDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Recent Expenses</CardTitle>
-                <CardDescription>Your latest transactions</CardDescription>
+                <CardDescription>Selected period</CardDescription>
               </div>
               <Link to="/dashboard/budget/expenses">
                 <Button variant="ghost" size="sm">
