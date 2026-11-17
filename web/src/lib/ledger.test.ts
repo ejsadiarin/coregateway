@@ -11,6 +11,7 @@ import {
   entryOf,
   hueOf,
   money,
+  monthlyTotals,
   nextDue,
   phpTotal,
   recents,
@@ -259,6 +260,42 @@ describe("ruleTotals", () => {
       "₱759/yr + $5/mo",
     );
     expect(ruleTotalsText({ perMonth: [], perYear: [] })).toBe("");
+  });
+});
+
+describe("monthlyTotals", () => {
+  it("keeps a monthly rule's amount", () => {
+    expect(monthlyTotals([{ amount: 85, currency: "PHP", cadence: "monthly" }])).toEqual([
+      { currency: "PHP", amount: 85 },
+    ]);
+  });
+
+  it("multiplies daily and weekly rules into their monthly equivalents", () => {
+    expect(monthlyTotals([{ amount: 100, currency: "PHP", cadence: "daily" }])).toEqual([
+      { currency: "PHP", amount: 3000 },
+    ]);
+    const weekly = monthlyTotals([{ amount: 500, currency: "PHP", cadence: "weekly" }]);
+    expect(weekly[0].amount).toBeCloseTo(2166.6667, 4);
+  });
+
+  it("turns seven weekly rules into the production monthly equivalent", () => {
+    const weekly = Array.from({ length: 7 }, () => ({ amount: 500, currency: "PHP", cadence: "weekly" as const }));
+    expect(monthlyTotals(weekly)[0].amount).toBeCloseTo(15166.6667, 4);
+  });
+
+  it("divides a yearly rule into its monthly equivalent", () => {
+    expect(monthlyTotals([{ amount: 759, currency: "PHP", cadence: "yearly" }])).toEqual([
+      { currency: "PHP", amount: 63.25 },
+    ]);
+  });
+
+  it("keeps each currency separate", () => {
+    const totals = monthlyTotals([
+      { amount: 100, currency: "USD", cadence: "daily" },
+      { amount: 600, currency: "PHP", cadence: "weekly" },
+    ]);
+    expect(totals[0]).toEqual({ currency: "PHP", amount: 2600 });
+    expect(totals[1]).toEqual({ currency: "USD", amount: 3000 });
   });
 });
 

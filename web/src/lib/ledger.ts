@@ -245,22 +245,42 @@ export interface RuleTotals {
   perYear: CurrencyTotal[];
 }
 
+const MONTHLY_FACTOR: Record<Cadence, number> = {
+  daily: 30,
+  weekly: 52 / 12,
+  monthly: 1,
+  yearly: 1 / 12,
+};
+
+export interface MonthlyProjection {
+  amount: number | string;
+  currency: string;
+  cadence: Cadence;
+}
+
+// monthlyTotals converts each rule to a monthly equivalent before adding it,
+// one currency at a time.
+export function monthlyTotals(rules: MonthlyProjection[]): CurrencyTotal[] {
+  const byCurrency = new Map<string, number>();
+  for (const rule of rules) {
+    addCurrencyAmount(byCurrency, rule.currency, Number(rule.amount) * MONTHLY_FACTOR[rule.cadence]);
+  }
+  return currencyTotals(byCurrency);
+}
+
 // perMonth and perYear add up what the active rules come to, one currency at
 // a time. PHP-only sets keep the single line they had before.
 export function ruleTotals(rules: Rule[]): RuleTotals {
-  const perMonth = new Map<string, number>();
   const perYear = new Map<string, number>();
   for (const r of rules) {
-    if (r.cadence === "yearly") {
-      addCurrencyAmount(perYear, r.currency, r.amount);
-      continue;
-    }
-    const factor = { daily: 30, weekly: 52 / 12, monthly: 1 }[r.cadence];
-    if (factor !== undefined) addCurrencyAmount(perMonth, r.currency, r.amount * factor);
+    if (r.cadence === "yearly") addCurrencyAmount(perYear, r.currency, r.amount);
   }
   const rounded = (totals: CurrencyTotal[]) =>
     totals.map((t) => ({ ...t, amount: Math.round(t.amount) })).filter((t) => t.amount !== 0);
-  return { perMonth: rounded(currencyTotals(perMonth)), perYear: rounded(currencyTotals(perYear)) };
+  return {
+    perMonth: rounded(monthlyTotals(rules.filter((r) => r.cadence !== "yearly"))),
+    perYear: rounded(currencyTotals(perYear)),
+  };
 }
 
 // ruleTotalsText says what those totals come to: one line per currency,

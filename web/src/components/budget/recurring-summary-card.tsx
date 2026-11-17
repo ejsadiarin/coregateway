@@ -3,12 +3,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useRecurringIncomes, useRecurringExpenses } from '@/hooks/use-budget';
 import { Repeat, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatCount, formatSigned, netCurrencyTotals, totalsByCurrency } from '@/lib/format';
+import { formatCount, formatSigned, isRecurringType, netCurrencyTotals } from '@/lib/format';
+import { monthlyTotals, type MonthlyProjection } from '@/lib/ledger';
 import { CurrencyAmounts } from './currency-amounts';
 
 interface RecurringSummaryCardProps {
   className?: string;
 }
+
+const projectionsOf = (
+  rules: { amount: number | string; currency: string; recurring_type: string }[],
+): MonthlyProjection[] =>
+  rules.flatMap((rule) =>
+    isRecurringType(rule.recurring_type)
+      ? [
+          {
+            amount: rule.amount,
+            currency: rule.currency,
+            cadence: rule.recurring_type as MonthlyProjection["cadence"],
+          },
+        ]
+      : [],
+  );
 
 export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
   const { data: recurringIncomes, isLoading: incomesLoading } = useRecurringIncomes();
@@ -33,9 +49,11 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
     );
   }
 
-  const incomeTotals = totalsByCurrency(recurringIncomes ?? []);
+  const incomeProjections = projectionsOf(recurringIncomes ?? []);
+  const incomeTotals = monthlyTotals(incomeProjections);
   const activeExpenses = (recurringExpenses || []).filter((r) => r.is_active !== false);
-  const expenseTotals = totalsByCurrency(activeExpenses);
+  const expenseProjections = projectionsOf(activeExpenses);
+  const expenseTotals = monthlyTotals(expenseProjections);
   const netTotals = netCurrencyTotals(incomeTotals, expenseTotals);
   const netPositive = netTotals.every((t) => t.amount >= 0);
   const netNegative = netTotals.every((t) => t.amount <= 0);
@@ -45,8 +63,8 @@ export function RecurringSummaryCard({ className }: RecurringSummaryCardProps) {
       ? "bg-red-500/10 text-red-500"
       : "bg-muted text-muted-foreground";
 
-  const recurringIncomeCount = recurringIncomes?.length || 0;
-  const recurringExpenseCount = activeExpenses.length;
+  const recurringIncomeCount = incomeProjections.length;
+  const recurringExpenseCount = expenseProjections.length;
 
   return (
     <Card className={className}>

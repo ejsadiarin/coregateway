@@ -95,7 +95,7 @@ test("upcoming bills show every due date of a past-start rule", async ({ page })
   }
 });
 
-test("PHP-only rule projections keep one peso line", async ({ page }) => {
+test("PHP-only rule projections keep one line", async ({ page }) => {
   const created: Rule[] = [];
   try {
     created.push(await createRule(page, "income", 1000, "PHP"));
@@ -113,9 +113,28 @@ test("PHP-only rule projections keep one peso line", async ({ page }) => {
     await page.goto("/dashboard/budget");
     const cashFlow = page.getByText("Recurring Cash Flow", { exact: true }).locator("..").locator("..");
     await expect(cashFlow.getByText("Income", { exact: true }).locator("..")).toContainText("₱1,000.00");
-    await expect(cashFlow.getByText("Expenses", { exact: true }).locator("..")).toContainText("₱200.00");
-    await expect(cashFlow.getByText("Net cash flow", { exact: true }).locator("..")).toContainText("+₱800.00");
+    await expect(cashFlow.getByText("Expenses", { exact: true }).locator("..")).toContainText("₱866.67");
+    await expect(cashFlow.getByText("Net cash flow", { exact: true }).locator("..")).toContainText("+₱133.33");
     await expect(page.getByText("Total due", { exact: true }).locator("..")).toContainText("₱200.00");
+  } finally {
+    for (const rule of created) await removeRule(page, rule);
+  }
+});
+
+test("recurring cash flow applies the monthly equivalent of every cadence", async ({ page }) => {
+  const created: Rule[] = [];
+  try {
+    created.push(await createRule(page, "income", 600, "PHP", { recurring_type: "weekly" }));
+    created.push(await createRule(page, "income", 100, "PHP", { recurring_type: "daily" }));
+    created.push(await createRule(page, "income", 600, "PHP", { recurring_type: "yearly" }));
+    created.push(await createRule(page, "income", 85, "PHP", { recurring_type: "monthly" }));
+    created.push(await createRule(page, "expense", 120, "PHP", { recurring_type: "weekly" }));
+
+    await page.goto("/dashboard/budget");
+    const cashFlow = page.getByText("Recurring Cash Flow", { exact: true }).locator("..").locator("..");
+    await expect(cashFlow.getByText("Income", { exact: true }).locator("..")).toContainText("₱5,735.00");
+    await expect(cashFlow.getByText("Expenses", { exact: true }).locator("..")).toContainText("₱520.00");
+    await expect(cashFlow.getByText("Net cash flow", { exact: true }).locator("..")).toContainText("+₱5,215.00");
   } finally {
     for (const rule of created) await removeRule(page, rule);
   }
@@ -153,13 +172,13 @@ test("rule projections show one subtotal per currency when mixed", async ({ page
     await expect(income).toContainText("$5.00");
 
     const expenses = cashFlow.getByText("Expenses", { exact: true }).locator("..");
-    await expect(expenses).toContainText("₱200.00");
-    await expect(expenses).toContainText("$2.00");
+    await expect(expenses).toContainText("₱866.67");
+    await expect(expenses).toContainText("$8.67");
 
     const net = cashFlow.getByText("Net cash flow", { exact: true }).locator("..");
-    await expect(net).toContainText("+₱800.00");
+    await expect(net).toContainText("+₱133.33");
     await expect(net).toContainText("+¥3,000.00");
-    await expect(net).toContainText("+$3.00");
+    await expect(net).toContainText("-$3.67");
 
     const totalDue = page.getByText("Total due", { exact: true }).locator("..");
     await expect(totalDue).toContainText("₱200.00");
