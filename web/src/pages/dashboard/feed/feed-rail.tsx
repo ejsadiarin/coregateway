@@ -7,20 +7,15 @@ import { useEntries, useRules } from "@/hooks/use-ledger";
 import { comingUp, monthDays, monthSummary, noteDaysFor, shortNet } from "@/lib/feed-rail";
 import { feedKey, fetchNoteDays } from "@/lib/feed";
 import { fetchKanbanReminders, remindersKey } from "@/lib/kanban";
-import { dueDatesWithin, money, today, type Entry, type Rule } from "@/lib/ledger";
+import { withDueDates, money, today, type Entry, type Rule } from "@/lib/ledger";
 import { cn } from "@/lib/utils";
 
 const NONE: never[] = [];
 
 // withDates pairs each rule with the dates it falls on in the next seven
 // days that it hasn't made an entry for yet.
-function withDates(rules: Rule[], entries: Entry[]) {
-  const made = new Map<string, Set<string>>();
-  for (const e of entries) if (e.ruleId) made.set(e.ruleId, (made.get(e.ruleId) ?? new Set()).add(e.date));
-  const from = today();
-  const until = format(addDays(new Date(), 6), "yyyy-MM-dd");
-  return rules.map((r) => ({ ...r, dates: dueDatesWithin(r, made.get(r.id) ?? new Set(), from, until) }));
-}
+const withDates = (rules: Rule[], entries: Entry[]) =>
+  withDueDates(rules, entries, today(), format(addDays(new Date(), 6), "yyyy-MM-dd"));
 
 const card = "rounded-2xl border border-border bg-card/60 p-4";
 

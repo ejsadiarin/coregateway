@@ -157,6 +157,27 @@ function nthDue(start: Date, cadence: Cadence, n: number): Date {
   }
 }
 
+// withDueDates pairs each rule with the dates it falls on in the window that
+// it hasn't made an entry for yet.
+export function withDueDates(
+  rules: Rule[],
+  entries: Pick<Entry, "ruleId" | "date">[],
+  from: string,
+  until: string,
+): (Rule & { dates: string[] })[] {
+  const madeByRule = new Map<string, Set<string>>();
+  for (const entry of entries) {
+    if (!entry.ruleId) continue;
+    const made = madeByRule.get(entry.ruleId) ?? new Set<string>();
+    made.add(entry.date);
+    madeByRule.set(entry.ruleId, made);
+  }
+  return rules.map((rule) => ({
+    ...rule,
+    dates: dueDatesWithin(rule, madeByRule.get(rule.id) ?? new Set(), from, until),
+  }));
+}
+
 // nextDue is the first date on or after `from` the rule is due that it
 // hasn't made an entry for yet (a skipped date has an entry too), or
 // undefined once it has ended. A paused rule has no next date.
