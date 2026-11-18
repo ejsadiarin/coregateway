@@ -54,6 +54,7 @@ export default function DrawPage() {
     if (isPhone) setDocOpen(false);
   }, [isPhone]);
   const [activeTool, setActiveTool] = useState<RailToolId | null>("select");
+  const activeToolRef = useRef<RailToolId | null>("select");
   const [style, setStyle] = useState<DrawStyle>(DEFAULT_DRAW_STYLE);
   const styleRef = useRef<DrawStyle>(DEFAULT_DRAW_STYLE);
   const [scene, setScene] = useState<LoadedScene | null>(null);
@@ -84,7 +85,13 @@ export default function DrawPage() {
   const onCanvasChange = useCallback(() => {
     const adapter = adapterRef.current;
     if (!adapter) return;
-    setActiveTool(adapter.activeRailTool());
+    // Change events also fire for pan/zoom/selection and every pointer move.
+    // Only touch React state when the tool or style really moved.
+    const tool = adapter.activeRailTool();
+    if (tool !== activeToolRef.current) {
+      activeToolRef.current = tool;
+      setActiveTool(tool);
+    }
     const next = adapter.currentStyle();
     if (!sameStyle(next, styleRef.current)) {
       styleRef.current = next;
@@ -102,7 +109,9 @@ export default function DrawPage() {
   const handleSelectTool = useCallback((id: CanvasTool) => {
     const adapter = adapterRef.current;
     adapter?.setTool(id);
-    setActiveTool(railToolForCanvasTool(id));
+    const railTool = railToolForCanvasTool(id);
+    activeToolRef.current = railTool;
+    setActiveTool(railTool);
     if (adapter) {
       const next = adapter.currentStyle();
       styleRef.current = next;

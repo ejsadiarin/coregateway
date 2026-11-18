@@ -3,6 +3,10 @@ import { expect, login, newDrawBoard, test } from "./fixtures";
 // Excalidraw 0.18 logs two known warnings before/while it mounts (an App
 // setState warning and Chrome's unload permissions-policy notice). They are
 // not our bugs, but a real console error still fails the run.
+// sync.ts debounces saves for 1500ms. Waiting a little longer proves that a
+// view-only change did not arm one.
+const SAVE_SETTLE_MS = 1800;
+
 function dropExcalidrawNoise(errors: string[]) {
   const known = [
     /Can't call %s on a component that is not yet mounted/,
@@ -81,6 +85,93 @@ test.describe("draw phone shell", () => {
     expect(metrics.toolbarTouchAction).toBe("manipulation");
     dropExcalidrawNoise(consoleErrors);
   });
+});
+
+test("saves a drawn stroke once and never on pan, zoom or selection", async ({ page, consoleErrors }) => {
+  await login(page);
+
+  // Count every board save, including one that opening a board might trigger.
+  const saves: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "PUT" && /\/api\/coredraw\/boards\//.test(request.url())) {
+      saves.push(request.url());
+    }
+  });
+
+  await newDrawBoard(page, "change detection");
+  const canvas = page.locator(".coredraw-canvas");
+  await expect(canvas).toBeVisible();
+  const rail = page.getByTestId("draw-tool-rail");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("canvas has no box");
+  const from = { x: box.x + box.width * 0.3, y: box.y + box.height * 0.35 };
+
+  async function drag(to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 20 });
+    await page.mouse.up();
+  }
+
+  // Opening a board only adopts a baseline; it never schedules a save.
+  await page.waitForTimeout(SAVE_SETTLE_MS + 200);
+  expect(saves).toHaveLength(0);
+
+  // Pan, zoom and selection are view-only.
+  await rail.getByRole("button", { name: "Pan", exact: true }).click();
+  await drag({ x: from.x + 120, y: from.y + 80 });
+  await page.keyboard.down("Control");
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.wheel(0, -200);
+  await page.keyboard.up("Control");
+  await rail.getByRole("button", { name: "Select", exact: true }).click();
+  await page.mouse.click(from.x, from.y);
+  await page.waitForTimeout(SAVE_SETTLE_MS);
+  expect(saves).toHaveLength(0);
+
+  // One drawn stroke schedules exactly one debounced save.
+  await rail.getByRole("button", { name: "Draw", exact: true }).click();
+  await drag({ x: from.x + 220, y: from.y + 40 });
+  await expect.poll(() => saves.length, { timeout: 5000 }).toBe(1);
+  await page.waitForTimeout(SAVE_SETTLE_MS);
+  expect(saves).toHaveLength(1);
+
+  // View changes on the loaded board add nothing.
+  await rail.getByRole("button", { name: "Select", exact: true }).click();
+  await page.mouse.click(from.x + 100, from.y + 100);
+  await rail.getByRole("button", { name: "Pan", exact: true }).click();
+  await drag({ x: from.x + 40, y: from.y + 30 });
+  await page.waitForTimeout(SAVE_SETTLE_MS);
+  expect(saves).toHaveLength(1);
+
+  // Reopening a board with content must not save (the mount rewrite is not an
+  // edit), and the first stroke after it must still be saved.
+  await page.reload();
+  await expect(canvas).toBeVisible();
+  await page.waitForTimeout(SAVE_SETTLE_MS + 200);
+  expect(saves).toHaveLength(1);
+
+  await rail.getByRole("button", { name: "Draw", exact: true }).click();
+  await drag({ x: from.x + 180, y: from.y + 120 });
+  await expect.poll(() => saves.length, { timeout: 5000 }).toBe(2);
+
+  // A pending debounce must not save a stroke that is still being drawn: draw
+  // one stroke, immediately start a second slow one, and hold past 1500ms.
+  await drag({ x: from.x + 140, y: from.y + 150 });
+  const held = { x: from.x + 60, y: from.y + 60 };
+  await page.mouse.move(held.x, held.y);
+  await page.mouse.down();
+  for (let i = 0; i < 20; i++) {
+    await page.mouse.move(held.x + i * 4, held.y + i * 2);
+    await page.waitForTimeout(100);
+  }
+  expect(saves).toHaveLength(2);
+  await page.mouse.up();
+  await expect.poll(() => saves.length, { timeout: 5000 }).toBe(3);
+  await page.waitForTimeout(SAVE_SETTLE_MS);
+  expect(saves).toHaveLength(3);
+
+  dropExcalidrawNoise(consoleErrors);
 });
 
 test.describe("draw tablet and desktop shell", () => {

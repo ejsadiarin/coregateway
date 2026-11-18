@@ -17,6 +17,8 @@ import {
   flattenFreehandPressure,
   applyFormalStyle,
   applyStyleToElements,
+  SceneEditTracker,
+  sceneChangeToken,
   DEFAULT_DRAW_STYLE,
   FREEDRAW_STROKE_WIDTH,
   hydrateIconFiles,
@@ -178,6 +180,63 @@ describe("flattenFreehandPressure", () => {
     const result = flattenFreehandPressure([rect]);
     expect(result.changed).toBe(false);
     expect(result.elements[0]).toBe(rect);
+  });
+});
+
+describe("sceneChangeToken", () => {
+  const appState = {
+    viewBackgroundColor: "#ffffff",
+    gridSize: 20,
+    gridModeEnabled: false,
+  };
+
+  it("ignores transient view state", () => {
+    expect(
+      sceneChangeToken(10, {
+        ...appState,
+        scrollX: 999,
+        scrollY: -40,
+        selectedElementIds: { a: true },
+      }),
+    ).toBe(sceneChangeToken(10, appState));
+  });
+
+  it("changes when elements or durable appState change", () => {
+    const base = sceneChangeToken(10, appState);
+    expect(sceneChangeToken(11, appState)).not.toBe(base);
+    expect(sceneChangeToken(10, { ...appState, gridModeEnabled: true })).not.toBe(base);
+    expect(sceneChangeToken(10, { ...appState, gridSize: 40 })).not.toBe(base);
+    expect(sceneChangeToken(10, { ...appState, viewBackgroundColor: "#000000" })).not.toBe(base);
+  });
+});
+
+describe("SceneEditTracker", () => {
+  it("treats the first observation as the open-board baseline", () => {
+    const tracker = new SceneEditTracker();
+    expect(tracker.observe("100")).toBe("baseline");
+  });
+
+  it("ignores an unchanged token (pan, zoom, selection)", () => {
+    const tracker = new SceneEditTracker();
+    tracker.observe("100");
+    expect(tracker.observe("100")).toBe("unchanged");
+    expect(tracker.observe("100")).toBe("unchanged");
+  });
+
+  it("reports exactly one change per token update", () => {
+    const tracker = new SceneEditTracker();
+    tracker.observe("100");
+    expect(tracker.observe("101")).toBe("changed");
+    expect(tracker.observe("101")).toBe("unchanged");
+    expect(tracker.observe("102")).toBe("changed");
+  });
+
+  it("adopts a normalization bump without reporting another edit", () => {
+    const tracker = new SceneEditTracker();
+    tracker.observe("100");
+    expect(tracker.observe("101")).toBe("changed");
+    tracker.adopt("102");
+    expect(tracker.observe("102")).toBe("unchanged");
   });
 });
 

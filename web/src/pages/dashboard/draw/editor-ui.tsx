@@ -105,7 +105,10 @@ export function ToolRail({
   onOpenPalette: (tab: PaletteTab) => void;
 }) {
   return (
-    <div className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2 md:flex">
+    <div
+      data-testid="draw-tool-rail"
+      className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2 md:flex"
+    >
       {RAIL_TOOLS.map((t) => (
         <ToolButton
           key={t.id}

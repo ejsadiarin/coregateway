@@ -10,7 +10,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "icons:gen": "node scripts/gen-icon-sprite.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "perf:draw": "node scripts/measure-draw-frame-times.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",

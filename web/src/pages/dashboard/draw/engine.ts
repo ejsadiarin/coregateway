@@ -213,6 +213,47 @@ function baseElement(f: BaseFields) {
 }
 
 // ---------------------------------------------------------------------------
+// Cheap edit detection.
+//
+// Excalidraw emits a change for pointer moves, pan, zoom and selection too.
+// Comparing a scene hash (ids/version nonces) is far cheaper than serialising
+// the whole snapshot, and the first observation is the baseline a freshly
+// opened board starts from.
+// ---------------------------------------------------------------------------
+
+export type SceneChangeResult = "baseline" | "unchanged" | "changed";
+
+// The cheap change token: Excalidraw's element version hash (element order and
+// version nonces) plus the durable appState. Transient view state (scroll,
+// zoom, selection) is not included.
+export function sceneChangeToken(elementHash: number, appState: Partial<AppState>): string {
+  const durable = pickDurableAppState(appState);
+  return `${elementHash}:${durable.viewBackgroundColor}:${durable.gridSize}:${durable.gridModeEnabled}`;
+}
+
+export class SceneEditTracker {
+  private token: string | null = null;
+
+  // Record the token a change reported. The first call only adopts a baseline;
+  // later calls report a real edit when the token moved.
+  observe(token: string): SceneChangeResult {
+    if (this.token === null) {
+      this.token = token;
+      return "baseline";
+    }
+    if (this.token === token) return "unchanged";
+    this.token = token;
+    return "changed";
+  }
+
+  // Adopt a token after a normalization (pressure flattening) bumped the
+  // scene, so the rewrite is not counted as a second user edit.
+  adopt(token: string): void {
+    this.token = token;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Style normalization.
 //
 // Two distinct jobs, deliberately kept apart:

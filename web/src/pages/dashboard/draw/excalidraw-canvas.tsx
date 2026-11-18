@@ -12,6 +12,7 @@ import {
   Excalidraw,
   exportToBlob,
   exportToSvg,
+  hashElementsVersion,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
@@ -25,6 +26,8 @@ import {
   railToolForExcalidrawTool,
   flattenFreehandPressure,
   applyFormalStyle,
+  SceneEditTracker,
+  sceneChangeToken,
   DEFAULT_DRAW_STYLE,
   FORMAL_DRAW_DEFAULTS,
   FREEDRAW_STROKE_WIDTH,
@@ -130,48 +133,46 @@ function download(blob: Blob, filename: string): void {
 }
 
 export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter {
-  // Serialized form of the last scene we know matches the server, and whether
-  // we have adopted the first post-mount snapshot. Excalidraw emits change
-  // events for view-only churn (scroll, selection, load normalization) that a
-  // user edit did not cause; comparing content keeps those from bumping the
-  // board revision. Adopting the first change absorbs Excalidraw's rewrite of
-  // freshly-loaded elements, so merely opening a board does not save.
-  let lastSeen: string | null = null;
-  let adoptBaseline = true;
+  // A cheap id/version hash of the last scene we saw. Excalidraw emits change
+  // events for view-only churn (pan, zoom, selection, load normalization) that
+  // a user edit did not cause; comparing the hash keeps those from bumping the
+  // board revision. The first change adopts a baseline, absorbing Excalidraw's
+  // rewrite of freshly-loaded elements so merely opening a board does not save.
+  const tracker = new SceneEditTracker();
   // `updateScene` can emit a synchronous change; this guard keeps the
   // pressure-flattening rewrite from re-entering itself.
   let flattening = false;
 
   return {
     toSnapshot: () => {
-      // Never rewrite an element that is still being drawn: replacing the
-      // in-progress element detaches it from Excalidraw's pointer state and the
-      // stroke collapses to a dot. The change emitted on pointer-up flattens it.
-      const inProgress = api.getAppState().newElement !== null;
-      const elements = inProgress
-        ? api.getSceneElements()
-        : flattenFreehandPressure(api.getSceneElements()).elements;
-      return sceneToSnapshot(elements, api.getAppState());
+      // Never read or rewrite the scene while a stroke is in progress: a save
+      // timer armed by the previous edit must not persist a partial stroke, and
+      // replacing the in-progress element would collapse it to a dot. The
+      // pointer-up change schedules the save that includes the whole stroke.
+      if (api.getAppState().newElement !== null) return null;
+      return sceneToSnapshot(flattenFreehandPressure(api.getSceneElements()).elements, api.getAppState());
     },
     noteSceneChange: () => {
-      const inProgress = api.getAppState().newElement !== null;
-      const { elements, changed } = inProgress
-        ? { elements: api.getSceneElements(), changed: false }
-        : flattenFreehandPressure(api.getSceneElements());
-      if (changed && !flattening) {
+      // Mid-stroke every pointer move emits a change. Do nothing scene-wide
+      // until pointer-up: the change that ends the stroke does the work once.
+      if (flattening || api.getAppState().newElement !== null) return false;
+
+      const elements = api.getSceneElements();
+      const token = sceneChangeToken(hashElementsVersion(elements), api.getAppState());
+      const result = tracker.observe(token);
+      if (result === "unchanged") return false;
+
+      // A real edit (or the first post-mount change): normalize simulated
+      // pressure, then adopt the bumped version so the rewrite is not counted
+      // as another edit.
+      const flattened = flattenFreehandPressure(elements);
+      if (flattened.changed) {
         flattening = true;
-        api.updateScene({ elements });
+        api.updateScene({ elements: flattened.elements });
         flattening = false;
+        tracker.adopt(sceneChangeToken(hashElementsVersion(flattened.elements), api.getAppState()));
       }
-      const json = JSON.stringify(sceneToSnapshot(elements, api.getAppState()));
-      if (adoptBaseline) {
-        adoptBaseline = false;
-        lastSeen = json;
-        return false;
-      }
-      if (json === lastSeen) return false;
-      lastSeen = json;
-      return true;
+      return result === "changed";
     },
     activeRailTool: () => railToolForExcalidrawTool(api.getAppState().activeTool?.type ?? ""),
     setTool: (tool: CanvasTool) => {
