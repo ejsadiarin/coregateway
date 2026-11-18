@@ -48,6 +48,9 @@ type Querier interface {
 	TouchApiKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (CoregatewayService, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (CoregatewayUser, error)
+	// The config owns a built-in's URL and identity; its pause flag, interval,
+	// timeout and other tuning stay as the admin left them.
+	UpsertBuiltinService(ctx context.Context, arg UpsertBuiltinServiceParams) (CoregatewayService, error)
 }
 
 var _ Querier = (*Queries)(nil)

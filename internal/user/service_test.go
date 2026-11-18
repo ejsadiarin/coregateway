@@ -101,6 +101,10 @@ func (m *mockQuerier) GetService(context.Context, uuid.UUID) (sqlc.CoregatewaySe
 func (m *mockQuerier) GetServiceHistory(context.Context, sqlc.GetServiceHistoryParams) ([]sqlc.CoregatewayServiceHealthHistory, error) {
 	return nil, nil
 }
+func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
+	return sqlc.CoregatewayService{}, nil
+}
+
 func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamp) (int64, error) {
 	return 0, nil
 }

@@ -118,6 +118,17 @@ func (s *Service) GetService(ctx context.Context, id uuid.UUID) (*sqlc.Coregatew
 
 func (s *Service) UpdateService(ctx context.Context, id uuid.UUID, req UpdateServiceRequest) (*sqlc.CoregatewayService, error) {
 	slog.Debug("monitor.Service.UpdateService", "id", id)
+	current, err := s.queries.GetService(ctx, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("service not found")
+		}
+		return nil, fmt.Errorf("failed to get service: %w", err)
+	}
+	if current.IsBuiltin && req.URL != nil && *req.URL != current.Url {
+		return nil, ErrBuiltinURL
+	}
+
 	params := sqlc.UpdateServiceParams{ID: id}
 
 	if req.Name != nil {
@@ -164,8 +175,18 @@ func (s *Service) UpdateService(ctx context.Context, id uuid.UUID, req UpdateSer
 
 func (s *Service) DeleteService(ctx context.Context, id uuid.UUID) error {
 	slog.Debug("monitor.Service.DeleteService", "id", id)
-	err := s.queries.DeleteService(ctx, id)
+	current, err := s.queries.GetService(ctx, id)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("service not found")
+		}
+		return fmt.Errorf("failed to get service: %w", err)
+	}
+	if current.IsBuiltin {
+		return ErrBuiltinService
+	}
+
+	if err := s.queries.DeleteService(ctx, id); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Errorf("service not found")
 		}

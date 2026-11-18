@@ -37,6 +37,11 @@ func main() {
 
 	queries := sqlc.New(pool)
 
+	if err := monitor.EnsureBuiltinServices(context.Background(), queries,
+		monitor.DownstreamBuiltins(cfg.CorefinanceURL, cfg.CorebanURL, cfg.CoredrawURL)); err != nil {
+		log.Fatalf("Failed to seed built-in services: %v", err)
+	}
+
 	healthChecker := monitor.NewHealthChecker(queries)
 	checkerCtx, stopChecker := context.WithCancel(context.Background())
 	checkerDone := make(chan struct{})

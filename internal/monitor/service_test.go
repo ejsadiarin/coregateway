@@ -35,6 +35,10 @@ func (m *mockQuerier) DeleteService(_ context.Context, id uuid.UUID) error {
 	}
 	return sql.ErrNoRows
 }
+func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
+	return sqlc.CoregatewayService{}, nil
+}
+
 func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamp) (int64, error) {
 	return 0, nil
 }

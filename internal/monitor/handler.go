@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -83,6 +84,10 @@ func (h *Handler) UpdateService(w http.ResponseWriter, r *http.Request) {
 			helper.RespondErrorJSON(w, http.StatusNotFound, "service not found")
 			return
 		}
+		if errors.Is(err, ErrBuiltinURL) {
+			helper.RespondErrorJSON(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -101,6 +106,10 @@ func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
 		slog.Error("monitor.Handler.DeleteService: failed", "error", err, "id", id)
 		if err.Error() == "service not found" {
 			helper.RespondErrorJSON(w, http.StatusNotFound, "service not found")
+			return
+		}
+		if errors.Is(err, ErrBuiltinService) {
+			helper.RespondErrorJSON(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())

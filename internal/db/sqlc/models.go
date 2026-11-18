@@ -37,6 +37,8 @@ type CoregatewayService struct {
 	CreatedAt           pgtype.Timestamp `json:"created_at"`
 	UpdatedAt           pgtype.Timestamp `json:"updated_at"`
 	IsActive            pgtype.Bool      `json:"is_active"`
+	IsBuiltin           bool             `json:"is_builtin"`
+	BuiltinKey          pgtype.Text      `json:"builtin_key"`
 }
 
 type CoregatewayServiceHealthHistory struct {

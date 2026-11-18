@@ -93,3 +93,7 @@ _Avoid_: service, downstream, target, endpoint
 **Health check**:
 One probe of a monitored service, recorded with its status, response time, and status code.
 _Avoid_: ping, uptime check, probe
+
+**Built-in service**:
+A monitored service the gateway creates from its own config for a downstream it proxies to. It follows the configured URL and can be paused or tuned, but not deleted or repointed.
+_Avoid_: internal service, default service

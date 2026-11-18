@@ -54,6 +54,21 @@ SELECT id, name, url, health_check_method, expected_status_codes, timeout, healt
 FROM coregateway.services
 WHERE is_active = true;
 
+-- name: UpsertBuiltinService :one
+-- The config owns a built-in's URL and identity; its pause flag, interval,
+-- timeout and other tuning stay as the admin left them.
+INSERT INTO coregateway.services (
+    name, url, description, service_type, is_builtin, builtin_key
+) VALUES (
+    $1, $2, $3, $4, true, $5
+)
+ON CONFLICT (builtin_key) DO UPDATE SET
+    url = EXCLUDED.url,
+    description = EXCLUDED.description,
+    service_type = EXCLUDED.service_type,
+    updated_at = NOW()
+RETURNING *;
+
 -- name: DeleteOldHealthHistory :execrows
 DELETE FROM coregateway.service_health_history
 WHERE checked_at < sqlc.arg(checked_before);

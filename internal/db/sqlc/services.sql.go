@@ -56,7 +56,7 @@ INSERT INTO coregateway.services (
     expected_status_codes, timeout
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active
+) RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
 `
 
 type CreateServiceParams struct {
@@ -98,6 +98,8 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsActive,
+		&i.IsBuiltin,
+		&i.BuiltinKey,
 	)
 	return i, err
 }
@@ -155,7 +157,7 @@ func (q *Queries) GetAllServicesStats(ctx context.Context) (GetAllServicesStatsR
 }
 
 const getService = `-- name: GetService :one
-SELECT id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active FROM coregateway.services
+SELECT id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key FROM coregateway.services
 WHERE id = $1 LIMIT 1
 `
 
@@ -176,6 +178,8 @@ func (q *Queries) GetService(ctx context.Context, id uuid.UUID) (CoregatewayServ
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsActive,
+		&i.IsBuiltin,
+		&i.BuiltinKey,
 	)
 	return i, err
 }
@@ -328,7 +332,7 @@ func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListA
 
 const listServices = `-- name: ListServices :many
 SELECT 
-    s.id, s.name, s.url, s.icon, s.description, s.service_type, s.health_check_interval, s.health_check_method, s.expected_status_codes, s.timeout, s.created_at, s.updated_at, s.is_active,
+    s.id, s.name, s.url, s.icon, s.description, s.service_type, s.health_check_interval, s.health_check_method, s.expected_status_codes, s.timeout, s.created_at, s.updated_at, s.is_active, s.is_builtin, s.builtin_key,
     COALESCE(h.status, 'unknown') as current_status,
     h.checked_at as last_check,
     h.response_time
@@ -358,6 +362,8 @@ type ListServicesRow struct {
 	CreatedAt           pgtype.Timestamp `json:"created_at"`
 	UpdatedAt           pgtype.Timestamp `json:"updated_at"`
 	IsActive            pgtype.Bool      `json:"is_active"`
+	IsBuiltin           bool             `json:"is_builtin"`
+	BuiltinKey          pgtype.Text      `json:"builtin_key"`
 	CurrentStatus       string           `json:"current_status"`
 	LastCheck           pgtype.Timestamp `json:"last_check"`
 	ResponseTime        pgtype.Int4      `json:"response_time"`
@@ -386,6 +392,8 @@ func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.IsActive,
+			&i.IsBuiltin,
+			&i.BuiltinKey,
 			&i.CurrentStatus,
 			&i.LastCheck,
 			&i.ResponseTime,
@@ -415,7 +423,7 @@ SET
     is_active = COALESCE($10, is_active),
     updated_at = NOW()
 WHERE id = $11
-RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active
+RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
 `
 
 type UpdateServiceParams struct {
@@ -461,6 +469,61 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (C
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.IsActive,
+		&i.IsBuiltin,
+		&i.BuiltinKey,
+	)
+	return i, err
+}
+
+const upsertBuiltinService = `-- name: UpsertBuiltinService :one
+INSERT INTO coregateway.services (
+    name, url, description, service_type, is_builtin, builtin_key
+) VALUES (
+    $1, $2, $3, $4, true, $5
+)
+ON CONFLICT (builtin_key) DO UPDATE SET
+    url = EXCLUDED.url,
+    description = EXCLUDED.description,
+    service_type = EXCLUDED.service_type,
+    updated_at = NOW()
+RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
+`
+
+type UpsertBuiltinServiceParams struct {
+	Name        string      `json:"name"`
+	Url         string      `json:"url"`
+	Description pgtype.Text `json:"description"`
+	ServiceType pgtype.Text `json:"service_type"`
+	BuiltinKey  pgtype.Text `json:"builtin_key"`
+}
+
+// The config owns a built-in's URL and identity; its pause flag, interval,
+// timeout and other tuning stay as the admin left them.
+func (q *Queries) UpsertBuiltinService(ctx context.Context, arg UpsertBuiltinServiceParams) (CoregatewayService, error) {
+	row := q.db.QueryRow(ctx, upsertBuiltinService,
+		arg.Name,
+		arg.Url,
+		arg.Description,
+		arg.ServiceType,
+		arg.BuiltinKey,
+	)
+	var i CoregatewayService
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Url,
+		&i.Icon,
+		&i.Description,
+		&i.ServiceType,
+		&i.HealthCheckInterval,
+		&i.HealthCheckMethod,
+		&i.ExpectedStatusCodes,
+		&i.Timeout,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsActive,
+		&i.IsBuiltin,
+		&i.BuiltinKey,
 	)
 	return i, err
 }
