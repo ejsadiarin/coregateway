@@ -63,10 +63,11 @@ export function useServiceStats(id: string | null, enabled: boolean = true) {
   });
 }
 
-export function useAllServicesStats() {
+export function useAllServicesStats(enabled = true) {
   return useQuery({
     queryKey: serviceKeys.allStats(),
     queryFn: fetchAllServicesStats,
+    enabled,
     refetchInterval: 60000,
     staleTime: 30000
   });

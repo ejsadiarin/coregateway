@@ -1,21 +1,3 @@
-export interface SystemStats {
-    cpu: number;
-    memory: number;
-    storage: number;
-    temperature: number;
-    uptime: string;
-    network: {
-        up: string;
-        down: string;
-    };
-}
-
-export interface ServiceStatus {
-    name: string;
-    status: "online" | "offline" | "degraded" | "maintenance" | "unknown";
-    type: string;
-}
-
 export interface Service {
     id: string;
     name: string;

@@ -154,6 +154,18 @@ func doNative(t *testing.T, h http.Handler, role string, id uuid.UUID, method, t
 	return rec
 }
 
+func TestRemovedMockRoutes(t *testing.T) {
+	h, _, _, _, _ := nativeTestSetup(t)
+	for _, path := range []string{"/api/system/stats", "/api/legacy/services"} {
+		t.Run(path, func(t *testing.T) {
+			rec := doNative(t, h, "", uuid.Nil, http.MethodGet, path, "")
+			if rec.Code != http.StatusNotFound {
+				t.Errorf("status = %d, want 404", rec.Code)
+			}
+		})
+	}
+}
+
 func TestNativeUserRoutesMatrix(t *testing.T) {
 	newRouter := func(t *testing.T) (http.Handler, *nativeStubQuerier, uuid.UUID, uuid.UUID, uuid.UUID) {
 		return nativeTestSetup(t)

@@ -247,14 +247,6 @@ export async function deleteUser(id: string): Promise<void> {
   }
 }
 
-export async function fetchSystemStatus() {
-  const res = await fetch(url + '/api/system/stats');
-  if (!res.ok) {
-    throw new Error(`Error fetching ${res.status}`);
-  }
-  return res.json();
-}
-
 // Budget API Functions
 
 // Expense Categories

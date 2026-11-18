@@ -19,24 +19,6 @@ import (
 	swagger "github.com/swaggo/http-swagger"
 )
 
-type systemStats struct {
-	CPU         int    `json:"cpu"`
-	Memory      int    `json:"memory"`
-	Storage     int    `json:"storage"`
-	Temperature int    `json:"temperature"`
-	Uptime      string `json:"uptime"`
-	Network     struct {
-		Up   string `json:"up"`
-		Down string `json:"down"`
-	} `json:"network"`
-}
-
-type serviceStatus struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Type   string `json:"type"`
-}
-
 func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r := chi.NewRouter()
 
@@ -50,8 +32,6 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 	r.Get("/.well-known/jwks.json", s.ServeJWKS)
 	r.Get("/swagger/*", swagger.WrapHandler)
 	r.Get("/health", healthCheck)
-	r.Get("/api/system/stats", getSystemStats)
-	r.Get("/api/legacy/services", getLegacyServices)
 
 	// auth
 	r.Post("/api/auth/register", s.AuthHandler.Register)
@@ -170,38 +150,6 @@ func healthCheck(w http.ResponseWriter, r *http.Request) {
 		"status": "healthy",
 		"time":   time.Now().Format(time.RFC3339),
 	})
-}
-
-func getSystemStats(w http.ResponseWriter, r *http.Request) {
-	stats := systemStats{
-		CPU:         15,
-		Memory:      42,
-		Storage:     68,
-		Temperature: 45,
-		Uptime:      "42d 13h 27m",
-		Network: struct {
-			Up   string `json:"up"`
-			Down string `json:"down"`
-		}{
-			Up:   "125.4 Mbps",
-			Down: "342.8 Mbps",
-		},
-	}
-
-	helper.RespondJSON(w, http.StatusOK, stats)
-}
-
-func getLegacyServices(w http.ResponseWriter, r *http.Request) {
-	services := []serviceStatus{
-		{Name: "Docker Manager", Type: "Container", Status: "online"},
-		{Name: "PostgreSQL", Type: "Database", Status: "online"},
-		{Name: "Nextcloud", Type: "Storage", Status: "online"},
-		{Name: "Vault", Type: "Security", Status: "online"},
-		{Name: "Jellyfin", Type: "Media", Status: "offline"},
-		{Name: "Mail Server", Type: "Email", Status: "maintenance"},
-	}
-
-	helper.RespondJSON(w, http.StatusOK, services)
 }
 
 // corsMiddleware lets the dashboard call the API cross-origin in dev

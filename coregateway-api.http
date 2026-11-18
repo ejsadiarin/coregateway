@@ -12,15 +12,6 @@ GET {{host}}/health
 
 GET {{host}}/swagger/index.html
 
-### System Stats (hardcoded mock data)
-
-GET {{host}}/api/system/stats
-
-### Legacy Services (hardcoded mock data)
-
-GET {{host}}/api/legacy/services
-
-
 # ─── Auth ────────────────────────────────────────────────────────────────────
 # Session is cookie-based (HttpOnly `session_token` set on login).
 # Send cookies with requests (VS Code REST Client: enable "Send cookies").
