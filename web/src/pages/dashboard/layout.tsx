@@ -4,6 +4,24 @@ import { useAuth } from "@/contexts/auth-context";
 import { Navigate } from "react-router-dom";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
 
+// DashboardSkeleton paints the shell's content area while the session check
+// runs, so a hard reload never flashes a full-screen spinner.
+function DashboardSkeleton() {
+  return (
+    <div className="px-4 md:px-6 py-6" data-testid="dashboard-skeleton">
+      <div className="animate-pulse space-y-6">
+        <div className="h-20 rounded-xl border border-border bg-card/50" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-28 rounded-xl border border-border bg-card/50" />
+          ))}
+        </div>
+        <div className="h-48 rounded-xl border border-border bg-card/40" />
+      </div>
+    </div>
+  );
+}
+
 function ProtectedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
@@ -13,15 +31,12 @@ function ProtectedLayout() {
   useUserTimezone();
 
   if (isLoading) {
+    // The shell paints immediately; the page inside it only mounts once the
+    // session is confirmed, so no protected read fires first.
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Initializing...
-          </span>
-        </div>
-      </div>
+      <DashboardShell>
+        <DashboardSkeleton />
+      </DashboardShell>
     );
   }
 
