@@ -9,5 +9,6 @@ export { CurrentTotalMoneyCard } from './current-total-money-card';
 export { MoneyOnHandCard } from './money-on-hand-card';
 export { BudgetPeriodSelector } from './budget-period-selector';
 export { PeriodBudgetCard } from './period-budget-card';
+export { WhereItWentCard } from './where-it-went-card';
 export { PeriodPresetFilter } from './period-preset-filter';
 export type { PeriodPresetFilterValue, PresetKey } from './period-preset-filter';

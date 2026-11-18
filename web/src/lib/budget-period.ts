@@ -9,6 +9,9 @@ import {
   parseISO,
   startOfMonth,
   startOfWeek,
+  subDays,
+  subMonths,
+  subWeeks,
 } from "date-fns";
 import type { BudgetPeriod } from "@/types/api";
 
@@ -61,6 +64,15 @@ export function budgetPeriodBounds(period: BudgetPeriod, date: string): BudgetDa
     default:
       return { start_date: date, end_date: date };
   }
+}
+
+/** The bounds of the period immediately before the one containing date. */
+export function previousBudgetPeriod(period: BudgetPeriod, date: string): BudgetDateRange {
+  const bounds = budgetPeriodBounds(period, date);
+  const start = parseISO(bounds.start_date);
+  const previous =
+    period === "day" ? subDays(start, 1) : period === "week" ? subWeeks(start, 1) : subMonths(start, 1);
+  return budgetPeriodBounds(period, format(previous, ISO_DATE));
 }
 
 /** Step one period forward (1) or back (-1), landing inside the new period. */

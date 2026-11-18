@@ -4,6 +4,7 @@ import {
   budgetPeriodBounds,
   budgetPeriodFrom,
   budgetPeriodTitle,
+  previousBudgetPeriod,
   stepBudgetDate,
   todayISODate,
 } from "./budget-period";
@@ -37,6 +38,23 @@ describe("budget period bounds", () => {
     expect(budgetPeriodBounds("month", "2028-02-10")).toEqual({
       start_date: "2028-02-01",
       end_date: "2028-02-29",
+    });
+  });
+});
+
+describe("previous period bounds", () => {
+  it("moves a day, a week and a month back", () => {
+    expect(previousBudgetPeriod("day", "2026-11-18")).toEqual({
+      start_date: "2026-11-17",
+      end_date: "2026-11-17",
+    });
+    expect(previousBudgetPeriod("week", "2027-01-02")).toEqual({
+      start_date: "2026-12-21",
+      end_date: "2026-12-27",
+    });
+    expect(previousBudgetPeriod("month", "2026-01-15")).toEqual({
+      start_date: "2025-12-01",
+      end_date: "2025-12-31",
     });
   });
 });
