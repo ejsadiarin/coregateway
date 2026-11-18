@@ -12,5 +12,6 @@ export { PeriodBudgetCard } from './period-budget-card';
 export { WhereItWentCard } from './where-it-went-card';
 export { ComingUpCard } from './coming-up-card';
 export { CashFlowCard } from './cash-flow-card';
+export { SpendingCalendarCard } from './spending-calendar-card';
 export { PeriodPresetFilter } from './period-preset-filter';
 export type { PeriodPresetFilterValue, PresetKey } from './period-preset-filter';

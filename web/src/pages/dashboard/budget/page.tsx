@@ -10,6 +10,7 @@ import {
   WhereItWentCard,
   ComingUpCard,
   CashFlowCard,
+  SpendingCalendarCard,
 } from "@/components/budget";
 import {
   usePeriodBudget,
@@ -267,6 +268,15 @@ export default function BudgetDashboard() {
         transition={{ duration: 0.25, delay: 0.25 }}
       >
         <CashFlowCard period={period} />
+      </motion.div>
+
+      <motion.div
+        className="mb-8"
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.3 }}
+      >
+        <SpendingCalendarCard date={anchor} onSelectDay={(date) => selectPeriod("day", date)} />
       </motion.div>
 
       {/* Recent Transactions */}
