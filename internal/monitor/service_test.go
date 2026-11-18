@@ -35,6 +35,10 @@ func (m *mockQuerier) DeleteService(_ context.Context, id uuid.UUID) error {
 	}
 	return sql.ErrNoRows
 }
+func (m *mockQuerier) GetServiceUptimeBuckets(context.Context, sqlc.GetServiceUptimeBucketsParams) ([]sqlc.GetServiceUptimeBucketsRow, error) {
+	return nil, nil
+}
+
 func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }

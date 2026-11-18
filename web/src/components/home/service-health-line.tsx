@@ -18,9 +18,10 @@ export function ServiceHealthLine({ className }: { className?: string }) {
     );
   }
 
-  const up = services.data.filter((service) => service.current_status === 'online').length;
-  const total = services.data.length;
-  const down = services.data.filter(
+  const active = services.data.filter((service) => service.is_active);
+  const up = active.filter((service) => service.current_status === 'online').length;
+  const total = active.length;
+  const down = active.filter(
     (service) => service.current_status === 'offline' || service.current_status === 'degraded',
   );
   const uptime =

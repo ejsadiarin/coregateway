@@ -89,6 +89,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Put("/api/services/{id}", s.ServiceHandler.UpdateService)
 		r.Delete("/api/services/{id}", s.ServiceHandler.DeleteService)
 		r.Get("/api/services/{id}/history", s.ServiceHandler.GetServiceHistory)
+		r.Get("/api/services/{id}/uptime", s.ServiceHandler.GetServiceUptime)
 		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 

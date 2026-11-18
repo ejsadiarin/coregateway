@@ -1,5 +1,16 @@
 package monitor
 
+import "time"
+
+// UptimeBucket is one hour or day of checks. Checks == 0 means no data, not
+// a failed bucket.
+type UptimeBucket struct {
+	StartAt    time.Time `json:"start_at"`
+	Checks     int64     `json:"checks"`
+	Successes  int64     `json:"successes"`
+	AvgLatency float64   `json:"avg_latency"`
+}
+
 // CreateServiceRequest represents the request to create a new service
 type CreateServiceRequest struct {
 	Name                string  `json:"name" validate:"required,min=1,max=255"`

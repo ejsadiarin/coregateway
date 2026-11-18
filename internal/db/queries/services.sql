@@ -25,7 +25,6 @@ LEFT JOIN LATERAL (
     ORDER BY checked_at DESC
     LIMIT 1
 ) h ON true
-WHERE s.is_active = true
 ORDER BY s.name;
 
 -- name: UpdateService :one
@@ -53,6 +52,39 @@ WHERE id = $1;
 SELECT id, name, url, health_check_method, expected_status_codes, timeout, health_check_interval
 FROM coregateway.services
 WHERE is_active = true;
+
+-- name: GetServiceUptimeBuckets :many
+-- Contiguous hour or day buckets ending with the current one. A bucket with
+-- no checks comes back as zeroes, so the page can tell "no data" from down.
+WITH bounds AS (
+    SELECT sqlc.arg(service_id)::uuid AS service_id,
+           sqlc.arg(bucket)::text AS unit,
+           sqlc.arg(start_at)::timestamp AS start_at,
+           sqlc.arg(end_at)::timestamp AS end_at
+), buckets AS (
+    SELECT generate_series(
+        date_trunc((SELECT unit FROM bounds), (SELECT start_at FROM bounds)),
+        date_trunc((SELECT unit FROM bounds), (SELECT end_at FROM bounds)),
+        ('1 ' || (SELECT unit FROM bounds))::interval
+    ) AS bucket_start
+), checks AS (
+    SELECT date_trunc(b.unit, h.checked_at) AS bucket_start,
+           COUNT(*)::bigint AS check_count,
+           COUNT(*) FILTER (WHERE h.status = 'online')::bigint AS successes,
+           COALESCE(AVG(h.response_time) FILTER (WHERE h.response_time IS NOT NULL), 0)::float8 AS avg_latency
+    FROM coregateway.service_health_history h, bounds b
+    WHERE h.service_id = b.service_id
+      AND h.checked_at >= b.start_at
+      AND h.checked_at <= b.end_at
+    GROUP BY 1
+)
+SELECT buckets.bucket_start::timestamp AS bucket_start,
+       COALESCE(checks.check_count, 0)::bigint AS checks,
+       COALESCE(checks.successes, 0)::bigint AS successes,
+       COALESCE(checks.avg_latency, 0)::float8 AS avg_latency
+FROM buckets
+LEFT JOIN checks USING (bucket_start)
+ORDER BY buckets.bucket_start;
 
 -- name: UpsertBuiltinService :one
 -- The config owns a built-in's URL and identity; its pause flag, interval,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
 )
@@ -117,6 +118,30 @@ func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("monitor.Handler.DeleteService: service deleted", "id", id)
 	helper.RespondJSON(w, http.StatusNoContent, nil)
+}
+
+func (h *Handler) GetServiceUptime(w http.ResponseWriter, r *http.Request) {
+	id, ok := helper.ParseUUID(w, r, "id")
+	if !ok {
+		return
+	}
+	bucket := r.URL.Query().Get("bucket")
+	if bucket != "hour" && bucket != "day" {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "bucket must be hour or day")
+		return
+	}
+	count, err := strconv.Atoi(r.URL.Query().Get("count"))
+	if err != nil || count < 1 || count > 720 {
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "count must be between 1 and 720")
+		return
+	}
+	buckets, err := h.service.UptimeBuckets(r.Context(), id, bucket, int32(count))
+	if err != nil {
+		slog.Error("monitor.Handler.GetServiceUptime: failed", "error", err, "id", id)
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	helper.RespondJSON(w, http.StatusOK, buckets)
 }
 
 func (h *Handler) GetServiceHistory(w http.ResponseWriter, r *http.Request) {

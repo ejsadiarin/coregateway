@@ -12,6 +12,8 @@ export interface Service {
     created_at: string;
     updated_at: string;
     is_active: boolean;
+    is_builtin?: boolean;
+    builtin_key?: string;
     current_status?:
         | "online"
         | "offline"
@@ -20,6 +22,13 @@ export interface Service {
         | "unknown";
     last_check?: string;
     response_time?: number;
+}
+
+export interface UptimeBucket {
+    start_at: string;
+    checks: number;
+    successes: number;
+    avg_latency: number;
 }
 
 export interface ServiceHealthHistory {

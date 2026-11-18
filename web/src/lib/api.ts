@@ -4,6 +4,7 @@ import type {
   UpdateServiceRequest,
   ServiceHealthHistory,
   ServiceStats,
+  UptimeBucket,
   Category,
   PriorityGroup,
   Tag,
@@ -610,6 +611,21 @@ export async function fetchServiceHistory(id: string): Promise<ServiceHealthHist
   });
   if (!res.ok) {
     throw new Error(`Error fetching service history: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchServiceUptime(
+  id: string,
+  bucket: 'hour' | 'day',
+  count: number
+): Promise<UptimeBucket[]> {
+  const params = new URLSearchParams({ bucket, count: String(count) });
+  const res = await fetch(url + `/api/services/${id}/uptime?${params}`, {
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    throw new Error(`Error fetching service uptime: ${res.status}`);
   }
   return res.json();
 }

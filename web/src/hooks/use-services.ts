@@ -7,6 +7,7 @@ import {
   deleteService,
   fetchServiceHistory,
   fetchServiceStats,
+  fetchServiceUptime,
   fetchAllServicesStats
 } from '@/lib/api';
 import type {
@@ -14,7 +15,8 @@ import type {
   CreateServiceRequest,
   UpdateServiceRequest,
   ServiceHealthHistory,
-  ServiceStats
+  ServiceStats,
+  UptimeBucket
 } from '@/types/api';
 
 export const serviceKeys = {
@@ -25,7 +27,9 @@ export const serviceKeys = {
   detail: (id: string) => [...serviceKeys.details(), id] as const,
   history: (id: string) => [...serviceKeys.all, 'history', id] as const,
   stats: (id: string) => [...serviceKeys.all, 'stats', id] as const,
-  allStats: () => [...serviceKeys.all, 'stats', 'all'] as const
+  allStats: () => [...serviceKeys.all, 'stats', 'all'] as const,
+  uptime: (id: string, bucket: 'hour' | 'day', count: number) =>
+    [...serviceKeys.all, 'uptime', id, bucket, count] as const
 };
 
 export function useServices() {
@@ -60,6 +64,14 @@ export function useServiceStats(id: string | null, enabled: boolean = true) {
     queryFn: () => fetchServiceStats(id!),
     enabled: !!id && enabled,
     staleTime: 60000
+  });
+}
+
+export function useServiceUptime(id: string, bucket: 'hour' | 'day', count: number) {
+  return useQuery<UptimeBucket[]>({
+    queryKey: serviceKeys.uptime(id, bucket, count),
+    queryFn: () => fetchServiceUptime(id, bucket, count),
+    staleTime: 30000
   });
 }
 

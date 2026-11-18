@@ -286,6 +286,84 @@ func (q *Queries) GetServiceStats7d(ctx context.Context, serviceID pgtype.UUID) 
 	return i, err
 }
 
+const getServiceUptimeBuckets = `-- name: GetServiceUptimeBuckets :many
+WITH bounds AS (
+    SELECT $1::uuid AS service_id,
+           $2::text AS unit,
+           $3::timestamp AS start_at,
+           $4::timestamp AS end_at
+), buckets AS (
+    SELECT generate_series(
+        date_trunc((SELECT unit FROM bounds), (SELECT start_at FROM bounds)),
+        date_trunc((SELECT unit FROM bounds), (SELECT end_at FROM bounds)),
+        ('1 ' || (SELECT unit FROM bounds))::interval
+    ) AS bucket_start
+), checks AS (
+    SELECT date_trunc(b.unit, h.checked_at) AS bucket_start,
+           COUNT(*)::bigint AS check_count,
+           COUNT(*) FILTER (WHERE h.status = 'online')::bigint AS successes,
+           COALESCE(AVG(h.response_time) FILTER (WHERE h.response_time IS NOT NULL), 0)::float8 AS avg_latency
+    FROM coregateway.service_health_history h, bounds b
+    WHERE h.service_id = b.service_id
+      AND h.checked_at >= b.start_at
+      AND h.checked_at <= b.end_at
+    GROUP BY 1
+)
+SELECT buckets.bucket_start::timestamp AS bucket_start,
+       COALESCE(checks.check_count, 0)::bigint AS checks,
+       COALESCE(checks.successes, 0)::bigint AS successes,
+       COALESCE(checks.avg_latency, 0)::float8 AS avg_latency
+FROM buckets
+LEFT JOIN checks USING (bucket_start)
+ORDER BY buckets.bucket_start
+`
+
+type GetServiceUptimeBucketsParams struct {
+	ServiceID uuid.UUID        `json:"service_id"`
+	Bucket    string           `json:"bucket"`
+	StartAt   pgtype.Timestamp `json:"start_at"`
+	EndAt     pgtype.Timestamp `json:"end_at"`
+}
+
+type GetServiceUptimeBucketsRow struct {
+	BucketStart pgtype.Timestamp `json:"bucket_start"`
+	Checks      int64            `json:"checks"`
+	Successes   int64            `json:"successes"`
+	AvgLatency  float64          `json:"avg_latency"`
+}
+
+// Contiguous hour or day buckets ending with the current one. A bucket with
+// no checks comes back as zeroes, so the page can tell "no data" from down.
+func (q *Queries) GetServiceUptimeBuckets(ctx context.Context, arg GetServiceUptimeBucketsParams) ([]GetServiceUptimeBucketsRow, error) {
+	rows, err := q.db.Query(ctx, getServiceUptimeBuckets,
+		arg.ServiceID,
+		arg.Bucket,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetServiceUptimeBucketsRow{}
+	for rows.Next() {
+		var i GetServiceUptimeBucketsRow
+		if err := rows.Scan(
+			&i.BucketStart,
+			&i.Checks,
+			&i.Successes,
+			&i.AvgLatency,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveServicesForHealthCheck = `-- name: ListActiveServicesForHealthCheck :many
 SELECT id, name, url, health_check_method, expected_status_codes, timeout, health_check_interval
 FROM coregateway.services
@@ -344,7 +422,6 @@ LEFT JOIN LATERAL (
     ORDER BY checked_at DESC
     LIMIT 1
 ) h ON true
-WHERE s.is_active = true
 ORDER BY s.name
 `
 

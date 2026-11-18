@@ -36,6 +36,9 @@ type Querier interface {
 	GetServiceStats24h(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats24hRow, error)
 	GetServiceStats30d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats30dRow, error)
 	GetServiceStats7d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats7dRow, error)
+	// Contiguous hour or day buckets ending with the current one. A bucket with
+	// no checks comes back as zeroes, so the page can tell "no data" from down.
+	GetServiceUptimeBuckets(ctx context.Context, arg GetServiceUptimeBucketsParams) ([]GetServiceUptimeBucketsRow, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (CoregatewayUser, error)
 	GetUserByEmail(ctx context.Context, email string) (CoregatewayUser, error)

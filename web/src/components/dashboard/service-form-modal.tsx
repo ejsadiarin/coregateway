@@ -104,7 +104,7 @@ export function ServiceFormModal({
           id: service.id,
           data: {
             name: data.name,
-            url: data.url,
+            ...(service.is_builtin ? {} : { url: data.url }),
             icon: data.icon || undefined,
             description: data.description || undefined,
             service_type: data.service_type || undefined,
@@ -182,8 +182,14 @@ export function ServiceFormModal({
               id="url"
               placeholder="https://example.com"
               {...register("url")}
+              readOnly={!!service?.is_builtin}
               aria-invalid={!!errors.url}
             />
+            {service?.is_builtin && (
+              <p className="text-xs text-muted-foreground">
+                Built-in service: config owns this URL.
+              </p>
+            )}
             {errors.url && (
               <p className="text-xs text-destructive">{errors.url.message}</p>
             )}

@@ -101,6 +101,10 @@ func (m *mockQuerier) GetService(context.Context, uuid.UUID) (sqlc.CoregatewaySe
 func (m *mockQuerier) GetServiceHistory(context.Context, sqlc.GetServiceHistoryParams) ([]sqlc.CoregatewayServiceHealthHistory, error) {
 	return nil, nil
 }
+func (m *mockQuerier) GetServiceUptimeBuckets(context.Context, sqlc.GetServiceUptimeBucketsParams) ([]sqlc.GetServiceUptimeBucketsRow, error) {
+	return nil, nil
+}
+
 func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"time"
 
 	sqlc "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 
@@ -194,6 +195,45 @@ func (s *Service) DeleteService(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// UptimeBuckets returns count contiguous hour or day buckets ending with
+// the current one. Buckets with no checks are kept as zeroes.
+func (s *Service) UptimeBuckets(ctx context.Context, serviceID uuid.UUID, bucket string, count int32) ([]UptimeBucket, error) {
+	if bucket != "hour" && bucket != "day" {
+		return nil, fmt.Errorf("bucket must be hour or day")
+	}
+	if count < 1 || count > 720 {
+		return nil, fmt.Errorf("count must be between 1 and 720")
+	}
+
+	unit := time.Hour
+	if bucket == "day" {
+		unit = 24 * time.Hour
+	}
+	now := time.Now().UTC()
+	start := now.Truncate(unit).Add(-time.Duration(count-1) * unit)
+
+	rows, err := s.queries.GetServiceUptimeBuckets(ctx, sqlc.GetServiceUptimeBucketsParams{
+		ServiceID: serviceID,
+		Bucket:    bucket,
+		StartAt:   pgtype.Timestamp{Time: start, Valid: true},
+		EndAt:     pgtype.Timestamp{Time: now, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get uptime buckets: %w", err)
+	}
+
+	buckets := make([]UptimeBucket, len(rows))
+	for i, row := range rows {
+		buckets[i] = UptimeBucket{
+			StartAt:    row.BucketStart.Time,
+			Checks:     row.Checks,
+			Successes:  row.Successes,
+			AvgLatency: row.AvgLatency,
+		}
+	}
+	return buckets, nil
 }
 
 func (s *Service) GetServiceHistory(ctx context.Context, serviceID uuid.UUID, limit int32) ([]sqlc.CoregatewayServiceHealthHistory, error) {

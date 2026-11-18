@@ -13,6 +13,8 @@ import {
   XCircle,
   AlertTriangle,
   ArrowLeft,
+  Pause,
+  Play,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -25,14 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ServiceUptime } from "@/components/dashboard/service-uptime";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ServiceFormModal } from "@/components/dashboard/service-form-modal";
 import { ServiceDetailModal } from "@/components/dashboard/service-detail-modal";
-import { useServices, useDeleteService, useTriggerHealthCheck } from "@/hooks/use-services";
+import { useServices, useDeleteService, useTriggerHealthCheck, useUpdateService } from "@/hooks/use-services";
 import type { Service } from "@/types/api";
 import { formatDistanceToNow } from "date-fns";
 
@@ -54,6 +49,7 @@ const statusColors: Record<string, string> = {
   degraded: "text-amber-500 border-amber-500/50 bg-amber-500/10",
   maintenance: "text-secondary border-secondary/50 bg-secondary/10",
   unknown: "text-muted-foreground border-muted-foreground/50 bg-muted-foreground/10",
+  paused: "text-muted-foreground border-border bg-muted/40",
 };
 
 function getStatusIcon(status: string) {
@@ -64,6 +60,8 @@ function getStatusIcon(status: string) {
       return <XCircle className="w-4 h-4 text-destructive" />;
     case "degraded":
       return <AlertTriangle className="w-4 h-4 text-amber-500" />;
+    case "paused":
+      return <Pause className="w-4 h-4 text-muted-foreground" />;
     default:
       return <Activity className="w-4 h-4 text-muted-foreground" />;
   }
@@ -79,6 +77,7 @@ export default function ServicesPage() {
   const { data: services, isLoading, error, refetch, isFetching } = useServices();
   const deleteService = useDeleteService();
   const triggerHealthCheck = useTriggerHealthCheck();
+  const updateService = useUpdateService();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -109,9 +108,8 @@ export default function ServicesPage() {
           service.description?.toLowerCase().includes(query);
         if (!matchesSearch) return false;
       }
-      if (statusFilter !== "all") {
-        if (service.current_status !== statusFilter) return false;
-      }
+      const effectiveStatus = service.is_active ? service.current_status ?? "unknown" : "paused";
+      if (statusFilter !== "all" && effectiveStatus !== statusFilter) return false;
       if (typeFilter !== "all") {
         if (service.service_type !== typeFilter) return false;
       }
@@ -164,10 +162,10 @@ export default function ServicesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-primary mb-2">
-              Service Management
+              Services
             </h1>
             <p className="text-sm text-muted-foreground">
-              Monitor and manage all your services in one place
+              Status, uptime and settings for every monitored service
             </p>
           </div>
           <Button onClick={() => setIsAddModalOpen(true)}>
@@ -231,6 +229,7 @@ export default function ServicesPage() {
             <SelectItem value="offline">Offline</SelectItem>
             <SelectItem value="degraded">Degraded</SelectItem>
             <SelectItem value="maintenance">Maintenance</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -294,125 +293,124 @@ export default function ServicesPage() {
             )}
           </div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Service</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Type</TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  Response Time
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  Last Check
-                </TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredServices.map((service) => (
-                <TableRow
+          <div className="divide-y divide-border/60">
+            {filteredServices.map((service) => {
+              const status = service.is_active ? service.current_status ?? "unknown" : "paused";
+              return (
+                <div
                   key={service.id}
-                  className="cursor-pointer"
+                  className="cursor-pointer p-4 transition-colors hover:bg-accent/20"
                   onClick={() => handleViewDetails(service)}
                 >
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{service.name}</span>
-                      <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                        {service.url}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      className={`${
-                        statusColors[service.current_status ?? "unknown"]
-                      } border`}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        {getStatusIcon(service.current_status ?? "unknown")}
-                        <span className="capitalize">
-                          {service.current_status ?? "Unknown"}
-                        </span>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{service.name}</span>
+                        {service.is_builtin && (
+                          <Badge variant="outline" className="font-mono text-[10px] uppercase tracking-[0.14em]">
+                            built-in
+                          </Badge>
+                        )}
+                        <Badge className={`${statusColors[status] ?? statusColors.unknown} border`}>
+                          <span className="flex items-center gap-1.5">
+                            {getStatusIcon(status)}
+                            <span className="capitalize">{status}</span>
+                          </span>
+                        </Badge>
                       </div>
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <span className="text-sm text-muted-foreground">
-                      {service.service_type || "-"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <span className="text-sm">
-                      {formatResponseTime(service.response_time)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell">
-                    <span className="text-sm text-muted-foreground">
-                      {service.last_check
-                        ? formatDistanceToNow(new Date(service.last_check), {
-                            addSuffix: true,
-                          })
-                        : "Never"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        asChild
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.open(service.url, "_blank");
-                          }}
-                        >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          Visit URL
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            triggerHealthCheck.mutate(service.id);
-                          }}
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Check Now
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingService(service);
-                          }}
-                        >
-                          <Pencil className="w-4 h-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(service);
-                          }}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                      <p className="mt-1 max-w-[42rem] truncate text-xs text-muted-foreground">
+                        {service.url}
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="text-right font-mono text-[10px] text-muted-foreground">
+                        <p>{formatResponseTime(service.response_time)}</p>
+                        <p>
+                          {service.last_check
+                            ? formatDistanceToNow(new Date(service.last_check), { addSuffix: true })
+                            : "Never checked"}
+                        </p>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-11 w-11 md:h-8 md:w-8"
+                            aria-label={`Actions for ${service.name}`}
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.open(service.url, "_blank");
+                            }}
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Visit URL
+                          </DropdownMenuItem>
+                          {service.is_active && (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                triggerHealthCheck.mutate(service.id);
+                              }}
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Check Now
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingService(service);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          {service.is_builtin ? (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateService.mutate({
+                                  id: service.id,
+                                  data: { is_active: !service.is_active },
+                                });
+                              }}
+                            >
+                              {service.is_active ? (
+                                <Pause className="w-4 h-4 mr-2" />
+                              ) : (
+                                <Play className="w-4 h-4 mr-2" />
+                              )}
+                              {service.is_active ? "Pause" : "Resume"}
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(service);
+                              }}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  <ServiceUptime service={service} />
+                </div>
+              );
+            })}
+          </div>
         )}
       </motion.div>
 
