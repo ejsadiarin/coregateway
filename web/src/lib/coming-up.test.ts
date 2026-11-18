@@ -81,6 +81,19 @@ describe("comingUp", () => {
     expect(items.map((i) => i.description)).toEqual(["Installment"]);
   });
 
+  it("shows a written income rule date once", () => {
+    const items = comingUp(
+      [],
+      [],
+      [rule({ id: "pay", kind: "income", description: "Pay", startDate: "2026-11-20" })],
+      [entry({ id: "pay-1", kind: "income", date: "2026-11-20", description: "Pay", ruleId: "pay" })],
+      window,
+    );
+    expect(items.map((i) => [i.date, i.description, i.kind])).toEqual([
+      ["2026-11-20", "Pay", "income"],
+    ]);
+  });
+
   it("nets income against expenses per currency", () => {
     const items = comingUp(
       [rule({ id: "rent", kind: "expense", description: "Rent" })],

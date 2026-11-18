@@ -45,9 +45,11 @@ export function SpendingCalendarCard({ date, onSelectDay, className }: SpendingC
             <CardTitle className="text-sm font-medium text-muted-foreground">Spending calendar</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">{monthTitle}</p>
           </div>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
-            {noSpend} no-spend {noSpend === 1 ? 'day' : 'days'} so far
-          </p>
+          {available && !isLoading && !error && (
+            <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
+              {noSpend} no-spend {noSpend === 1 ? 'day' : 'days'} so far
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">

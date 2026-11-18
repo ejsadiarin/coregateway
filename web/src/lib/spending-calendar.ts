@@ -8,7 +8,7 @@ import {
   startOfWeek,
 } from "date-fns";
 
-export const CALENDAR_MAX_DAYS = 62;
+export const CALENDAR_MAX_DAYS = 366;
 
 export interface CalendarDay {
   date: string;

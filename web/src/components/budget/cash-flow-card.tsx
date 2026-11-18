@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCashFlow } from '@/hooks/use-budget';
@@ -21,12 +21,27 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
   const count = CASH_FLOW_COUNTS[period];
   const { data, isLoading, error } = useCashFlow(period, count);
   const [selected, setSelected] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const buckets = data?.buckets ?? [];
   const activeIndex = selected !== null && selected < buckets.length ? selected : buckets.length - 1;
   const active = buckets[activeIndex];
   const max = cashFlowMax(buckets);
   const hasData = buckets.some((bucket) => Number(bucket.income) !== 0 || Number(bucket.spent) !== 0);
+
+  // On narrow screens the buckets scroll inside the card; start at the most
+  // recent one so the current, still-running bucket is visible.
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const scrollToEnd = () => {
+      element.scrollLeft = element.scrollWidth;
+    };
+    scrollToEnd();
+    const observer = new ResizeObserver(scrollToEnd);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [period, buckets.length]);
 
   return (
     <Card className={className} data-testid="cash-flow-card">
@@ -57,7 +72,7 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
           <p className="text-sm text-muted-foreground">No cash flow in this window yet.</p>
         ) : (
           <>
-            <div className="overflow-x-auto pb-1">
+            <div ref={scrollRef} className="overflow-x-auto pb-1" data-testid="cash-flow-strip">
               <div
                 className="flex h-36 min-w-full items-end gap-1"
                 role="group"

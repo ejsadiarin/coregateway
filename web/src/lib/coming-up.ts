@@ -74,6 +74,18 @@ export function comingUp(
       kind: "expense",
     });
   }
+  for (const entry of incomeEntries) {
+    if (entry.kind !== "income" || entry.status === "skipped") continue;
+    if (entry.date <= window.from || entry.date > window.until) continue;
+    items.push({
+      key: `income-${entry.id}`,
+      date: entry.date,
+      description: entry.description,
+      amount: entry.amount,
+      currency: entry.currency,
+      kind: "income",
+    });
+  }
 
   return items.sort(
     (a, b) =>

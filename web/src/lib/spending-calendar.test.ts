@@ -16,8 +16,8 @@ describe("calendar window", () => {
 
   it("only reads a month inside the cash-flow bound", () => {
     expect(calendarAvailable(18)).toBe(true);
-    expect(calendarAvailable(62)).toBe(true);
-    expect(calendarAvailable(63)).toBe(false);
+    expect(calendarAvailable(366)).toBe(true);
+    expect(calendarAvailable(367)).toBe(false);
     expect(calendarAvailable(0)).toBe(false);
   });
 });

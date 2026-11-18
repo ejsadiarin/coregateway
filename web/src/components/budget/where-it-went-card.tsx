@@ -107,17 +107,18 @@ export function WhereItWentCard({ period, date, className }: WhereItWentCardProp
                   {formatRate(priorities.wantsShare * 100, 0)}
                 </span>
               </p>
-              {priorities.savings > 0 ? (
+              {priorities.savings > 0 && (
                 <p className="flex items-baseline gap-2">
                   <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Savings</span>
                   <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.savings)}</span>
                 </p>
-              ) : (
-                <p className="flex items-baseline gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Total spent</span>
-                  <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.total)}</span>
-                </p>
               )}
+              <p className="flex items-baseline gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">
+                  Total spent
+                </span>
+                <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.total)}</span>
+              </p>
             </div>
           </>
         )}

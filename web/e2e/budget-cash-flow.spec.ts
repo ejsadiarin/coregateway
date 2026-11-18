@@ -92,6 +92,15 @@ test("cash flow follows the period kind and shows the current bucket", async ({ 
     await expect(card).toContainText(`${peso(Number(todayBucket.spent))} spent`);
     await expect(card).toContainText(`${peso(Number(todayBucket.net))} net`);
 
+    // On a phone the current bucket is scrolled into view, not hidden at the
+    // right edge of the strip.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const atEnd = await page.getByTestId("cash-flow-strip").evaluate(
+      (element) => element.scrollLeft + element.clientWidth >= element.scrollWidth - 1,
+    );
+    expect(atEnd).toBe(true);
+    await page.setViewportSize({ width: 1440, height: 900 });
+
     // Hovering or tapping another bar shows that bucket's numbers.
     await card.getByRole("button").nth(daily.length - 3).hover();
     await expect(card).toContainText(`${peso(Number(earlier.spent))} spent`);

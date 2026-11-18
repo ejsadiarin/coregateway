@@ -7,7 +7,6 @@ import {
   fetchIncomeCategories,
   isUnknownCategoryError,
   fetchTags,
-  fetchTag,
   createTag,
   updateTag,
   deleteTag,
@@ -146,14 +145,6 @@ export function useTags() {
     queryKey: budgetKeys.tagsList(),
     queryFn: fetchTags,
     staleTime: 300000
-  });
-}
-
-export function useTag(id: string | null) {
-  return useQuery<Tag>({
-    queryKey: budgetKeys.tagDetail(id ?? ''),
-    queryFn: () => fetchTag(id!),
-    enabled: !!id
   });
 }
 

@@ -86,6 +86,14 @@ test("calendar marks no-spend days and selects a tapped date", async ({ page }) 
   }
 });
 
+test("an unavailable month shows no no-spend count", async ({ page }) => {
+  // More than a year back is outside the cash-flow bound.
+  await page.goto("/dashboard/budget?period=month&date=2025-01-15");
+  const card = page.getByTestId("spending-calendar-card");
+  await expect(card).toContainText("only keeps the last 366 days");
+  await expect(card).not.toContainText("no-spend days so far");
+});
+
 test("calendar fits a phone width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/dashboard/budget?period=day&date=${ymd(today())}`);
