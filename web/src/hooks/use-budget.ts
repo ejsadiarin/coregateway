@@ -143,9 +143,19 @@ export const budgetKeys = {
   currentTotalMoney: () =>
     [...budgetKeys.all, 'currentTotalMoney'] as const,
 
+  periodBudgetRoot: () => [...budgetKeys.all, 'periodBudget'] as const,
   periodBudget: (period: BudgetPeriod, date: string) =>
-    [...budgetKeys.all, 'periodBudget', { period, date }] as const
+    [...budgetKeys.periodBudgetRoot(), { period, date }] as const
 };
+
+// invalidateMoneyReads refetches every read whose totals a record or rule
+// write changes.
+export function invalidateMoneyReads(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: budgetKeys.currentTotalMoney() });
+  queryClient.invalidateQueries({ queryKey: budgetKeys.periodBudgetRoot() });
+  queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
+  queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+}
 
 // Categories
 
@@ -280,8 +290,7 @@ export function useCreateExpense() {
     onSuccess: (record) => {
       syncNote(queryClient, "expense", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }
@@ -299,8 +308,7 @@ export function useUpdateExpense() {
       syncNote(queryClient, "expense", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenseDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }
@@ -317,8 +325,7 @@ export function useDeleteExpense() {
     onSuccess: (_, id) => {
       dropNote(queryClient, "expense", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.expenses() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }
@@ -405,8 +412,7 @@ export function useCreateIncome() {
       syncNote(queryClient, "income", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }
@@ -425,8 +431,7 @@ export function useUpdateIncome() {
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomeDetail(variables.id) });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }
@@ -444,8 +449,7 @@ export function useDeleteIncome() {
       dropNote(queryClient, "income", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
+      invalidateMoneyReads(queryClient);
     }
   });
 }

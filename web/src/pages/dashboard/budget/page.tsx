@@ -11,7 +11,7 @@ import {
 import {
   usePeriodBudget,
   useExpenses,
-  useIncomeOccurrences,
+  useIncomes,
   useUpdateIncome,
   useDeleteIncome,
   useUpdateExpense,
@@ -55,10 +55,9 @@ export default function BudgetDashboard() {
     5
   );
 
-  // recent incomes follow the same selected period
-  const { data: recentOccurrences, isLoading: occurrencesLoading } = useIncomeOccurrences(
-    bounds.start_date,
-    bounds.end_date,
+  // recent incomes follow the same selected period; rule entries are incomes
+  const { data: incomesData, isLoading: incomesLoading } = useIncomes(
+    { start_date: bounds.start_date, end_date: bounds.end_date },
     1,
     10
   );
@@ -95,6 +94,7 @@ export default function BudgetDashboard() {
   const deleteIncome = useDeleteIncome();
 
   const displayExpenses = expensesData?.data || [];
+  const displayIncomes = incomesData?.data || [];
 
   const handleActionClick = () => {
     if (isGuest) {
@@ -263,7 +263,7 @@ export default function BudgetDashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {occurrencesLoading ? (
+            {incomesLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
                   <div key={i} className="flex items-center space-x-4 animate-pulse">
@@ -276,7 +276,7 @@ export default function BudgetDashboard() {
                   </div>
                 ))}
               </div>
-            ) : !recentOccurrences?.data?.length ? (
+            ) : displayIncomes.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p>No incomes in the selected period</p>
                 <Button
@@ -293,54 +293,40 @@ export default function BudgetDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-border/60">
-                {recentOccurrences.data.map((occ) => (
-                  <div
-                    key={occ.id}
-                    className={`flex items-center justify-between py-2.5 transition-colors ${occ.is_skipped ? 'bg-red-500/5' : ''} ${occ.is_virtual ? 'cursor-default' : 'cursor-pointer hover:bg-accent/50'}`}
-                    onClick={() => {
-                      if (!occ.is_virtual) {
-                        // for real entries, allow editing
-                        const incomeForEdit: Income = {
-                          id: occ.source_income_id,
-                          amount: occ.amount,
-                          currency: occ.currency,
-                          date: occ.date,
-                          description: occ.description,
-                          source_rule_id: occ.source_rule_id,
-                          priority: "need",
-                          status: "posted",
-                          created_at: '',
-                          updated_at: ''
-                        };
-                        setEditingIncome(incomeForEdit);
-                      }
-                    }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium truncate ${occ.is_skipped ? 'line-through text-muted-foreground' : ''}`}>
-                        {occ.description || (occ.is_skipped ? "Skipped Income" : "Income")}
-                        {occ.is_virtual && (
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            {occ.recurring_type || 'recurring'}
-                          </Badge>
-                        )}
-                        {occ.is_skipped && (
-                          <Badge variant="destructive" className="ml-2 text-xs">
-                            Skipped
-                          </Badge>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {safeFormat(occ.date, (d) => formatDistanceToNow(d, { addSuffix: true }))}
-                      </p>
+                {displayIncomes.map((income) => {
+                  const skipped = income.status === "skipped";
+                  return (
+                    <div
+                      key={income.id}
+                      className={`flex items-center justify-between py-2.5 transition-colors cursor-pointer hover:bg-accent/50 ${skipped ? 'bg-red-500/5' : ''}`}
+                      onClick={() => setEditingIncome(income)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className={`flex items-center gap-2 font-medium ${skipped ? 'line-through text-muted-foreground' : ''}`}>
+                          <span className="truncate">{income.description || (skipped ? "Skipped Income" : "Income")}</span>
+                          {income.source_rule_id && (
+                            <Badge variant="secondary" className="text-xs">
+                              recurring
+                            </Badge>
+                          )}
+                          {skipped && (
+                            <Badge variant="destructive" className="text-xs">
+                              Skipped
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {safeFormat(income.date, (d) => formatDistanceToNow(d, { addSuffix: true }))}
+                        </p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className={`font-semibold font-mono tabular-nums shrink-0 ${skipped ? 'text-red-600' : 'text-green-600'}`}>
+                          {skipped ? formatPeso(Math.abs(Number(income.amount)), income.currency) : formatSigned(income.amount, "income", income.currency)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right ml-4">
-                      <p className={`font-semibold font-mono tabular-nums shrink-0 ${occ.is_skipped ? 'text-red-600' : 'text-green-600'}`}>
-                        {occ.is_skipped ? formatPeso(Math.abs(Number(occ.amount)), occ.currency) : formatSigned(occ.amount, "income", occ.currency)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

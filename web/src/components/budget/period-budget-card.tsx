@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { todayISODate } from '@/lib/budget-period';
 import { formatPeso } from '@/lib/format';
 import type { PeriodBudgetResponse } from '@/types/api';
 
@@ -71,6 +72,17 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
 
   const projected = Number(data.projected_income);
   const left = Number(data.left);
+  const future = data.start_date > todayISODate();
+  const unit = data.period === "day" ? "day" : data.period === "week" ? "week" : "month";
+  const spentNote = isPast ? 'for the period' : future ? 'not started' : 'through today';
+  const pace =
+    data.period === 'day'
+      ? isPast
+        ? `${formatPeso(data.spent)} that day · ${formatPeso(data.previous_spent_total)} the day before`
+        : `${formatPeso(data.spent)} today · ${formatPeso(data.previous_spent_to_point)} by this time yesterday`
+      : isPast
+        ? `${formatPeso(data.spent)} that ${unit} · ${formatPeso(data.previous_spent_total)} the ${unit} before`
+        : `${formatPeso(data.spent)} this ${unit} · ${formatPeso(data.previous_spent_to_point)} by the same point last ${unit}`;
 
   return (
     <Card className={className}>
@@ -84,8 +96,12 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
             value={formatPeso(data.funded)}
             note={projected > 0 ? `includes ${formatPeso(projected)} projected` : 'income this period'}
           />
-          <Metric label="Spent" value={formatPeso(data.spent)} note="through today" />
-          <Metric label="Bills still due" value={formatPeso(data.bills_still_due)} note="after today" />
+          <Metric label="Spent" value={formatPeso(data.spent)} note={spentNote} />
+          <Metric
+            label="Bills still due"
+            value={formatPeso(data.bills_still_due)}
+            note={isPast ? 'none' : 'after today'}
+          />
           <Metric
             label="Left"
             value={formatPeso(left)}
@@ -100,11 +116,7 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
         </div>
         <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 border-t border-border/60 pt-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Pace</p>
-          <p className="text-sm text-muted-foreground font-mono tabular-nums">
-            {isPast
-              ? `${formatPeso(data.spent)} total · ${formatPeso(data.previous_spent_total)} previous period`
-              : `${formatPeso(data.spent)} so far · ${formatPeso(data.previous_spent_to_point)} by the same point`}
-          </p>
+          <p className="text-sm text-muted-foreground font-mono tabular-nums">{pace}</p>
         </div>
       </CardContent>
     </Card>

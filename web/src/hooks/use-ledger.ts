@@ -11,6 +11,7 @@ import {
   budgetKeys,
   categoryListKey,
   GuestBlockedError,
+  invalidateMoneyReads,
   saveFailureMessage,
   useCreateExpense,
   useCreateIncome,
@@ -194,8 +195,7 @@ export function useSaveRule(kind: LedgerKind) {
       await qc.invalidateQueries({ queryKey: recordsKey(kind) });
       // A save runs the materialize pass, which can write rule entries.
       qc.invalidateQueries({ queryKey: ruleReviewKey });
-      qc.invalidateQueries({ queryKey: budgetKeys.stats() });
-      qc.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
+      invalidateMoneyReads(qc);
       // Today's new entry gets its Feed note.
       const records = qc.getQueryData<Entry[]>(recordsKey(kind)) ?? [];
       const fresh = records.filter((r) => r.ruleId && r.createdAt > new Date(Date.now() - 60000).toISOString());

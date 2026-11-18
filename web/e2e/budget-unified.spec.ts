@@ -47,13 +47,15 @@ test("headline shows money on hand, committed and runway", async ({ page }) => {
 
 test("period budget matches the read and the selector survives a reload", async ({ page }) => {
   const date = today();
+  const incomeDescription = `e2e unified income ${Date.now()}`;
+  const expenseDescription = `e2e unified expense ${Date.now()}`;
   const created: string[] = [];
   try {
     const income = await page.request.post(`${api}/api/budget/incomes`, {
       data: {
         amount: 1234,
         currency: "PHP",
-        description: `e2e unified income ${Date.now()}`,
+        description: incomeDescription,
         date,
         priority: "need",
         status: "posted",
@@ -67,7 +69,7 @@ test("period budget matches the read and the selector survives a reload", async 
       data: {
         amount: 234,
         currency: "PHP",
-        description: `e2e unified expense ${Date.now()}`,
+        description: expenseDescription,
         expense_date: date,
         priority: "want",
         status: "posted",
@@ -89,17 +91,33 @@ test("period budget matches the read and the selector survives a reload", async 
     await expect(card).toContainText(peso(Number(budget.funded)));
     await expect(card).toContainText(peso(Number(budget.spent)));
     await expect(card).toContainText(peso(Number(budget.left)));
-    await expect(card).toContainText("so far");
+    await expect(card).toContainText("by this time yesterday");
+    await expect(page.getByText(incomeDescription, { exact: true })).toBeVisible();
+    await expect(page.getByText(expenseDescription, { exact: true })).toBeVisible();
+
+    // Stepping back and forward moves the budget and the recent lists
+    // together.
+    await page.getByRole("button", { name: "Previous period" }).click();
+    await expect(page).toHaveURL(new RegExp(`date=${daysAgo(1)}`));
+    await expect(page.getByText(expenseDescription, { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Next period" }).click();
+    await expect(page.getByText(expenseDescription, { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Week", exact: true }).click();
     await expect(page).toHaveURL(/period=week/);
+    await expect(card).toContainText("by the same point last week");
+    await expect(page.getByText(expenseDescription, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Week", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
 
+    await page.getByRole("button", { name: "Month", exact: true }).click();
+    await expect(page).toHaveURL(/period=month/);
+    await expect(page.getByText(expenseDescription, { exact: true })).toBeVisible();
+
     await page.reload();
-    await expect(page.getByRole("button", { name: "Week", exact: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: "Month", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -110,6 +128,45 @@ test("period budget matches the read and the selector survives a reload", async 
   } finally {
     for (const row of created) {
       const res = await page.request.delete(`${api}/api/budget/${row}`);
+      expect(res.ok() || res.status() === 404).toBe(true);
+    }
+  }
+});
+
+test("adding an expense refreshes the headline and period budget", async ({ page }) => {
+  const date = today();
+  const description = `e2e live expense ${Date.now()}`;
+  const amount = 321;
+
+  const budgetRes = await page.request.get(
+    `${api}/api/budget/period-budget?period=day&date=${date}`,
+  );
+  expect(budgetRes.ok()).toBe(true);
+  const budget = (await budgetRes.json()) as { spent: number };
+  const moneyRes = await page.request.get(`${api}/api/budget/current-total-money`);
+  expect(moneyRes.ok()).toBe(true);
+  const money = (await moneyRes.json()) as { total_money: number };
+
+  let createdId: string | undefined;
+  try {
+    await page.goto(`/dashboard/budget?period=day&date=${date}`);
+    await page.getByRole("button", { name: "Add Expense" }).click();
+    const dialog = page.getByRole("dialog", { name: "New expense" });
+    await dialog.getByLabel("Amount").fill(String(amount));
+    await dialog.getByLabel("What was it?").fill(description);
+    const created = page.waitForResponse(
+      (r) => r.url().endsWith("/api/budget/expenses") && r.request().method() === "POST",
+    );
+    await dialog.getByRole("button", { name: "Add expense" }).click();
+    createdId = ((await (await created).json()) as { id: string }).id;
+    await expect(dialog).toBeHidden();
+
+    await expect(periodCard(page)).toContainText(peso(Number(budget.spent) + amount));
+    const moneyCard = page.getByText("Money on hand", { exact: true }).locator("..").locator("..");
+    await expect(moneyCard).toContainText(peso(Number(money.total_money) - amount));
+  } finally {
+    if (createdId) {
+      const res = await page.request.delete(`${api}/api/budget/expenses/${createdId}`);
       expect(res.ok() || res.status() === 404).toBe(true);
     }
   }
