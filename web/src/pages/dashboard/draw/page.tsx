@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useParams } from "react-router-dom";
 import { ExcalidrawCanvas } from "@/pages/dashboard/draw/excalidraw-canvas";
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { DrawSheet } from "@/pages/dashboard/draw/draw-sheet";
+import { DrawEditorSkeleton } from "@/pages/dashboard/draw/skeleton";
 import {
   HistoryZoomControls,
   IconPalette,
@@ -28,6 +30,7 @@ import {
 } from "@/pages/dashboard/draw/editor-ui";
 import { usePageTitle } from "@/components/layout/page-title";
 import { useIsPhone } from "@/hooks/use-is-phone";
+import { canvasTheme, useTheme } from "@/lib/theme";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
 
 function sameStyle(a: DrawStyle, b: DrawStyle): boolean {
@@ -81,6 +84,10 @@ export default function DrawPage() {
   const historyRef = useRef(history);
   const [pen, setPen] = useState({ detected: false, active: false });
   const penRef = useRef(pen);
+  // The paper theme is the only light workspace; the canvas follows it live.
+  const [themeId] = useTheme();
+  const drawTheme = canvasTheme(themeId);
+  const reduceMotion = useReducedMotion();
 
   const adapterRef = useRef<CanvasAdapter | null>(null);
 
@@ -300,16 +307,7 @@ export default function DrawPage() {
   }, [handleSelectTool, isPhone, openPhoneSheet]);
 
   if (sync.phase === "loading") {
-    return (
-      <div className="flex h-full min-h-[500px] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span className="text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-            Opening board...
-          </span>
-        </div>
-      </div>
-    );
+    return <DrawEditorSkeleton />;
   }
 
   if (sync.phase === "error" || !meta) {
@@ -353,6 +351,13 @@ export default function DrawPage() {
         : saveState === "conflict"
           ? `Not saved · rev ${meta.revision} is stale`
           : `Saved · rev ${meta.revision}`;
+  // Phones keep the same fixed slot but need a shorter visible string.
+  const saveLabelShort =
+    saveState === "failed"
+      ? "Save failed"
+      : saveState === "conflict"
+        ? "Not saved"
+        : saveLabel;
 
   return (
     <div
@@ -362,6 +367,7 @@ export default function DrawPage() {
       <TopBar
         title={meta.title}
         saveLabel={saveLabel}
+        saveLabelShort={saveLabelShort}
         saveState={saveState}
         docOpen={docOpen}
         onToggleDoc={() => {
@@ -398,13 +404,29 @@ export default function DrawPage() {
           penMode={pen.active}
           onTogglePenMode={handleTogglePenMode}
         />
-        {!isPhone && <IconPalette {...paletteProps} />}
+        {!isPhone && (
+          <AnimatePresence initial={false}>
+            {paletteOpen && (
+              <motion.div
+                key="palette"
+                className="shrink-0"
+                initial={reduceMotion ? false : { opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, x: -8 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+              >
+                <IconPalette {...paletteProps} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
         <div className="relative min-h-0 min-w-0 flex-1">
           <ExcalidrawCanvas
             key={`${meta.id}:${loadEpoch}`}
             initialScene={scene ?? { elements: [], appState: DEFAULT_APP_STATE, files: {} }}
             onAdapterReady={onAdapterReady}
             onChange={onCanvasChange}
+            theme={drawTheme}
           />
 
           <HistoryZoomControls
@@ -431,14 +453,14 @@ export default function DrawPage() {
                 <button
                   type="button"
                   onClick={reloadLatest}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-transform hover:bg-primary/90 active:scale-[0.98]"
                 >
                   Reload latest
                 </button>
                 <button
                   type="button"
                   onClick={() => sync.dismissConflict()}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-transform hover:bg-accent active:scale-[0.98]"
                 >
                   Keep editing
                 </button>
@@ -446,7 +468,22 @@ export default function DrawPage() {
             </div>
           )}
         </div>
-        {!isPhone && docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
+        {!isPhone && (
+          <AnimatePresence initial={false}>
+            {docOpen && (
+              <motion.div
+                key="notes"
+                className="shrink-0"
+                initial={reduceMotion ? false : { opacity: 0, x: 8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={reduceMotion ? { opacity: 1 } : { opacity: 0, x: 8 }}
+                transition={{ duration: reduceMotion ? 0 : 0.2, ease: "easeOut" }}
+              >
+                <DocPane doc={meta.doc} onChange={updateDoc} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </div>
       <MobileToolbar
         activeTool={activeTool}

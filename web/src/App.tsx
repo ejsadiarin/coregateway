@@ -1,4 +1,5 @@
 import { lazy, Suspense } from "react";
+import { MotionConfig } from "motion/react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/contexts/query-context";
@@ -19,25 +20,33 @@ import KanbanSettingsPage from "@/pages/dashboard/kanban/settings";
 import KanbanRemindersPage from "@/pages/dashboard/kanban/reminders";
 import FeedPage from "@/pages/dashboard/feed/page";
 import SharePage from "@/pages/share/page";
+import { DrawEditorSkeleton } from "@/pages/dashboard/draw/skeleton";
 
-// tldraw stays out of the dashboard bundle: this chunk loads only on /dashboard/draw/:boardId.
+// Excalidraw stays out of the dashboard bundle: this chunk loads only on
+// /dashboard/draw/:boardId.
 const DrawPage = lazy(() => import("@/pages/dashboard/draw/page"));
 // The boards list carries no canvas code, so it splits into its own tiny chunk.
 const BoardsPage = lazy(() => import("@/pages/dashboard/draw/boards"));
 
-// Kept inline (not imported from the draw page) so the fallback itself
-// doesn't pull the tldraw chunk into the dashboard bundle.
-function DrawFallback() {
+// The boards list is not the editor, so it gets a list-shaped fallback.
+function BoardsSkeleton() {
   return (
-    <div className="flex h-full min-h-[500px] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <div role="status" aria-label="Loading boards" className="mx-auto max-w-3xl p-6">
+      <div className="h-7 w-32 animate-pulse rounded bg-muted" />
+      <div className="mt-5 h-10 w-full animate-pulse rounded-lg bg-muted/40" />
+      <div className="mt-6 space-y-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function App() {
   return (
-    <Routes>
+    <MotionConfig reducedMotion="user">
+      <Routes>
       <Route path="/" element={<EntrancePortal />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
@@ -69,7 +78,7 @@ export default function App() {
         <Route
           path="draw"
           element={
-            <Suspense fallback={<DrawFallback />}>
+            <Suspense fallback={<BoardsSkeleton />}>
               <BoardsPage />
             </Suspense>
           }
@@ -77,14 +86,15 @@ export default function App() {
         <Route
           path="draw/:boardId"
           element={
-            <Suspense fallback={<DrawFallback />}>
+            <Suspense fallback={<DrawEditorSkeleton />}>
               <DrawPage />
             </Suspense>
           }
         />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </MotionConfig>
   );
 }

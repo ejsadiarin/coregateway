@@ -330,3 +330,17 @@
 .scan-line {
   animation: scan-line 8s linear infinite;
 }
+
+/* DESIGN §6: collapse CSS-driven motion for users who ask for it, including
+   Radix and vaul panels. Motion/react is handled by MotionConfig
+   reducedMotion="user" at the app root. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

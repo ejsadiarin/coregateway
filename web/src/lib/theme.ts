@@ -102,3 +102,9 @@ export function useTheme(): [ThemeId, (id: ThemeId) => void] {
 export function themeMeta(id: ThemeId): ThemeMeta {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
+
+// The drawing canvas has one light and one dark theme; paper is the only
+// light workspace. Kept here so the Draw page does not own theme knowledge.
+export function canvasTheme(id: ThemeId): "light" | "dark" {
+  return id === "paper" ? "light" : "dark";
+}

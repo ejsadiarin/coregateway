@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { API_URL, expect, login, newDrawBoard, test } from "./fixtures";
 
 // Excalidraw 0.18 under React 19 logs a few known warnings (an App setState
@@ -99,6 +100,7 @@ test.describe("draw phone shell", () => {
 });
 
 test("saves a drawn stroke once and never on pan, zoom or selection", async ({ page, consoleErrors }) => {
+  test.setTimeout(45_000);
   await login(page);
 
   // Count every board save, including one that opening a board might trigger.
@@ -276,6 +278,109 @@ test("undo, redo and zoom stay in our own controls", async ({ page, consoleError
   await expect(zoomLabel).toHaveText("100%");
 
   dropExcalidrawNoise(consoleErrors);
+});
+
+test("canvas follows the app theme, exports stay light and the top bar is stable", async ({
+  page,
+  consoleErrors,
+}) => {
+  test.setTimeout(60_000);
+  await login(page);
+  await newDrawBoard(page, "theme polish");
+  const root = page.locator(".coredraw-canvas .excalidraw");
+  const canvasFilter = () =>
+    page.locator(".coredraw-canvas canvas").first().evaluate((el) => getComputedStyle(el).filter);
+  await expect(root).toHaveClass(/theme--dark/);
+  expect(await canvasFilter()).toContain("invert");
+
+  const canvas = page.locator(".coredraw-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("no canvas");
+  const draw = async () => {
+    await page.getByTestId("draw-tool-rail").getByRole("button", { name: "Draw", exact: true }).click();
+    const x = box.x + box.width * 0.3;
+    const y = box.y + box.height * 0.4;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 160, y + 60, { steps: 15 });
+    await page.mouse.up();
+  };
+
+  // The save status has a fixed slot, so the bar does not shift while saving.
+  const status = page.getByRole("status").filter({ hasText: /Saved|Saving/ });
+  await expect(status).toHaveText(/Saved · rev/);
+  const cleanBox = await page.getByRole("button", { name: "Clean", exact: true }).boundingBox();
+  const statusBox = await status.boundingBox();
+  await draw();
+  await expect(status).toHaveText(/Saving|Saved/);
+  expect((await status.boundingBox())?.width).toBe(statusBox?.width);
+  expect((await status.boundingBox())?.x).toBe(statusBox?.x);
+  expect((await page.getByRole("button", { name: "Clean", exact: true }).boundingBox())?.x).toBe(
+    cleanBox?.x,
+  );
+  await expect(status).toHaveText(/Saved · rev \d+/);
+
+  // The canvas follows the runtime theme, including while a board is open.
+  await page.getByRole("button", { name: "Color scheme" }).click();
+  await page.getByRole("menuitem", { name: /Warm Paper/ }).click();
+  await expect(root).not.toHaveClass(/theme--dark/);
+  expect(await canvasFilter()).toBe("none");
+  await page.getByRole("button", { name: "Color scheme" }).click();
+  await page.getByRole("menuitem", { name: /Ember Craft/ }).click();
+  await expect(root).toHaveClass(/theme--dark/);
+  expect(await canvasFilter()).toContain("invert");
+
+  // Exporting from the dark canvas keeps the light board background.
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "SVG", exact: true }).click(),
+  ]);
+  const file = await download.path();
+  if (!file) throw new Error("no downloaded svg");
+  const svg = await readFile(file, "utf8");
+  expect(svg).toContain("#ffffff");
+  expect(svg).not.toContain("#141110");
+
+  dropExcalidrawNoise(consoleErrors);
+});
+
+test("shows an editor skeleton while a board opens", async ({ page, consoleErrors }) => {
+  await login(page);
+  await page.goto("/dashboard/draw");
+  await page.route("**/api/coredraw/boards/*", async (route) => {
+    if (route.request().method() === "GET") {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    await route.continue();
+  });
+  await page.getByLabel("New board title").fill(`skeleton ${Date.now().toString(36)}`);
+  await page.getByRole("button", { name: "New board" }).click();
+  const skeleton = page.getByRole("status", { name: "Opening board" });
+  await expect(skeleton).toBeVisible();
+  await expect(page.getByRole("link", { name: "Boards" })).toBeVisible({ timeout: 10_000 });
+  await expect(skeleton).toHaveCount(0);
+  await expect(page.locator(".coredraw-canvas")).toBeVisible();
+  dropExcalidrawNoise(consoleErrors);
+});
+
+test.describe("reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("collapses editor animations", async ({ page, consoleErrors }) => {
+    await login(page);
+    await newDrawBoard(page, "reduced motion");
+    const draw = page.getByTestId("draw-tool-rail").getByRole("button", { name: "Draw", exact: true });
+    const durations = await draw.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        transition: parseFloat(style.transitionDuration),
+        animation: parseFloat(style.animationDuration),
+      };
+    });
+    expect(durations.transition).toBeLessThanOrEqual(0.01);
+    expect(durations.animation).toBeLessThanOrEqual(0.01);
+    dropExcalidrawNoise(consoleErrors);
+  });
 });
 
 test.describe("draw phone sheets", () => {

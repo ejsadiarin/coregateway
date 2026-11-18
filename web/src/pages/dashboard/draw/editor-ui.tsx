@@ -92,7 +92,7 @@ function ToolButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40",
+        "flex items-center justify-center rounded-md transition-colors active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40",
         size === "toolbar" ? "h-11 w-11 shrink-0 touch-manipulation" : "h-9 w-9",
         active
           ? "bg-primary/15 text-primary"
@@ -285,7 +285,7 @@ export function HistoryZoomControls({
   onZoomToFit,
 }: HistoryZoomControlsProps) {
   const button =
-    "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
+    "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40";
   return (
     <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-0.5 rounded-lg border border-border bg-background/90 p-0.5 shadow-sm backdrop-blur-sm md:flex">
       <button type="button" aria-label="Undo" disabled={!canUndo} onClick={onUndo} className={button}>
@@ -524,9 +524,8 @@ export function IconPalette({
     onClose();
   }
 
-  // Inside a sheet, keep the content mounted while the sheet animates out.
-  if (!open && !sheet) return null;
-
+  // The page controls mounting so desktop panels can animate out; inside a
+  // sheet, vaul handles the exit.
   return (
     <aside
       className={cn(
@@ -539,7 +538,7 @@ export function IconPalette({
           type="button"
           onClick={() => onTabChange("icons")}
           className={cn(
-            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium",
+            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium transition-transform active:scale-[0.98]",
             tab === "icons" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
           )}
         >
@@ -549,7 +548,7 @@ export function IconPalette({
           type="button"
           onClick={() => onTabChange("shapes")}
           className={cn(
-            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium",
+            "flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium transition-transform active:scale-[0.98]",
             tab === "shapes" ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60",
           )}
         >
@@ -559,7 +558,7 @@ export function IconPalette({
           type="button"
           aria-label="Close panel"
           onClick={onClose}
-          className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="ml-auto rounded p-1 text-muted-foreground transition-transform hover:bg-accent hover:text-foreground active:scale-[0.98]"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -758,7 +757,7 @@ function Swatch({
       aria-label={name}
       aria-pressed={active}
       onClick={onClick}
-      className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center md:h-4 md:w-4"
+      className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center active:scale-[0.98] md:h-4 md:w-4"
     >
       <span
         className={cn(
@@ -842,7 +841,7 @@ function WidthOptions({
           aria-pressed={style.strokeWidth === width}
           onClick={() => onChange({ strokeWidth: width })}
           className={cn(
-            "flex h-11 w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:w-6",
+            "flex h-11 w-11 touch-manipulation items-center justify-center rounded border transition-colors active:scale-[0.98] md:h-6 md:w-6",
             style.strokeWidth === width
               ? "border-foreground/40 bg-muted text-foreground"
               : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -873,7 +872,7 @@ function DashOptions({
           aria-pressed={style.strokeStyle === item.value}
           onClick={() => onChange({ strokeStyle: item.value })}
           className={cn(
-            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:min-w-0 md:w-7",
+            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border transition-colors active:scale-[0.98] md:h-6 md:min-w-0 md:w-7",
             style.strokeStyle === item.value
               ? "border-foreground/40 bg-muted text-foreground"
               : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -907,7 +906,7 @@ function OpacityOptions({
           aria-pressed={style.opacity === opacity}
           onClick={() => onChange({ opacity })}
           className={cn(
-            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border px-1.5 text-[10px] transition-colors md:h-6 md:min-w-0",
+            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border px-1.5 text-[10px] transition-colors active:scale-[0.98] md:h-6 md:min-w-0",
             style.opacity === opacity
               ? "border-foreground/40 bg-muted text-foreground"
               : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -987,6 +986,7 @@ export function StyleSheet({
 export function TopBar({
   title,
   saveLabel,
+  saveLabelShort,
   saveState,
   docOpen,
   onToggleDoc,
@@ -1001,6 +1001,7 @@ export function TopBar({
 }: {
   title: string;
   saveLabel: string;
+  saveLabelShort: string;
   saveState: "saved" | "saving" | "failed" | "conflict";
   docOpen: boolean;
   onToggleDoc: () => void;
@@ -1014,14 +1015,14 @@ export function TopBar({
   onRedo: () => void;
 }) {
   const actionClass =
-    "flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
+    "flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98]";
 
   return (
     <header className="flex shrink-0 touch-manipulation items-center gap-1 border-b border-border bg-background px-1.5 py-1 text-xs max-md:pl-[max(0.375rem,env(safe-area-inset-left))] max-md:pr-[max(0.375rem,env(safe-area-inset-right))] max-md:pt-[max(0.25rem,env(safe-area-inset-top))] md:gap-2 md:px-2 md:py-1.5">
       <Link
         to="/dashboard/draw"
         aria-label="Boards"
-        className="flex h-11 min-w-11 items-center justify-center gap-1 rounded px-1.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground md:h-auto md:min-w-0 md:justify-start md:py-1"
+        className="flex h-11 min-w-11 items-center justify-center gap-1 rounded px-1.5 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98] md:h-auto md:min-w-0 md:justify-start md:py-1"
         title="All boards"
       >
         <ChevronLeft className="h-4 w-4 md:h-3.5 md:w-3.5" />
@@ -1033,7 +1034,7 @@ export function TopBar({
         onClick={onTogglePalette}
         aria-pressed={paletteOpen}
         className={cn(
-          "hidden items-center gap-1.5 rounded px-2 py-1 font-medium transition-colors md:flex",
+          "hidden items-center gap-1.5 rounded px-2 py-1 font-medium transition-colors active:scale-[0.98] md:flex",
           paletteOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
         )}
         title="Toggle shapes & icons"
@@ -1042,20 +1043,24 @@ export function TopBar({
       </button>
       <span className="min-w-0 max-w-[16rem] truncate font-medium max-md:flex-1">{title}</span>
       <span
+        role="status"
+        aria-live="polite"
+        aria-label={saveLabel}
+        title={saveLabel}
         className={cn(
-          "shrink-0 text-muted-foreground max-md:text-[10px]",
+          "w-[8.5rem] shrink-0 truncate text-right text-muted-foreground max-md:w-[5.5rem] max-md:text-[10px]",
           saveState === "conflict" && "text-amber-500",
           saveState === "failed" && "text-destructive",
         )}
       >
-        {saveLabel}
+        {saveLabelShort}
       </span>
       <button
         type="button"
         aria-label="Undo"
         disabled={!canUndo}
         onClick={onUndo}
-        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 md:hidden"
+        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 md:hidden"
       >
         <Undo2 className="h-5 w-5" />
       </button>
@@ -1064,7 +1069,7 @@ export function TopBar({
         aria-label="Redo"
         disabled={!canRedo}
         onClick={onRedo}
-        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 md:hidden"
+        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 md:hidden"
       >
         <Redo2 className="h-5 w-5" />
       </button>
@@ -1088,7 +1093,7 @@ export function TopBar({
           onClick={onToggleDoc}
           aria-pressed={docOpen}
           className={cn(
-            "rounded px-2 py-1 font-medium transition-colors",
+            "rounded px-2 py-1 font-medium transition-colors active:scale-[0.98]",
             docOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
@@ -1101,7 +1106,7 @@ export function TopBar({
           <button
             type="button"
             aria-label="More actions"
-            className="ml-auto flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:hidden"
+            className="ml-auto flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-[0.98] md:hidden"
           >
             <MoreHorizontal className="h-5 w-5" />
           </button>

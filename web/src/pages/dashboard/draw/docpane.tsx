@@ -38,7 +38,7 @@ export function DocPane({
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded px-2 py-1 text-xs font-medium capitalize ${
+            className={`rounded px-2 py-1 text-xs font-medium capitalize transition-transform active:scale-[0.98] ${
               tab === t ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/50"
             }`}
           >

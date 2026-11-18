@@ -60,6 +60,7 @@ export interface ExcalidrawCanvasProps {
   initialScene: LoadedScene;
   onAdapterReady: (adapter: CanvasAdapter) => void;
   onChange: () => void;
+  theme: "light" | "dark";
 }
 
 // Excalidraw 0.18 swallows a single-finger touch while pen mode is on and
@@ -202,7 +203,7 @@ function installTouchPanZoom(
   };
 }
 
-export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: ExcalidrawCanvasProps) {
+export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange, theme }: ExcalidrawCanvasProps) {
   // Excalidraw only reads `initialData` on mount, so freeze it. The page keys
   // this component per load, so opening a different board (or reloading)
   // remounts with fresh data. This replaces imperative `updateScene`, which was
@@ -246,6 +247,7 @@ export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: Exc
         initialData={initialData}
         excalidrawAPI={handleApiReady}
         onChange={handleChange}
+        theme={theme}
       />
     </div>
   );
@@ -459,8 +461,14 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
     },
     exportImage: async (format: "png" | "svg") => {
       const elements = api.getSceneElements();
-      const appState = api.getAppState();
       const files = api.getFiles();
+      // The app theme must not leak into the file: export the board's own
+      // background in light mode, as before the canvas followed the theme.
+      const appState = {
+        ...api.getAppState(),
+        exportBackground: true,
+        exportWithDarkMode: false,
+      };
       if (format === "png") {
         const blob = await exportToBlob({ elements, appState, files, mimeType: "image/png" });
         download(blob, "board.png");
