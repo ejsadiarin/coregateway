@@ -17,6 +17,7 @@ import {
 import { DocPane } from "@/pages/dashboard/draw/docpane";
 import { DrawSheet } from "@/pages/dashboard/draw/draw-sheet";
 import {
+  HistoryZoomControls,
   IconPalette,
   MobileToolbar,
   StyleBar,
@@ -74,6 +75,10 @@ export default function DrawPage() {
   // Bumped on every load so the canvas remounts (Excalidraw only reads
   // initialData on mount).
   const [loadEpoch, setLoadEpoch] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  const [history, setHistory] = useState({ undo: false, redo: false });
+  const historyRef = useRef(history);
 
   const adapterRef = useRef<CanvasAdapter | null>(null);
 
@@ -95,11 +100,27 @@ export default function DrawPage() {
 
   // Only arm a save when the scene actually differs from the last known state
   // (the adapter owns that judgement; it also refreshes the rail highlight).
+  const syncHistory = useCallback(() => {
+    const next = adapterRef.current?.historyState();
+    if (!next) return;
+    if (next.undo !== historyRef.current.undo || next.redo !== historyRef.current.redo) {
+      historyRef.current = next;
+      setHistory(next);
+    }
+  }, []);
+
+  // Excalidraw updates its footer buttons during the same change tick, so the
+  // first read still sees the old disabled state. Re-read after the commit.
+  const queueHistorySync = useCallback(() => {
+    syncHistory();
+    requestAnimationFrame(syncHistory);
+  }, [syncHistory]);
+
   const onCanvasChange = useCallback(() => {
     const adapter = adapterRef.current;
     if (!adapter) return;
     // Change events also fire for pan/zoom/selection and every pointer move.
-    // Only touch React state when the tool or style really moved.
+    // Only touch React state when the tool, style or zoom really moved.
     const tool = adapter.activeRailTool();
     if (tool !== activeToolRef.current) {
       activeToolRef.current = tool;
@@ -110,13 +131,27 @@ export default function DrawPage() {
       styleRef.current = next;
       setStyle(next);
     }
-    if (adapter.noteSceneChange()) scheduleSave();
-  }, [scheduleSave]);
+    const nextZoom = adapter.currentZoom();
+    if (nextZoom !== zoomRef.current) {
+      zoomRef.current = nextZoom;
+      setZoom(nextZoom);
+    }
+    if (adapter.noteSceneChange()) {
+      queueHistorySync();
+      scheduleSave();
+    }
+  }, [scheduleSave, queueHistorySync]);
 
   // The canvas may mount after the network load resolves; keep its adapter so
   // the page can drive the canvas through it.
   const onAdapterReady = useCallback((adapter: CanvasAdapter) => {
     adapterRef.current = adapter;
+    const nextHistory = adapter.historyState();
+    historyRef.current = nextHistory;
+    setHistory(nextHistory);
+    const nextZoom = adapter.currentZoom();
+    zoomRef.current = nextZoom;
+    setZoom(nextZoom);
   }, []);
 
   const handleSelectTool = useCallback((id: CanvasTool) => {
@@ -176,6 +211,43 @@ export default function DrawPage() {
   const handleNormalize = useCallback(() => {
     adapterRef.current?.normalizeBoard();
   }, []);
+
+  const syncZoom = useCallback(() => {
+    const next = adapterRef.current?.currentZoom();
+    if (next === undefined) return;
+    zoomRef.current = next;
+    setZoom(next);
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    adapterRef.current?.undo();
+    queueHistorySync();
+  }, [queueHistorySync]);
+
+  const handleRedo = useCallback(() => {
+    adapterRef.current?.redo();
+    queueHistorySync();
+  }, [queueHistorySync]);
+
+  const handleZoomIn = useCallback(() => {
+    adapterRef.current?.zoomIn();
+    syncZoom();
+  }, [syncZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    adapterRef.current?.zoomOut();
+    syncZoom();
+  }, [syncZoom]);
+
+  const handleResetZoom = useCallback(() => {
+    adapterRef.current?.resetZoom();
+    syncZoom();
+  }, [syncZoom]);
+
+  const handleZoomToFit = useCallback(() => {
+    adapterRef.current?.zoomToFit();
+    syncZoom();
+  }, [syncZoom]);
 
   // eraser.io-style keyboard: `/` opens icon search, and bare tool keys
   // (v/h/d/e/t/r/o/a/l/f) select the matching tool. Bound on the window in the
@@ -311,6 +383,18 @@ export default function DrawPage() {
             onChange={onCanvasChange}
           />
 
+          <HistoryZoomControls
+            canUndo={history.undo}
+            canRedo={history.redo}
+            zoom={zoom}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onResetZoom={handleResetZoom}
+            onZoomToFit={handleZoomToFit}
+          />
+
           {conflict !== null && (
             <div className="absolute left-1/2 top-16 w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-md border border-amber-500/50 bg-background px-4 py-3 shadow-lg">
               <p className="text-sm font-medium">This board changed on another device</p>
@@ -351,6 +435,15 @@ export default function DrawPage() {
         styleOpen={styleOpen}
         styleColor={style.strokeColor}
         onOpenStyle={() => openPhoneSheet(styleOpen ? null : "style")}
+        canUndo={history.undo}
+        canRedo={history.redo}
+        zoom={zoom}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
+        onZoomToFit={handleZoomToFit}
       />
 
       {isPhone && (

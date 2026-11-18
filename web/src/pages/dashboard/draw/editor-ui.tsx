@@ -12,11 +12,16 @@ import {
   ChevronLeft,
   Download,
   Layers,
+  Maximize2,
   MoreHorizontal,
+  Redo2,
   Search,
   Shapes,
   Sparkles,
+  Undo2,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -62,6 +67,8 @@ function ToolButton({
   hint,
   onClick,
   size = "rail",
+  disabled,
+  ariaLabel,
   children,
 }: {
   active?: boolean;
@@ -70,17 +77,21 @@ function ToolButton({
   onClick: () => void;
   // The phone bar needs a 44px target; the desktop rail keeps its compact 36px.
   size?: "rail" | "toolbar";
+  disabled?: boolean;
+  // Use when the visible text is the important part of the accessible name.
+  ariaLabel?: string;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
       title={hint ? `${title} (${hint})` : title}
-      aria-label={title}
+      aria-label={ariaLabel ?? title}
       aria-pressed={active}
+      disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex items-center justify-center rounded-md transition-colors",
+        "flex items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40",
         size === "toolbar" ? "h-11 w-11 shrink-0 touch-manipulation" : "h-9 w-9",
         active
           ? "bg-primary/15 text-primary"
@@ -143,8 +154,20 @@ export function ToolRail({
 }
 
 // The phone toolbar. A tablet keeps the side rail, so this only renders below
-// the md breakpoint. A 390px screen fits the eight tools on one row and wraps
-// Insert onto a second; a wider phone fits all nine.
+// the md breakpoint. The eight drawing tools fill the first row; style, insert,
+// history and zoom share the second.
+export interface HistoryZoomControlsProps {
+  canUndo: boolean;
+  canRedo: boolean;
+  zoom: number;
+  onUndo: () => void;
+  onRedo: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onResetZoom: () => void;
+  onZoomToFit: () => void;
+}
+
 export function MobileToolbar({
   activeTool,
   onSelectTool,
@@ -153,6 +176,15 @@ export function MobileToolbar({
   styleOpen,
   styleColor,
   onOpenStyle,
+  canUndo,
+  canRedo,
+  zoom,
+  onUndo,
+  onRedo,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  onZoomToFit,
 }: {
   activeTool: RailToolId | null;
   onSelectTool: (id: RailToolId) => void;
@@ -161,7 +193,7 @@ export function MobileToolbar({
   styleOpen: boolean;
   styleColor: string;
   onOpenStyle: () => void;
-}) {
+} & HistoryZoomControlsProps) {
   return (
     <div
       data-draw-toolbar
@@ -190,6 +222,75 @@ export function MobileToolbar({
       <ToolButton size="toolbar" title="Insert" active={paletteOpen} onClick={onTogglePalette}>
         <Boxes className="h-5 w-5" />
       </ToolButton>
+      <ToolButton size="toolbar" title="Undo" disabled={!canUndo} onClick={onUndo}>
+        <Undo2 className="h-5 w-5" />
+      </ToolButton>
+      <ToolButton size="toolbar" title="Redo" disabled={!canRedo} onClick={onRedo}>
+        <Redo2 className="h-5 w-5" />
+      </ToolButton>
+      <ToolButton size="toolbar" title="Zoom out" onClick={onZoomOut}>
+        <ZoomOut className="h-5 w-5" />
+      </ToolButton>
+      <ToolButton
+        size="toolbar"
+        title="Reset zoom to 100%"
+        ariaLabel={`${Math.round(zoom * 100)}% zoom, reset to 100%`}
+        onClick={onResetZoom}
+      >
+        <span className="text-[10px] tabular-nums">{Math.round(zoom * 100)}%</span>
+      </ToolButton>
+      <ToolButton size="toolbar" title="Zoom in" onClick={onZoomIn}>
+        <ZoomIn className="h-5 w-5" />
+      </ToolButton>
+      <ToolButton size="toolbar" title="Zoom to fit" onClick={onZoomToFit}>
+        <Maximize2 className="h-5 w-5" />
+      </ToolButton>
+    </div>
+  );
+}
+
+// Desktop/tablet history and zoom cluster, floating over the bottom-left of
+// the canvas where Excalidraw's own footer used to be.
+export function HistoryZoomControls({
+  canUndo,
+  canRedo,
+  zoom,
+  onUndo,
+  onRedo,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  onZoomToFit,
+}: HistoryZoomControlsProps) {
+  const button =
+    "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded-lg px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
+  return (
+    <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-0.5 rounded-lg border border-border bg-background/90 p-0.5 shadow-sm backdrop-blur-sm md:flex">
+      <button type="button" aria-label="Undo" disabled={!canUndo} onClick={onUndo} className={button}>
+        <Undo2 className="h-4 w-4" />
+      </button>
+      <button type="button" aria-label="Redo" disabled={!canRedo} onClick={onRedo} className={button}>
+        <Redo2 className="h-4 w-4" />
+      </button>
+      <div className="mx-0.5 h-5 w-px bg-border" />
+      <button type="button" aria-label="Zoom out" onClick={onZoomOut} className={button}>
+        <ZoomOut className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        title="Reset zoom to 100%"
+        aria-label={`${Math.round(zoom * 100)}% zoom, reset to 100%`}
+        onClick={onResetZoom}
+        className={cn(button, "min-w-14 text-[10px] tabular-nums")}
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <button type="button" aria-label="Zoom in" onClick={onZoomIn} className={button}>
+        <ZoomIn className="h-4 w-4" />
+      </button>
+      <button type="button" aria-label="Zoom to fit" onClick={onZoomToFit} className={button}>
+        <Maximize2 className="h-4 w-4" />
+      </button>
     </div>
   );
 }

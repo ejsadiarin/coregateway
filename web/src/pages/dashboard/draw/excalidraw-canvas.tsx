@@ -9,13 +9,14 @@
 
 import { useCallback, useRef, type ComponentProps } from "react";
 import {
+  CaptureUpdateAction,
   Excalidraw,
   exportToBlob,
   exportToSvg,
   hashElementsVersion,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import {
@@ -117,7 +118,10 @@ function viewportCenter(api: ExcalidrawImperativeAPI): { x: number; y: number } 
 
 function appendElements(api: ExcalidrawImperativeAPI, elements: ExcalidrawElement[]): void {
   const existing = api.getSceneElements();
-  api.updateScene({ elements: [...existing, ...elements] });
+  api.updateScene({
+    elements: [...existing, ...elements],
+    captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+  });
   const selectedElementIds: Record<string, true> = {};
   for (const el of elements) selectedElementIds[el.id] = true;
   api.updateScene({ appState: { selectedElementIds } });
@@ -141,6 +145,34 @@ function styleNewElements(elements: ExcalidrawElement[], style: DrawStyle): Exca
   const selected: Record<string, true> = {};
   for (const el of elements) selected[el.id] = true;
   return applyStyleToElements(elements, selected, style);
+}
+
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 30;
+const ZOOM_STEP = 1.1;
+
+// Keep the scene point at the viewport centre fixed while zooming (the same
+// formula as Excalidraw's own zoom actions), so the drawing does not drift.
+function setZoom(api: ExcalidrawImperativeAPI, value: number): void {
+  const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
+  const appState = api.getAppState();
+  const currentZoom = appState.zoom.value;
+  const layerX = appState.width / 2;
+  const layerY = appState.height / 2;
+  const scrollX =
+    appState.scrollX + (layerX - layerX / currentZoom) - (layerX - layerX / clamped);
+  const scrollY =
+    appState.scrollY + (layerY - layerY / currentZoom) - (layerY - layerY / clamped);
+  api.updateScene({
+    appState: { scrollX, scrollY, zoom: { value: clamped } as AppState["zoom"] },
+  });
+}
+
+// Excalidraw's own footer carries the canonical undo/redo buttons, including
+// their disabled state. We hide that footer visually but drive the same
+// actions, so history semantics (style changes, moves, deletes) stay exact.
+function historyButton(testId: "button-undo" | "button-redo"): HTMLButtonElement | null {
+  return document.querySelector<HTMLButtonElement>(`[data-testid="${testId}"]`);
 }
 
 function download(blob: Blob, filename: string): void {
@@ -212,8 +244,11 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
     },
     applyStyle: (style: DrawStyle) => {
       const appState = api.getAppState();
+      const current = api.getSceneElements();
+      const next = applyStyleToElements(current, appState.selectedElementIds ?? {}, style);
+      const changed = next.some((el, index) => el !== current[index]);
       api.updateScene({
-        elements: applyStyleToElements(api.getSceneElements(), appState.selectedElementIds ?? {}, style),
+        elements: next,
         appState: {
           currentItemStrokeColor: style.strokeColor,
           currentItemBackgroundColor: style.backgroundColor,
@@ -222,9 +257,30 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
           currentItemFillStyle: style.fillStyle,
           currentItemOpacity: style.opacity,
         },
+        // A default colour with nothing selected is not a scene edit.
+        captureUpdate: changed ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.NEVER,
       });
     },
     currentStyle: (): DrawStyle => currentStyleFrom(api.getAppState()),
+    historyState: () => {
+      const undo = historyButton("button-undo");
+      const redo = historyButton("button-redo");
+      return { undo: !!undo && !undo.disabled, redo: !!redo && !redo.disabled };
+    },
+    undo: () => historyButton("button-undo")?.click(),
+    redo: () => historyButton("button-redo")?.click(),
+    currentZoom: () => api.getAppState().zoom.value,
+    zoomIn: () => setZoom(api, api.getAppState().zoom.value * ZOOM_STEP),
+    zoomOut: () => setZoom(api, api.getAppState().zoom.value / ZOOM_STEP),
+    resetZoom: () => setZoom(api, 1),
+    zoomToFit: () => {
+      const elements = api.getSceneElements();
+      if (elements.length === 0) {
+        api.updateScene({ appState: { scrollX: 0, scrollY: 0, zoom: { value: 1 } as AppState["zoom"] } });
+        return;
+      }
+      api.scrollToContent(elements, { fitToContent: true });
+    },
     insertIcon: (iconId: string) => {
       const { x, y } = viewportCenter(api);
       const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2);
@@ -237,7 +293,13 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
       appendElements(api, styleNewElements([shape], currentStyleFrom(api.getAppState())));
     },
     normalizeBoard: () => {
-      api.updateScene({ elements: applyFormalStyle(api.getSceneElements()) });
+      const current = api.getSceneElements();
+      const next = applyFormalStyle(current);
+      const changed = next.some((el, index) => el !== current[index]);
+      api.updateScene({
+        elements: next,
+        captureUpdate: changed ? CaptureUpdateAction.IMMEDIATELY : CaptureUpdateAction.NEVER,
+      });
     },
     exportImage: async (format: "png" | "svg") => {
       const elements = api.getSceneElements();

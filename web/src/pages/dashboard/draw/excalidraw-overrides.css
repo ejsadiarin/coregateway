@@ -8,6 +8,31 @@
   display: none !important;
 }
 
+/* Hide only Excalidraw's duplicate history/zoom controls. The rest of its
+   footer stays: touch users still need the finalize control for multi-point
+   lines and arrows. */
+.coredraw-canvas .undo-redo-buttons,
+.coredraw-canvas .zoom-actions,
+.coredraw-canvas [data-testid="main-menu-trigger"],
+.coredraw-canvas .App-toolbar-content > *:has([data-testid="button-undo"]),
+.coredraw-canvas .App-toolbar-content > *:has([data-testid="button-redo"]) {
+  display: none !important;
+}
+
+/* The mobile island is a white bar when only our hidden controls remain.
+   Keep it for selection actions (Edit/Duplicate/Delete) and finalize. */
+.coredraw-canvas
+  .App-bottom-bar
+  > .Island:not(:has(.finalize-button)):not(
+    :has(
+      .ToolIcon_type_button--show:not([data-testid="button-undo"]):not(
+          [data-testid="button-redo"]
+        )
+    )
+  ) {
+  display: none !important;
+}
+
 /* Excalidraw fills its parent only when that parent has a definite height.
    Setting h-full was not enough through the flex chain (the canvas resolved to
    a runaway height and the interactive layer landed off-screen), so anchor the

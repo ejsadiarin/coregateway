@@ -740,6 +740,18 @@ export interface CanvasAdapter {
   // when nothing is selected) and report the resulting style.
   applyStyle(style: DrawStyle): void;
   currentStyle(): DrawStyle;
+  // Undo/redo availability and actions. Excalidraw owns the history; these
+  // mirror its own controls so the UI can render the disabled state.
+  historyState(): { undo: boolean; redo: boolean };
+  undo(): void;
+  redo(): void;
+  // Zoom is read from appState; the actions keep the view centred where the
+  // engine allows it and clamp to Excalidraw's range.
+  currentZoom(): number;
+  zoomIn(): void;
+  zoomOut(): void;
+  resetZoom(): void;
+  zoomToFit(): void;
   // Re-style every element on the board to the formal preset (roughness 0,
   // solid ink strokes; freedraw is thinner than shapes). User-initiated only —
   // it overwrites deliberate styling.

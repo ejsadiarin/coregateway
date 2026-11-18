@@ -44,6 +44,15 @@ test.describe("draw phone shell", () => {
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(390);
     }
     await expect(page.getByRole("button", { name: "Insert", exact: true })).toBeVisible();
+    for (const name of ["Undo", "Redo", "Zoom out", "Zoom in", "Zoom to fit"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+      const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByRole("button", { name: /reset to 100%/ })).toBeVisible();
+    await expect(page.getByTestId("button-undo")).toBeHidden();
+    await expect(page.getByTestId("button-redo")).toBeHidden();
 
     // Switching tools updates the pressed state without touching Excalidraw's
     // hidden toolbar. Frame and Insert prove the far end of the bar is reachable.
@@ -170,6 +179,99 @@ test("saves a drawn stroke once and never on pan, zoom or selection", async ({ p
   await expect.poll(() => saves.length, { timeout: 5000 }).toBe(3);
   await page.waitForTimeout(SAVE_SETTLE_MS);
   expect(saves).toHaveLength(3);
+
+  dropExcalidrawNoise(consoleErrors);
+});
+
+test("undo, redo and zoom stay in our own controls", async ({ page, consoleErrors }) => {
+  await login(page);
+  await newDrawBoard(page, "history controls");
+  const boardId = page.url().split("/").pop();
+  if (!boardId) throw new Error("board id missing");
+  const savedElements = async () => {
+    const res = await page.request.get(`${API_URL}/api/coredraw/boards/${boardId}`);
+    const saved = await res.json();
+    return (saved.snapshot?.elements ?? []) as { type: string }[];
+  };
+
+  const undo = page.getByRole("button", { name: "Undo", exact: true });
+  const redo = page.getByRole("button", { name: "Redo", exact: true });
+  const zoomLabel = page.getByRole("button", { name: /reset to 100%/ });
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeDisabled();
+  await expect(zoomLabel).toHaveText("100%");
+
+  // Zoom-to-fit on an empty board resets instead of breaking.
+  await page.getByRole("button", { name: "Zoom to fit", exact: true }).click();
+  await expect(zoomLabel).toHaveText("100%");
+
+  // Draw a stroke, then undo and redo it through our controls.
+  const canvas = page.locator(".coredraw-canvas");
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("no canvas");
+  await page.getByTestId("draw-tool-rail").getByRole("button", { name: "Draw", exact: true }).click();
+  const x = box.x + box.width * 0.35;
+  const y = box.y + box.height * 0.4;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 180, y + 80, { steps: 20 });
+  await page.mouse.up();
+
+  await expect(undo).toBeEnabled();
+  await expect(redo).toBeDisabled();
+  await undo.click();
+  await expect(undo).toBeDisabled();
+  await expect(redo).toBeEnabled();
+  await expect.poll(async () => (await savedElements()).some((el) => el.type === "freedraw")).toBe(false);
+
+  await redo.click();
+  await expect(undo).toBeEnabled();
+  await expect.poll(async () => (await savedElements()).some((el) => el.type === "freedraw")).toBe(true);
+
+  // Excalidraw's keyboard shortcuts still work alongside our buttons when the
+  // canvas has focus.
+  await page.getByTestId("draw-tool-rail").getByRole("button", { name: "Select", exact: true }).click();
+  await page.mouse.click(box.x + 40, box.y + 40);
+  await page.keyboard.press("Control+z");
+  await expect.poll(async () => (await savedElements()).some((el) => el.type === "freedraw")).toBe(false);
+  await page.keyboard.press("Control+Shift+z");
+  await expect.poll(async () => (await savedElements()).some((el) => el.type === "freedraw")).toBe(true);
+
+  // An app-driven style change is undoable too.
+  await page.keyboard.press("Control+a");
+  await page
+    .getByRole("group", { name: "Stroke" })
+    .getByRole("button", { name: "Blue", exact: true })
+    .click();
+  await expect
+    .poll(async () => {
+      const elements = await savedElements();
+      return (elements.find((el) => el.type === "freedraw") as { strokeColor?: string } | undefined)
+        ?.strokeColor;
+    })
+    .toBe("#2563eb");
+  await undo.click();
+  await expect
+    .poll(async () => {
+      const elements = await savedElements();
+      return (elements.find((el) => el.type === "freedraw") as { strokeColor?: string } | undefined)
+        ?.strokeColor;
+    })
+    .toBe("#1e1e1e");
+
+  // Zoom in/out and reset update the readout.
+  await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await expect(zoomLabel).toHaveText("91%");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(zoomLabel).toHaveText("100%");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(zoomLabel).toHaveText("110%");
+  await zoomLabel.click();
+  await expect(zoomLabel).toHaveText("100%");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(zoomLabel).toHaveText("110%");
+  await page.getByRole("button", { name: "Zoom to fit", exact: true }).click();
+  await expect(zoomLabel).toHaveText("100%");
 
   dropExcalidrawNoise(consoleErrors);
 });
@@ -346,6 +448,13 @@ test.describe("draw tablet and desktop shell", () => {
     }
     await expect(page.getByRole("button", { name: "Hide notes", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "More actions" })).toHaveCount(0);
+    for (const name of ["Undo", "Redo", "Zoom out", "Zoom in", "Zoom to fit"]) {
+      await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole("button", { name: /reset to 100%/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+    await expect(page.getByTestId("button-undo")).toBeHidden();
+    await expect(page.getByTestId("button-redo")).toBeHidden();
     dropExcalidrawNoise(consoleErrors);
   });
 });
