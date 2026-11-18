@@ -20,32 +20,44 @@ type mockQuerier struct {
 }
 
 func (m *mockQuerier) GetUserByEmail(_ context.Context, email string) (sqlc.CoregatewayUser, error) {
-	if m.getUserByEmailFn != nil { return m.getUserByEmailFn(context.Background(), email) }
+	if m.getUserByEmailFn != nil {
+		return m.getUserByEmailFn(context.Background(), email)
+	}
 	return sqlc.CoregatewayUser{}, pgx.ErrNoRows
 }
 func (m *mockQuerier) CreateUser(ctx context.Context, arg sqlc.CreateUserParams) (sqlc.CoregatewayUser, error) {
-	if m.createUserFn != nil { return m.createUserFn(ctx, arg) }
+	if m.createUserFn != nil {
+		return m.createUserFn(ctx, arg)
+	}
 	return sqlc.CoregatewayUser{}, nil
 }
 func (m *mockQuerier) CreateSession(ctx context.Context, arg sqlc.CreateSessionParams) (sqlc.CoregatewaySession, error) {
-	if m.createSessionFn != nil { return m.createSessionFn(ctx, arg) }
+	if m.createSessionFn != nil {
+		return m.createSessionFn(ctx, arg)
+	}
 	return sqlc.CoregatewaySession{}, nil
 }
 func (m *mockQuerier) DeleteSessionByTokenHash(_ context.Context, tokenHash string) error {
-	if m.deleteSessionByHashFn != nil { return m.deleteSessionByHashFn(context.Background(), tokenHash) }
+	if m.deleteSessionByHashFn != nil {
+		return m.deleteSessionByHashFn(context.Background(), tokenHash)
+	}
 	return nil
 }
 func (m *mockQuerier) GetSessionByTokenHash(_ context.Context, tokenHash string) (sqlc.GetSessionByTokenHashRow, error) {
-	if m.getSessionByHashFn != nil { return m.getSessionByHashFn(context.Background(), tokenHash) }
+	if m.getSessionByHashFn != nil {
+		return m.getSessionByHashFn(context.Background(), tokenHash)
+	}
 	return sqlc.GetSessionByTokenHashRow{}, pgx.ErrNoRows
 }
 func (m *mockQuerier) GetUser(_ context.Context, id uuid.UUID) (sqlc.CoregatewayUser, error) {
-	if m.getUserFn != nil { return m.getUserFn(context.Background(), id) }
+	if m.getUserFn != nil {
+		return m.getUserFn(context.Background(), id)
+	}
 	return sqlc.CoregatewayUser{}, pgx.ErrNoRows
 }
-func (m *mockQuerier) DeleteExpiredSessions(context.Context) error                { return nil }
-func (m *mockQuerier) CountActiveSessions(context.Context) (int64, error)        { return 0, nil }
-func (m *mockQuerier) CountAdmins(context.Context) (int64, error)                { return 0, nil }
+func (m *mockQuerier) DeleteExpiredSessions(context.Context) error        { return nil }
+func (m *mockQuerier) CountActiveSessions(context.Context) (int64, error) { return 0, nil }
+func (m *mockQuerier) CountAdmins(context.Context) (int64, error)         { return 0, nil }
 func (m *mockQuerier) CreateApiKey(context.Context, sqlc.CreateApiKeyParams) (sqlc.CoregatewayApiKey, error) {
 	return sqlc.CoregatewayApiKey{}, nil
 }
@@ -65,9 +77,9 @@ func (m *mockQuerier) CreateHealthHistory(context.Context, sqlc.CreateHealthHist
 func (m *mockQuerier) CreateService(context.Context, sqlc.CreateServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }
-func (m *mockQuerier) DeleteService(context.Context, uuid.UUID) error   { return nil }
-func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error   { return nil }
-func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error      { return nil }
+func (m *mockQuerier) DeleteService(context.Context, uuid.UUID) error { return nil }
+func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error { return nil }
+func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error    { return nil }
 func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
 	return arg.Timezone, nil
 }
@@ -81,6 +93,10 @@ func (m *mockQuerier) GetService(context.Context, uuid.UUID) (sqlc.CoregatewaySe
 func (m *mockQuerier) GetServiceHistory(context.Context, sqlc.GetServiceHistoryParams) ([]sqlc.CoregatewayServiceHealthHistory, error) {
 	return nil, nil
 }
+func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamp) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockQuerier) GetServiceStats24h(context.Context, pgtype.UUID) (sqlc.GetServiceStats24hRow, error) {
 	return sqlc.GetServiceStats24hRow{}, nil
 }
@@ -114,8 +130,12 @@ func TestRegister_Success(t *testing.T) {
 	}
 	svc := NewService(mock)
 	user, err := svc.Register(context.Background(), "test@example.com", "password123")
-	if err != nil { t.Fatalf("unexpected error: %v", err) }
-	if user.Email != "test@example.com" { t.Errorf("expected test@example.com, got %s", user.Email) }
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.Email != "test@example.com" {
+		t.Errorf("expected test@example.com, got %s", user.Email)
+	}
 }
 
 func TestRegister_DuplicateEmail(t *testing.T) {
@@ -126,14 +146,18 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	}
 	svc := NewService(mock)
 	_, err := svc.Register(context.Background(), "existing@example.com", "password123")
-	if err == nil { t.Fatal("expected error for duplicate email") }
+	if err == nil {
+		t.Fatal("expected error for duplicate email")
+	}
 }
 
 func TestLogin_InvalidCredentials(t *testing.T) {
 	mock := &mockQuerier{}
 	svc := NewService(mock)
 	_, err := svc.Login(context.Background(), "nobody@example.com", "password")
-	if err == nil { t.Fatal("expected error for invalid credentials") }
+	if err == nil {
+		t.Fatal("expected error for invalid credentials")
+	}
 }
 
 func TestGetUser_Found(t *testing.T) {
@@ -145,8 +169,12 @@ func TestGetUser_Found(t *testing.T) {
 	}
 	svc := NewService(mock)
 	user, err := svc.GetUser(context.Background(), userID)
-	if err != nil { t.Fatalf("unexpected error: %v", err) }
-	if user.Email != "found@example.com" { t.Errorf("expected found@example.com, got %s", user.Email) }
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if user.Email != "found@example.com" {
+		t.Errorf("expected found@example.com, got %s", user.Email)
+	}
 }
 
 func TestLogout_Success(t *testing.T) {
@@ -155,5 +183,7 @@ func TestLogout_Success(t *testing.T) {
 	}
 	svc := NewService(mock)
 	err := svc.Logout(context.Background(), "some-token")
-	if err != nil { t.Fatalf("unexpected error: %v", err) }
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

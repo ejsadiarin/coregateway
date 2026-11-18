@@ -4,22 +4,20 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 )
 
 // Config holds application configuration
 type Config struct {
-	DatabaseURL         string
-	Port                int
-	Env                 string
-	FrontendURL         string
-	HealthCheckInterval time.Duration
-	AdminEmail          string
-	AdminPass           string
-	AllowedOrigins      string
-	CorefinanceURL      string
-	CoredrawURL         string
-	CorebanURL          string
+	DatabaseURL    string
+	Port           int
+	Env            string
+	FrontendURL    string
+	AdminEmail     string
+	AdminPass      string
+	AllowedOrigins string
+	CorefinanceURL string
+	CoredrawURL    string
+	CorebanURL     string
 	// Internal JWT identity (gateway is the sole signer).
 	//
 	// JWTPrivateKeyPEM holds the resolved key material: either the contents
@@ -46,21 +44,20 @@ type Config struct {
 // Load loads configuration from environment variables
 func Load() *Config {
 	cfg := &Config{
-		DatabaseURL:         getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
-		Port:                getEnvInt("PORT", 8080),
-		Env:                 getEnv("ENV", "development"),
-		HealthCheckInterval: 60 * time.Second,
-		AdminEmail:          os.Getenv("ADMIN_EMAIL"),
-		AdminPass:           os.Getenv("ADMIN_PASSWORD"),
-		AllowedOrigins:      getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
-		CorefinanceURL:      getEnv("COREFINANCE_URL", "http://localhost:6969"),
-		CoredrawURL:         getEnv("COREDRAW_URL", "http://localhost:6971"),
-		CorebanURL:          getEnv("COREBAN_URL", "http://localhost:6972"),
-		JWTKID:              os.Getenv("JWT_KID"),
-		JWTPrevKID:          os.Getenv("JWT_PREV_KID"),
-		JWTIssuer:           getEnv("JWT_ISSUER", "https://gateway.internal"),
-		JWTAudience:         getEnvList("JWT_AUDIENCE", "corefinance,coredraw,coreban"),
-		JWTTTLSeconds:       getEnvInt("JWT_TTL_SECONDS", 300),
+		DatabaseURL:    getEnv("DATABASE_URL", "postgresql://core:core@localhost:5432/core?sslmode=disable"),
+		Port:           getEnvInt("PORT", 8080),
+		Env:            getEnv("ENV", "development"),
+		AdminEmail:     os.Getenv("ADMIN_EMAIL"),
+		AdminPass:      os.Getenv("ADMIN_PASSWORD"),
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		CorefinanceURL: getEnv("COREFINANCE_URL", "http://localhost:6969"),
+		CoredrawURL:    getEnv("COREDRAW_URL", "http://localhost:6971"),
+		CorebanURL:     getEnv("COREBAN_URL", "http://localhost:6972"),
+		JWTKID:         os.Getenv("JWT_KID"),
+		JWTPrevKID:     os.Getenv("JWT_PREV_KID"),
+		JWTIssuer:      getEnv("JWT_ISSUER", "https://gateway.internal"),
+		JWTAudience:    getEnvList("JWT_AUDIENCE", "corefinance,coredraw,coreban"),
+		JWTTTLSeconds:  getEnvInt("JWT_TTL_SECONDS", 300),
 	}
 
 	cfg.JWTPrivateKeyPEM, cfg.JWTKeySource, cfg.jwtKeyErr = resolveKeyMaterial(

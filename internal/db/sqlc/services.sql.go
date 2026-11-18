@@ -102,6 +102,19 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (C
 	return i, err
 }
 
+const deleteOldHealthHistory = `-- name: DeleteOldHealthHistory :execrows
+DELETE FROM coregateway.service_health_history
+WHERE checked_at < $1
+`
+
+func (q *Queries) DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamp) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOldHealthHistory, checkedBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteService = `-- name: DeleteService :exec
 DELETE FROM coregateway.services
 WHERE id = $1
@@ -270,7 +283,7 @@ func (q *Queries) GetServiceStats7d(ctx context.Context, serviceID pgtype.UUID) 
 }
 
 const listActiveServicesForHealthCheck = `-- name: ListActiveServicesForHealthCheck :many
-SELECT id, name, url, health_check_method, expected_status_codes, timeout
+SELECT id, name, url, health_check_method, expected_status_codes, timeout, health_check_interval
 FROM coregateway.services
 WHERE is_active = true
 `
@@ -282,6 +295,7 @@ type ListActiveServicesForHealthCheckRow struct {
 	HealthCheckMethod   pgtype.Text `json:"health_check_method"`
 	ExpectedStatusCodes []int32     `json:"expected_status_codes"`
 	Timeout             pgtype.Int4 `json:"timeout"`
+	HealthCheckInterval pgtype.Int4 `json:"health_check_interval"`
 }
 
 func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListActiveServicesForHealthCheckRow, error) {
@@ -300,6 +314,7 @@ func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListA
 			&i.HealthCheckMethod,
 			&i.ExpectedStatusCodes,
 			&i.Timeout,
+			&i.HealthCheckInterval,
 		); err != nil {
 			return nil, err
 		}

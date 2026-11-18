@@ -50,9 +50,13 @@ DELETE FROM coregateway.services
 WHERE id = $1;
 
 -- name: ListActiveServicesForHealthCheck :many
-SELECT id, name, url, health_check_method, expected_status_codes, timeout
+SELECT id, name, url, health_check_method, expected_status_codes, timeout, health_check_interval
 FROM coregateway.services
 WHERE is_active = true;
+
+-- name: DeleteOldHealthHistory :execrows
+DELETE FROM coregateway.service_health_history
+WHERE checked_at < sqlc.arg(checked_before);
 
 -- name: CreateHealthHistory :one
 INSERT INTO coregateway.service_health_history (

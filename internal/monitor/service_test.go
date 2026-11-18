@@ -18,24 +18,36 @@ type mockQuerier struct {
 }
 
 func (m *mockQuerier) CreateService(ctx context.Context, arg sqlc.CreateServiceParams) (sqlc.CoregatewayService, error) {
-	if m.createServiceFn != nil { return m.createServiceFn(ctx, arg) }
+	if m.createServiceFn != nil {
+		return m.createServiceFn(ctx, arg)
+	}
 	return sqlc.CoregatewayService{}, nil
 }
 func (m *mockQuerier) GetService(_ context.Context, id uuid.UUID) (sqlc.CoregatewayService, error) {
-	if m.getServiceFn != nil { return m.getServiceFn(context.Background(), id) }
+	if m.getServiceFn != nil {
+		return m.getServiceFn(context.Background(), id)
+	}
 	return sqlc.CoregatewayService{}, sql.ErrNoRows
 }
 func (m *mockQuerier) DeleteService(_ context.Context, id uuid.UUID) error {
-	if m.deleteServiceFn != nil { return m.deleteServiceFn(context.Background(), id) }
+	if m.deleteServiceFn != nil {
+		return m.deleteServiceFn(context.Background(), id)
+	}
 	return sql.ErrNoRows
 }
+func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamp) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockQuerier) ListServices(_ context.Context) ([]sqlc.ListServicesRow, error) {
-	if m.listServicesFn != nil { return m.listServicesFn(context.Background()) }
+	if m.listServicesFn != nil {
+		return m.listServicesFn(context.Background())
+	}
 	return nil, nil
 }
 
 func (m *mockQuerier) CountActiveSessions(context.Context) (int64, error) { return 0, nil }
-func (m *mockQuerier) CountAdmins(context.Context) (int64, error) { return 0, nil }
+func (m *mockQuerier) CountAdmins(context.Context) (int64, error)         { return 0, nil }
 func (m *mockQuerier) CreateApiKey(context.Context, sqlc.CreateApiKeyParams) (sqlc.CoregatewayApiKey, error) {
 	return sqlc.CoregatewayApiKey{}, nil
 }
@@ -46,7 +58,7 @@ func (m *mockQuerier) ListApiKeys(context.Context) ([]sqlc.ListApiKeysRow, error
 	return nil, nil
 }
 func (m *mockQuerier) RevokeApiKey(context.Context, uuid.UUID) (int64, error) { return 0, nil }
-func (m *mockQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error  { return nil }
+func (m *mockQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error   { return nil }
 func (m *mockQuerier) CreateHealthHistory(context.Context, sqlc.CreateHealthHistoryParams) (sqlc.CoregatewayServiceHealthHistory, error) {
 	return sqlc.CoregatewayServiceHealthHistory{}, nil
 }
@@ -56,10 +68,10 @@ func (m *mockQuerier) CreateSession(context.Context, sqlc.CreateSessionParams) (
 func (m *mockQuerier) CreateUser(context.Context, sqlc.CreateUserParams) (sqlc.CoregatewayUser, error) {
 	return sqlc.CoregatewayUser{}, nil
 }
-func (m *mockQuerier) DeleteExpiredSessions(context.Context) error { return nil }
-func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error { return nil }
+func (m *mockQuerier) DeleteExpiredSessions(context.Context) error            { return nil }
+func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error         { return nil }
 func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error { return nil }
-func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error { return nil }
+func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error            { return nil }
 func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
 	return arg.Timezone, nil
 }
@@ -107,24 +119,36 @@ func TestCreateService_Success(t *testing.T) {
 	}
 	svc := NewService(mock)
 	result, err := svc.CreateService(context.Background(), CreateServiceRequest{Name: "My Service", URL: "https://example.com"})
-	if err != nil { t.Fatalf("unexpected error: %v", err) }
-	if result.Name != "My Service" { t.Errorf("expected My Service, got %s", result.Name) }
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Name != "My Service" {
+		t.Errorf("expected My Service, got %s", result.Name)
+	}
 }
 
 func TestGetService_NotFound(t *testing.T) {
 	mock := &mockQuerier{}
 	svc := NewService(mock)
 	_, err := svc.GetService(context.Background(), uuid.New())
-	if err == nil { t.Fatal("expected error for service not found") }
-	if err.Error() != "service not found" { t.Errorf("expected 'service not found', got: %v", err) }
+	if err == nil {
+		t.Fatal("expected error for service not found")
+	}
+	if err.Error() != "service not found" {
+		t.Errorf("expected 'service not found', got: %v", err)
+	}
 }
 
 func TestDeleteService_NotFound(t *testing.T) {
 	mock := &mockQuerier{}
 	svc := NewService(mock)
 	err := svc.DeleteService(context.Background(), uuid.New())
-	if err == nil { t.Fatal("expected error for service not found") }
-	if err.Error() != "service not found" { t.Errorf("expected 'service not found', got: %v", err) }
+	if err == nil {
+		t.Fatal("expected error for service not found")
+	}
+	if err.Error() != "service not found" {
+		t.Errorf("expected 'service not found', got: %v", err)
+	}
 }
 
 func TestListServices_Empty(t *testing.T) {
@@ -135,6 +159,10 @@ func TestListServices_Empty(t *testing.T) {
 	}
 	svc := NewService(mock)
 	services, err := svc.ListServices(context.Background())
-	if err != nil { t.Fatalf("unexpected error: %v", err) }
-	if len(services) != 0 { t.Errorf("expected 0 services, got %d", len(services)) }
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(services) != 0 {
+		t.Errorf("expected 0 services, got %d", len(services))
+	}
 }

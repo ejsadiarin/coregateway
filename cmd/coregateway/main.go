@@ -38,9 +38,12 @@ func main() {
 	queries := sqlc.New(pool)
 
 	healthChecker := monitor.NewHealthChecker(queries)
-	if cfg.HealthCheckInterval > 0 {
-		healthChecker.StartHealthCheckScheduler(cfg.HealthCheckInterval)
-	}
+	checkerCtx, stopChecker := context.WithCancel(context.Background())
+	checkerDone := make(chan struct{})
+	go func() {
+		healthChecker.Run(checkerCtx)
+		close(checkerDone)
+	}()
 
 	srv, err := server.New(cfg, pool, queries)
 	if err != nil {
@@ -58,6 +61,8 @@ func main() {
 	}
 
 	<-done
+	stopChecker()
+	<-checkerDone
 	log.Println("Graceful shutdown complete")
 }
 
