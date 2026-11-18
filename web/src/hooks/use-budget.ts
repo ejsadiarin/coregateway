@@ -388,7 +388,8 @@ export function useCurrentTotalMoney() {
   return useQuery<CurrentTotalMoneyResponse>({
     queryKey: budgetKeys.currentTotalMoney(),
     queryFn: () => fetchCurrentTotalMoney(),
-    staleTime: 300000
+    staleTime: 300000,
+    retry: 1
   });
 }
 
@@ -396,7 +397,8 @@ export function usePeriodBudget(period: BudgetPeriod, date: string) {
   return useQuery<PeriodBudgetResponse>({
     queryKey: budgetKeys.periodBudget(period, date),
     queryFn: () => fetchPeriodBudget(period, date),
-    staleTime: 60000
+    staleTime: 60000,
+    retry: 1
   });
 }
 
