@@ -395,6 +395,19 @@ export interface CurrentTotalMoneyResponse {
 
 export type BudgetPeriod = "day" | "week" | "month";
 
+export interface CashFlowBucket {
+    start_date: string;
+    end_date: string;
+    income: number;
+    spent: number;
+    net: number;
+}
+
+export interface CashFlowResponse {
+    bucket: BudgetPeriod;
+    buckets: CashFlowBucket[];
+}
+
 export interface PeriodBudgetResponse {
     period: BudgetPeriod;
     start_date: string;

@@ -36,6 +36,7 @@ import type {
   MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
   PeriodBudgetResponse,
+  CashFlowResponse,
   BudgetPeriod,
   IncomeOccurrence,
   BudgetExportPayload,
@@ -937,6 +938,17 @@ export async function fetchCurrentTotalMoney(): Promise<CurrentTotalMoneyRespons
   });
   if (!res.ok) {
     throw new Error(`Error fetching current total money: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchCashFlow(bucket: BudgetPeriod, count: number): Promise<CashFlowResponse> {
+  const params = new URLSearchParams({ bucket, count: String(count) });
+  const res = await fetch(url + `/api/budget/cash-flow?${params}`, {
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    throw new Error(`Error fetching cash flow: ${res.status}`);
   }
   return res.json();
 }

@@ -40,7 +40,8 @@ import {
   fetchFiftyThirtyTwenty,
   fetchMonthOverMonth,
   fetchCurrentTotalMoney,
-  fetchPeriodBudget
+  fetchPeriodBudget,
+  fetchCashFlow
 } from '@/lib/api';
 import type { ExpenseSearchParams } from '@/lib/api';
 import type {
@@ -75,6 +76,7 @@ import type {
   MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
   PeriodBudgetResponse,
+  CashFlowResponse,
   BudgetPeriod,
   MerchantAnalysisResponse,
   HealthScoreResponse,
@@ -145,7 +147,11 @@ export const budgetKeys = {
 
   periodBudgetRoot: () => [...budgetKeys.all, 'periodBudget'] as const,
   periodBudget: (period: BudgetPeriod, date: string) =>
-    [...budgetKeys.periodBudgetRoot(), { period, date }] as const
+    [...budgetKeys.periodBudgetRoot(), { period, date }] as const,
+
+  cashFlowRoot: () => [...budgetKeys.all, 'cashFlow'] as const,
+  cashFlow: (period: BudgetPeriod, count: number) =>
+    [...budgetKeys.cashFlowRoot(), { period, count }] as const
 };
 
 // invalidateMoneyReads refetches every read whose totals a record or rule
@@ -153,6 +159,7 @@ export const budgetKeys = {
 export function invalidateMoneyReads(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: budgetKeys.currentTotalMoney() });
   queryClient.invalidateQueries({ queryKey: budgetKeys.periodBudgetRoot() });
+  queryClient.invalidateQueries({ queryKey: budgetKeys.cashFlowRoot() });
   queryClient.invalidateQueries({ queryKey: budgetKeys.budgetRemainingRoot() });
   queryClient.invalidateQueries({ queryKey: budgetKeys.stats() });
 }
@@ -605,6 +612,14 @@ export function usePeriodBudget(period: BudgetPeriod, date: string) {
   return useQuery<PeriodBudgetResponse>({
     queryKey: budgetKeys.periodBudget(period, date),
     queryFn: () => fetchPeriodBudget(period, date),
+    staleTime: 60000
+  });
+}
+
+export function useCashFlow(period: BudgetPeriod, count: number) {
+  return useQuery<CashFlowResponse>({
+    queryKey: budgetKeys.cashFlow(period, count),
+    queryFn: () => fetchCashFlow(period, count),
     staleTime: 60000
   });
 }
