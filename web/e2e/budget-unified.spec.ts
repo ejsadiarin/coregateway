@@ -191,6 +191,16 @@ test("the headline works at phone width", async ({ page }) => {
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+test("retired budget pages and nav items are gone", async ({ page }) => {
+  await page.goto(`/dashboard/budget?period=day&date=${today()}`);
+  await expect(page.getByText("Budget 2", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Budget 3", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Budget 4", { exact: true })).toHaveCount(0);
+
+  await page.goto("/dashboard/budget2");
+  await expect(page).not.toHaveURL(/budget2/);
+});
+
 test("guest mode reads the budget without write actions", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Try Demo Mode (Guest Access)" }).click();

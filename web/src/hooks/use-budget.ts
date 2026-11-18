@@ -12,38 +12,22 @@ import {
   updateTag,
   deleteTag,
   fetchExpenses,
-  fetchExpense,
   createExpense,
   updateExpense,
   deleteExpense,
-  searchExpenses,
   fetchIncomes,
-  fetchIncome,
   createIncome,
   updateIncome,
   deleteIncome,
   exportBudgetJSON,
   importBudgetJSON,
-  skipIncome,
-  skipExpense,
-  fetchRecurringIncomes,
-  fetchRecurringExpenses,
-  fetchIncomeOccurrences,
   fetchBudgetRemaining,
-  fetchSummaryStats,
   fetchCategoryBreakdown,
-  fetchTrends,
-  fetchSavingsRate,
-  fetchSpendingVelocity,
-  fetchUpcomingBills,
-  fetchPriorityGroups,
   fetchFiftyThirtyTwenty,
-  fetchMonthOverMonth,
   fetchCurrentTotalMoney,
   fetchPeriodBudget,
   fetchCashFlow
 } from '@/lib/api';
-import type { ExpenseSearchParams } from '@/lib/api';
 import type {
   Category,
   Tag,
@@ -54,33 +38,18 @@ import type {
   UpdateExpenseRequest,
   ExpenseFilters,
   Income,
-  RecurringIncomeWithNextDate,
-  RecurringExpenseRule,
-  IncomeOccurrence,
   CreateIncomeRequest,
   UpdateIncomeRequest,
   BudgetRemainingResponse,
-  SummaryStats,
   CategoryBreakdown,
-  TrendItem,
   PaginatedResponse,
   BudgetExportPayload,
   BudgetImportResult,
-  SkipIncomeRequest,
-  SkipExpenseRequest,
-  PriorityGroup,
-  SavingsRateResponse,
-  SpendingVelocityResponse,
-  UpcomingBillsResponse,
   FiftyThirtyTwentyResponse,
-  MonthOverMonthResponse,
   CurrentTotalMoneyResponse,
   PeriodBudgetResponse,
   CashFlowResponse,
-  BudgetPeriod,
-  MerchantAnalysisResponse,
-  HealthScoreResponse,
-  WeekdayPatternResponse
+  BudgetPeriod
 } from '@/types/api';
 import { useAuth } from '@/contexts/auth-context';
 
@@ -107,24 +76,16 @@ export const budgetKeys = {
   categories: () => [...budgetKeys.all, 'categories'] as const,
   categoriesList: () => [...budgetKeys.categories(), 'list'] as const,
 
-  priorityGroups: () => [...budgetKeys.all, 'priorityGroups'] as const,
-
   tags: () => [...budgetKeys.all, 'tags'] as const,
   tagsList: () => [...budgetKeys.tags(), 'list'] as const,
   tagDetail: (id: string) => [...budgetKeys.tags(), 'detail', id] as const,
 
-  subscriptions: () => [...budgetKeys.all, 'subscriptions'] as const,
-
   expenses: () => [...budgetKeys.all, 'expenses'] as const,
   expensesList: (filters?: ExpenseFilters) => [...budgetKeys.expenses(), 'list', filters] as const,
-  expensesSearch: (query: string, filters?: Omit<ExpenseSearchParams, 'q'>) =>
-    [...budgetKeys.expenses(), 'search', query, filters] as const,
   expenseDetail: (id: string) => [...budgetKeys.expenses(), 'detail', id] as const,
 
   incomes: () => [...budgetKeys.all, 'incomes'] as const,
   incomeDetail: (id: string) => [...budgetKeys.incomes(), 'detail', id] as const,
-  incomeOccurrences: (startDate: string, endDate: string) =>
-    [...budgetKeys.incomes(), 'occurrences', { startDate, endDate }] as const,
   recurringIncomes: () => [...budgetKeys.all, 'recurringIncomes'] as const,
   recurringExpenses: () => [...budgetKeys.all, 'recurringExpenses'] as const,
 
@@ -132,15 +93,8 @@ export const budgetKeys = {
 
   stats: () => [...budgetKeys.all, 'stats'] as const,
 
-  savingsRate: (startDate?: string, endDate?: string) =>
-    [...budgetKeys.stats(), 'savingsRate', { startDate, endDate }] as const,
-  spendingVelocity: (startDate?: string, endDate?: string) =>
-    [...budgetKeys.stats(), 'spendingVelocity', { startDate, endDate }] as const,
-  upcomingBills: () => [...budgetKeys.all, 'upcomingBills'] as const,
-
   fiftyThirtyTwenty: (startDate?: string, endDate?: string) =>
     [...budgetKeys.stats(), 'fiftyThirtyTwenty', { startDate, endDate }] as const,
-  monthOverMonth: () => [...budgetKeys.stats(), 'monthOverMonth'] as const,
 
   currentTotalMoney: () =>
     [...budgetKeys.all, 'currentTotalMoney'] as const,
@@ -261,14 +215,6 @@ export function useExpenses(filters?: ExpenseFilters, page: number = 1, pageSize
   });
 }
 
-export function useExpense(id: string | null) {
-  return useQuery<Expense>({
-    queryKey: budgetKeys.expenseDetail(id ?? ''),
-    queryFn: () => fetchExpense(id!),
-    enabled: !!id
-  });
-}
-
 // Every budget record has a note in the Feed (coreban ADR-0005). A record
 // created or re-dated here gets its note placed at once; a record deleted
 // here takes its synced note with it. A failure only delays it: the Feed
@@ -337,23 +283,6 @@ export function useDeleteExpense() {
   });
 }
 
-export function useSearchExpenses(
-  query: string,
-  filters?: { category_id?: string; start_date?: string; end_date?: string },
-  page: number = 1,
-  pageSize: number = 50
-) {
-  return useQuery<PaginatedResponse<Expense>>({
-    queryKey: budgetKeys.expensesSearch(query, { ...filters, page, page_size: pageSize }),
-    queryFn: () => searchExpenses({ q: query, ...filters, page, page_size: pageSize }),
-    enabled: query.length > 0,
-    staleTime: 60000,
-    refetchOnMount: true
-  });
-}
-
-// Incomes
-
 export function useIncomes(
   filters?: { start_date?: string; end_date?: string },
   page: number = 1,
@@ -364,45 +293,6 @@ export function useIncomes(
     queryFn: () => fetchIncomes({ ...filters, page, page_size: pageSize }),
     staleTime: 60000,
     refetchOnMount: true
-  });
-}
-
-export function useIncome(id: string | null) {
-  return useQuery<Income>({
-    queryKey: budgetKeys.incomeDetail(id ?? ''),
-    queryFn: () => fetchIncome(id!),
-    enabled: !!id
-  });
-}
-
-export function useRecurringIncomes() {
-  return useQuery<RecurringIncomeWithNextDate[]>({
-    queryKey: budgetKeys.recurringIncomes(),
-    queryFn: fetchRecurringIncomes,
-    staleTime: 300000
-  });
-}
-
-export function useRecurringExpenses() {
-  return useQuery<RecurringExpenseRule[]>({
-    queryKey: budgetKeys.recurringExpenses(),
-    queryFn: fetchRecurringExpenses,
-    staleTime: 300000
-  });
-}
-
-export function useIncomeOccurrences(
-  startDate: string,
-  endDate: string,
-  page: number = 1,
-  pageSize: number = 50,
-  enabled: boolean = true
-) {
-  return useQuery<PaginatedResponse<IncomeOccurrence>>({
-    queryKey: [...budgetKeys.incomeOccurrences(startDate, endDate), page, pageSize],
-    queryFn: () => fetchIncomeOccurrences({ start_date: startDate, end_date: endDate, page, page_size: pageSize }),
-    enabled: enabled && !!startDate && !!endDate,
-    staleTime: 60000
   });
 }
 
@@ -418,7 +308,6 @@ export function useCreateIncome() {
     onSuccess: (record) => {
       syncNote(queryClient, "income", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
       invalidateMoneyReads(queryClient);
     }
   });
@@ -437,7 +326,6 @@ export function useUpdateIncome() {
       syncNote(queryClient, "income", record);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomeDetail(variables.id) });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
       invalidateMoneyReads(queryClient);
     }
   });
@@ -455,7 +343,6 @@ export function useDeleteIncome() {
     onSuccess: (_, id) => {
       dropNote(queryClient, "income", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
-      queryClient.invalidateQueries({ queryKey: budgetKeys.recurringIncomes() });
       invalidateMoneyReads(queryClient);
     }
   });
@@ -482,52 +369,11 @@ export function useImportBudgetJSON() {
   });
 }
 
-export function useSkipIncome() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: (data: SkipIncomeRequest) => {
-      if (isGuest) throw new GuestBlockedError('Guest users cannot skip incomes');
-      return skipIncome(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
-    }
-  });
-}
-
-export function useSkipExpense() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: (data: SkipExpenseRequest) => {
-      if (isGuest) throw new GuestBlockedError('Guest users cannot skip expenses');
-      return skipExpense(data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
-    }
-  });
-}
-
 export function useBudgetRemaining() {
   return useQuery<BudgetRemainingResponse>({
     queryKey: budgetKeys.budgetRemainingRoot(),
     queryFn: fetchBudgetRemaining,
     staleTime: 0
-  });
-}
-
-// Statistics
-
-export function useSummaryStats(startDate?: string, endDate?: string) {
-  return useQuery<SummaryStats>({
-    queryKey: [...budgetKeys.stats(), 'summary', { startDate, endDate }],
-    queryFn: () => fetchSummaryStats(startDate, endDate),
-    staleTime: 60000,
-    refetchOnMount: true
   });
 }
 
@@ -539,63 +385,10 @@ export function useCategoryBreakdown(startDate?: string, endDate?: string) {
   });
 }
 
-export function useTrends(startDate?: string, endDate?: string) {
-  return useQuery<TrendItem[]>({
-    queryKey: [...budgetKeys.stats(), 'trends', { startDate, endDate }],
-    queryFn: () => fetchTrends(startDate, endDate),
-    staleTime: 60000
-  });
-}
-
-// Budget Analytics
-
-export function useSavingsRate(startDate?: string, endDate?: string) {
-  return useQuery<SavingsRateResponse>({
-    queryKey: budgetKeys.savingsRate(startDate, endDate),
-    queryFn: () => fetchSavingsRate(startDate, endDate),
-    staleTime: 300000
-  });
-}
-
-export function useSpendingVelocity(startDate?: string, endDate?: string) {
-  return useQuery<SpendingVelocityResponse>({
-    queryKey: budgetKeys.spendingVelocity(startDate, endDate),
-    queryFn: () => fetchSpendingVelocity(startDate!, endDate!),
-    staleTime: 60000,
-    enabled: !!startDate && !!endDate
-  });
-}
-
-export function useUpcomingBills() {
-  return useQuery<UpcomingBillsResponse>({
-    queryKey: budgetKeys.upcomingBills(),
-    queryFn: fetchUpcomingBills,
-    staleTime: 300000
-  });
-}
-
-export function usePriorityGroups() {
-  return useQuery<PriorityGroup[]>({
-    queryKey: budgetKeys.priorityGroups(),
-    queryFn: fetchPriorityGroups,
-    staleTime: 300000
-  });
-}
-
-// Financial Health
-
 export function useFiftyThirtyTwenty(startDate?: string, endDate?: string) {
   return useQuery<FiftyThirtyTwentyResponse>({
     queryKey: budgetKeys.fiftyThirtyTwenty(startDate, endDate),
     queryFn: () => fetchFiftyThirtyTwenty(startDate, endDate),
-    staleTime: 300000
-  });
-}
-
-export function useMonthOverMonth(startDate?: string, endDate?: string) {
-  return useQuery<MonthOverMonthResponse>({
-    queryKey: [...budgetKeys.monthOverMonth(), { startDate, endDate }],
-    queryFn: () => fetchMonthOverMonth(startDate, endDate),
     staleTime: 300000
   });
 }
@@ -624,31 +417,3 @@ export function useCashFlow(period: BudgetPeriod, count: number) {
   });
 }
 
-// Stub hooks for endpoints not yet implemented in corefinance backend
-
-export function useHealthScore() {
-  return useQuery<HealthScoreResponse>({
-    queryKey: ['budget', 'stats', 'healthScore'],
-    queryFn: async () => { throw new Error('Health score endpoint not implemented'); },
-    enabled: false,
-    staleTime: Infinity
-  });
-}
-
-export function useWeekdayPattern(_startDate?: string, _endDate?: string) {
-  return useQuery<WeekdayPatternResponse[]>({
-    queryKey: ['budget', 'stats', 'weekdayPattern'],
-    queryFn: async () => { throw new Error('Weekday pattern endpoint not implemented'); },
-    enabled: false,
-    staleTime: Infinity
-  });
-}
-
-export function useMerchantAnalysis(_limit: number = 10, _startDate?: string, _endDate?: string) {
-  return useQuery<MerchantAnalysisResponse>({
-    queryKey: ['budget', 'stats', 'merchantAnalysis'],
-    queryFn: async () => { throw new Error('Merchant analysis endpoint not implemented'); },
-    enabled: false,
-    staleTime: Infinity
-  });
-}
