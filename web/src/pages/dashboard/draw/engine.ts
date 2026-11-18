@@ -49,9 +49,10 @@ const MEDIUM_FONT_SIZE = 20;
 // standalone SVG image; pin a dark ink so they read on the default light board.
 const MONO_INK = "#1e1e1e";
 
-// Uniform freedraw width. Excalidraw tapers a mouse stroke because it
-// synthesises pressure; pinning every sample to one value renders a plain,
-// constant-weight vector pen instead of a paint brush.
+// Uniform freedraw width for simulated pressure. Excalidraw tapers a mouse or
+// finger stroke because it synthesises pressure; pinning every sample to one
+// value renders a plain, constant-weight vector pen instead of a paint brush.
+// Real stylus samples are kept so line weight follows the pen.
 const FREEDRAW_PRESSURE = 0.5;
 
 // Excalidraw expands freedraw `strokeWidth` by ~4.25x when it builds the pen
@@ -258,9 +259,11 @@ export class SceneEditTracker {
 //
 // Two distinct jobs, deliberately kept apart:
 // - `flattenFreehandPressure` runs automatically on every change. It only
-//   removes the simulated-pressure taper from freedraw strokes, because
-//   Excalidraw exposes no UI setting for it and it is the main source of the
-//   "paint brush" look. It never touches colour, width or roughness.
+//   removes the simulated-pressure taper from freedraw strokes (mouse and
+//   finger input), because Excalidraw exposes no UI setting for it and it is
+//   the main source of the "paint brush" look. A real stylus stroke keeps its
+//   samples; already-flat strokes are left alone. It never touches colour,
+//   width or roughness.
 // - `applyFormalStyle` runs only when the user explicitly asks for a clean
 //   board. It forces every element back onto the formal preset (architect
 //   roughness, solid 2px strokes, ink colour) and is therefore destructive to
@@ -283,9 +286,13 @@ export function flattenFreehandPressure(
   const out = elements.map((el) => {
     if (el.type !== "freedraw") return el;
     const free = el as ExcalidrawFreeDrawElement;
-    const flat =
-      !free.simulatePressure && free.pressures.every((p) => p === FREEDRAW_PRESSURE);
-    if (flat) return el;
+    // A real pen stroke (simulatePressure false) keeps its samples; only
+    // Excalidraw's synthesised taper is rewritten. A simulated stroke whose
+    // samples are already uniform is flat too, and is left untouched.
+    if (!free.simulatePressure) return el;
+    if (free.pressures.length > 0 && free.pressures.every((p) => p === FREEDRAW_PRESSURE)) {
+      return el;
+    }
     changed = true;
     return flattenFreehand(free);
   });

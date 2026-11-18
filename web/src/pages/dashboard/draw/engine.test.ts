@@ -175,6 +175,31 @@ describe("flattenFreehandPressure", () => {
     expect(result.elements[0]).toBe(el);
   });
 
+  it("keeps a real stylus stroke's pressure samples", () => {
+    const pen = freedraw({ simulatePressure: false, pressures: [0.12, 0.94] });
+    const result = flattenFreehandPressure([pen]);
+    expect(result.changed).toBe(false);
+    expect(result.elements[0]).toBe(pen);
+    expect((result.elements[0] as ExcalidrawFreeDrawElement).pressures).toEqual([0.12, 0.94]);
+  });
+
+  it("flattens a real mouse stroke that recorded no pressure samples", () => {
+    // Excalidraw keeps pressures empty while simulatePressure is on.
+    const mouse = freedraw({ simulatePressure: true, pressures: [] });
+    const { elements, changed } = flattenFreehandPressure([mouse]);
+    expect(changed).toBe(true);
+    const out = elements[0] as ExcalidrawFreeDrawElement;
+    expect(out.simulatePressure).toBe(false);
+    expect(out.pressures).toEqual([0.5, 0.5]);
+  });
+
+  it("leaves an already-uniform simulated stroke untouched", () => {
+    const flat = freedraw({ simulatePressure: true, pressures: [0.5, 0.5] });
+    const result = flattenFreehandPressure([flat]);
+    expect(result.changed).toBe(false);
+    expect(result.elements[0]).toBe(flat);
+  });
+
   it("ignores non-freedraw elements", () => {
     const rect = buildShapeElement("rectangle", 0, 0);
     const result = flattenFreehandPressure([rect]);
@@ -256,6 +281,14 @@ describe("applyFormalStyle", () => {
     expect(free.opacity).toBe(100);
     expect((free as ExcalidrawFreeDrawElement).simulatePressure).toBe(false);
     expect((label as ExcalidrawTextElement).fontFamily).toBe(3);
+  });
+
+  it("flattens a real stylus stroke on Clean", () => {
+    const pen = freedraw({ simulatePressure: false, pressures: [0.12, 0.94] });
+    const [cleaned] = applyFormalStyle([pen]);
+    const out = cleaned as ExcalidrawFreeDrawElement;
+    expect(out.simulatePressure).toBe(false);
+    expect(out.pressures).toEqual([0.5, 0.5]);
   });
 
   it("is idempotent", () => {
@@ -378,6 +411,17 @@ describe("sceneToSnapshot / snapshotToScene", () => {
     const scene = snapshotToScene(snap, SNAPSHOT_VERSION);
     expect(scene.elements.map((e) => e.type)).toEqual(["image", "text"]);
     expect(scene.files[iconFileId(LAMBDA)]).toBeDefined();
+  });
+
+  it("saves and reloads a pen stroke through the same flatten-then-snapshot path", () => {
+    const pen = freedraw({ simulatePressure: false, pressures: [0.2, 0.85] });
+    // The adapter's toSnapshot composes exactly these two steps.
+    const prepared = flattenFreehandPressure([pen]);
+    expect(prepared.changed).toBe(false);
+    const scene = snapshotToScene(sceneToSnapshot(prepared.elements, {}), SNAPSHOT_VERSION);
+    const out = scene.elements[0] as ExcalidrawFreeDrawElement;
+    expect(out.simulatePressure).toBe(false);
+    expect(out.pressures).toEqual([0.2, 0.85]);
   });
 
   it("loads a board whose snapshot_version is not this build's as blank", () => {
