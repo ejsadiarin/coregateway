@@ -51,6 +51,17 @@ export async function newBoard(page: Page, prefix: string): Promise<string> {
   return name;
 }
 
+// newDrawBoard creates a uniquely named Draw board and opens its editor.
+export async function newDrawBoard(page: Page, prefix: string): Promise<string> {
+  const name = `${prefix} ${Date.now().toString(36)}`;
+  await page.goto("/dashboard/draw");
+  await page.getByLabel("New board title").fill(name);
+  await page.getByRole("button", { name: "New board" }).click();
+  await page.waitForURL(/\/dashboard\/draw\/[0-9a-f-]+/);
+  await expect(page.getByRole("link", { name: "Boards" })).toBeVisible();
+  return name;
+}
+
 export async function deleteBoard(page: Page, name: string) {
   await page.goto("/dashboard/kanban");
   await page.getByRole("button", { name: `Delete ${name}` }).click();

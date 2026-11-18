@@ -15,8 +15,16 @@ import {
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
-import { IconPalette, StyleBar, TopBar, ToolRail, type PaletteTab } from "@/pages/dashboard/draw/editor-ui";
+import {
+  IconPalette,
+  MobileToolbar,
+  StyleBar,
+  TopBar,
+  ToolRail,
+  type PaletteTab,
+} from "@/pages/dashboard/draw/editor-ui";
 import { usePageTitle } from "@/components/layout/page-title";
+import { useIsPhone } from "@/hooks/use-is-phone";
 import { useBoardSync, type SyncEngine } from "@/pages/dashboard/draw/sync";
 
 function sameStyle(a: DrawStyle, b: DrawStyle): boolean {
@@ -38,7 +46,13 @@ export default function DrawPage() {
   // Bumped when `/` is pressed so the palette's search refocuses even when the
   // panel is already open.
   const [paletteFocusNonce, setPaletteFocusNonce] = useState(0);
-  const [docOpen, setDocOpen] = useState(true);
+  // Phones open with the notes pane closed so the canvas gets the screen, and
+  // close it again if the viewport shrinks to phone width while it is open.
+  const isPhone = useIsPhone();
+  const [docOpen, setDocOpen] = useState(() => !isPhone);
+  useEffect(() => {
+    if (isPhone) setDocOpen(false);
+  }, [isPhone]);
   const [activeTool, setActiveTool] = useState<RailToolId | null>("select");
   const [style, setStyle] = useState<DrawStyle>(DEFAULT_DRAW_STYLE);
   const styleRef = useRef<DrawStyle>(DEFAULT_DRAW_STYLE);
@@ -198,7 +212,10 @@ export default function DrawPage() {
           : `Saved · rev ${meta.revision}`;
 
   return (
-    <div className="flex h-full min-h-[500px] flex-col">
+    <div
+      data-draw-editor
+      className="flex h-full min-h-0 flex-col max-md:touch-manipulation max-md:overscroll-none md:min-h-[500px]"
+    >
       <TopBar
         title={meta.title}
         saveLabel={saveLabel}
@@ -270,6 +287,12 @@ export default function DrawPage() {
         </div>
         {docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
       </div>
+      <MobileToolbar
+        activeTool={activeTool}
+        onSelectTool={handleSelectTool}
+        paletteOpen={paletteOpen}
+        onTogglePalette={() => setPaletteOpen((open) => !open)}
+      />
     </div>
   );
 }

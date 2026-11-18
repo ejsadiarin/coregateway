@@ -13,6 +13,7 @@
 #   gateway   127.0.0.1:18080   COREBAN_URL -> :16972
 #   coreban   127.0.0.1:16972   REMINDER_CAP=5 (low, so the cap is testable)
 #   corefinance 127.0.0.1:16969 (the Feed's expense and income notes)
+#   coredraw  127.0.0.1:16971   (the Draw editor's board storage)
 #   rates      127.0.0.1:16970   fake ECB rates for corefinance (corefinance ADR-0003)
 #   S3        127.0.0.1:19070   versitygw: coreban's attachment bucket,
 #                                CORS open to the web's origins
@@ -58,18 +59,19 @@ for cmd in docker goose go pnpm curl openssl node; do
   command -v "$cmd" >/dev/null || die "missing $cmd"
 done
 [ -f "$E2E/pids" ] && die "a stack is already up; run scripts/e2e-down.sh first"
-for port in 55432 18090 19070 18080 16972 16969 16970 3001; do
+for port in 55432 18090 19070 18080 16972 16969 16970 16971 3001; do
   ss -ltn "sport = :$port" | grep -q LISTEN && die "port $port is in use"
 done
 
 mkdir -p "$E2E/bin"
 : > "$E2E/pids"
 
-log "building gateway, coreban, and corefinance"
+log "building gateway, coreban, corefinance, and coredraw"
 (cd "$ROOT" && go build -o "$E2E/bin/coregateway" ./cmd/coregateway)
 (cd "$ROOT/services/coreban" && go build -o "$E2E/bin/coreban" ./cmd/coreban)
 (cd "$ROOT/services/coreban" && go build -o "$E2E/bin/s3setup" ./internal/tools/s3setup)
 (cd "$ROOT/services/corefinance" && go build -o "$E2E/bin/corefinance" ./cmd/api)
+(cd "$ROOT/services/coredraw" && go build -o "$E2E/bin/coredraw" ./cmd/api)
 
 log "starting Postgres, ntfy and S3"
 docker rm -f "$PG" "$NTFY" "$S3" >/dev/null 2>&1 || true
@@ -106,6 +108,11 @@ psql -qc 'CREATE SCHEMA IF NOT EXISTS corefinance'
 goose -table corefinance.goose_db_version -dir "$ROOT/services/corefinance/internal/db/migrations" postgres \
   "$OWNER_URL&options=-c%20search_path%3Dcorefinance,coregateway" up >/dev/null
 sed 's/REPLACE_ME/cfpw/' "$ROOT/services/corefinance/internal/db/bootstrap.sql" | psql -q
+# Draw's board storage: its own schema and DML-only runtime role.
+psql -qc 'CREATE SCHEMA IF NOT EXISTS coredraw'
+goose -table coredraw.goose_db_version -dir "$ROOT/services/coredraw/internal/db/migrations" postgres \
+  "$OWNER_URL&options=-c%20search_path%3Dcoredraw" up >/dev/null
+sed 's/REPLACE_ME/cdpw/' "$ROOT/services/coredraw/internal/db/bootstrap.sql" | psql -q
 
 wait_for ntfy 30 curl -sf http://localhost:18090/v1/health
 docker exec -e NTFY_PASSWORD=corebanpw "$NTFY" ntfy user add coreban >/dev/null
@@ -170,6 +177,15 @@ env -i PATH="$PATH" HOME="$HOME" PORT=16969 ENV=development \
   "$E2E/bin/corefinance" > "$E2E/corefinance.log" 2>&1 &
 echo "corefinance $!" >> "$E2E/pids"
 wait_for corefinance 30 curl -sf http://localhost:16969/health
+
+log "starting coredraw :16971"
+env -i PATH="$PATH" HOME="$HOME" PORT=16971 ENV=development \
+  DATABASE_URL="postgresql://coredraw_role:cdpw@localhost:55432/coredb?sslmode=disable" \
+  JWT_ISSUER=https://gateway.internal JWT_AUDIENCE=coredraw \
+  JWT_JWKS_URL=http://localhost:18080/.well-known/jwks.json \
+  "$E2E/bin/coredraw" > "$E2E/coredraw.log" 2>&1 &
+echo "coredraw $!" >> "$E2E/pids"
+wait_for coredraw 30 curl -sf http://localhost:16971/health
 
 if [ -n "${E2E_HOST:-}" ]; then
   log "building web for $HOST"

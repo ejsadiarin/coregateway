@@ -7,7 +7,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Boxes, ChevronLeft, Download, Layers, Search, Shapes, Sparkles, X } from "lucide-react";
+import {
+  Boxes,
+  ChevronLeft,
+  Download,
+  Layers,
+  MoreHorizontal,
+  Search,
+  Shapes,
+  Sparkles,
+  X,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ICON_FAMILIES, ICON_ENTRIES, iconSprite, type IconEntry } from "@/pages/dashboard/draw/icon-catalog";
 import { RAIL_TOOLS, SHAPE_ITEMS, type ShapeItem } from "@/pages/dashboard/draw/palette-catalog";
@@ -39,17 +55,20 @@ function PaletteGlyph({ iconId }: { iconId: string }) {
 // Tool rail
 // ---------------------------------------------------------------------------
 
-function RailButton({
+function ToolButton({
   active,
   title,
   hint,
   onClick,
+  size = "rail",
   children,
 }: {
   active?: boolean;
   title: string;
   hint?: string;
   onClick: () => void;
+  // The phone bar needs a 44px target; the desktop rail keeps its compact 36px.
+  size?: "rail" | "toolbar";
   children: React.ReactNode;
 }) {
   return (
@@ -60,7 +79,8 @@ function RailButton({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-md transition-colors",
+        "flex items-center justify-center rounded-md transition-colors",
+        size === "toolbar" ? "h-11 w-11 shrink-0 touch-manipulation" : "h-9 w-9",
         active
           ? "bg-primary/15 text-primary"
           : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -85,9 +105,9 @@ export function ToolRail({
   onOpenPalette: (tab: PaletteTab) => void;
 }) {
   return (
-    <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2">
+    <div className="hidden w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background py-2 md:flex">
       {RAIL_TOOLS.map((t) => (
-        <RailButton
+        <ToolButton
           key={t.id}
           title={t.title}
           hint={t.hint}
@@ -95,25 +115,64 @@ export function ToolRail({
           onClick={() => onSelectTool(t.id)}
         >
           <t.icon className="h-[18px] w-[18px]" />
-        </RailButton>
+        </ToolButton>
       ))}
 
       <div className="my-1 h-px w-6 bg-border" />
 
-      <RailButton
+      <ToolButton
         title="Shapes"
         active={paletteOpen && paletteTab === "shapes"}
         onClick={() => onOpenPalette("shapes")}
       >
         <Shapes className="h-[18px] w-[18px]" />
-      </RailButton>
-      <RailButton
+      </ToolButton>
+      <ToolButton
         title="Icons"
         active={paletteOpen && paletteTab === "icons"}
         onClick={() => onOpenPalette("icons")}
       >
         <Layers className="h-[18px] w-[18px]" />
-      </RailButton>
+      </ToolButton>
+    </div>
+  );
+}
+
+// The phone toolbar. A tablet keeps the side rail, so this only renders below
+// the md breakpoint. A 390px screen fits the eight tools on one row and wraps
+// Insert onto a second; a wider phone fits all nine.
+export function MobileToolbar({
+  activeTool,
+  onSelectTool,
+  paletteOpen,
+  onTogglePalette,
+}: {
+  activeTool: RailToolId | null;
+  onSelectTool: (id: RailToolId) => void;
+  paletteOpen: boolean;
+  onTogglePalette: () => void;
+}) {
+  return (
+    <div
+      data-draw-toolbar
+      data-testid="draw-mobile-toolbar"
+      className="flex shrink-0 touch-manipulation flex-wrap items-center justify-center gap-0.5 border-t border-border bg-background px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))] md:hidden"
+    >
+      {RAIL_TOOLS.map((t) => (
+        <ToolButton
+          key={t.id}
+          size="toolbar"
+          title={t.title}
+          hint={t.hint}
+          active={activeTool === t.id}
+          onClick={() => onSelectTool(t.id)}
+        >
+          <t.icon className="h-5 w-5" />
+        </ToolButton>
+      ))}
+      <ToolButton size="toolbar" title="Insert" active={paletteOpen} onClick={onTogglePalette}>
+        <Boxes className="h-5 w-5" />
+      </ToolButton>
     </div>
   );
 }
@@ -534,16 +593,20 @@ function Swatch({
       aria-label={name}
       aria-pressed={active}
       onClick={onClick}
-      className={cn(
-        "h-4 w-4 rounded-full border transition-transform",
-        active ? "border-foreground ring-2 ring-foreground/40" : "border-border hover:scale-110",
-      )}
-      style={{
-        background: transparent
-          ? "repeating-linear-gradient(45deg, transparent 0 3px, #a8a29e 3px 4px)"
-          : value,
-      }}
-    />
+      className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center md:h-4 md:w-4"
+    >
+      <span
+        className={cn(
+          "block h-4 w-4 rounded-full border transition-transform md:h-full md:w-full",
+          active ? "border-foreground ring-2 ring-foreground/40" : "border-border hover:scale-110",
+        )}
+        style={{
+          background: transparent
+            ? "repeating-linear-gradient(45deg, transparent 0 3px, var(--muted-foreground) 3px 4px)"
+            : value,
+        }}
+      />
+    </button>
   );
 }
 
@@ -555,7 +618,7 @@ export function StyleBar({
   onChange: (patch: Partial<DrawStyle>) => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-border bg-background px-2 py-1">
+    <div className="flex shrink-0 touch-manipulation items-center gap-2 overflow-x-auto border-b border-border bg-background px-2 py-1">
       <StyleGroup label="Stroke">
         {STROKE_COLORS.map((color) => (
           <Swatch
@@ -599,7 +662,7 @@ export function StyleBar({
             aria-pressed={style.strokeWidth === width}
             onClick={() => onChange({ strokeWidth: width })}
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded border transition-colors",
+              "flex h-11 w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:w-6",
               style.strokeWidth === width
                 ? "border-foreground/40 bg-muted text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -622,7 +685,7 @@ export function StyleBar({
             aria-pressed={style.strokeStyle === item.value}
             onClick={() => onChange({ strokeStyle: item.value })}
             className={cn(
-              "flex h-6 w-7 items-center justify-center rounded border transition-colors",
+              "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:min-w-0 md:w-7",
               style.strokeStyle === item.value
                 ? "border-foreground/40 bg-muted text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -648,7 +711,7 @@ export function StyleBar({
             aria-pressed={style.opacity === opacity}
             onClick={() => onChange({ opacity })}
             className={cn(
-              "flex h-6 items-center justify-center rounded border px-1.5 text-[10px] transition-colors",
+              "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border px-1.5 text-[10px] transition-colors md:h-6 md:min-w-0",
               style.opacity === opacity
                 ? "border-foreground/40 bg-muted text-foreground"
                 : "border-transparent text-muted-foreground hover:bg-muted/60",
@@ -687,61 +750,56 @@ export function TopBar({
   onExport: (format: "png" | "svg") => void;
   onNormalize: () => void;
 }) {
+  const actionClass =
+    "flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
+
   return (
-    <header className="flex shrink-0 items-center gap-2 border-b border-border bg-background px-2 py-1.5 text-xs">
+    <header className="flex shrink-0 touch-manipulation items-center gap-1 border-b border-border bg-background px-1.5 py-1 text-xs max-md:pl-[max(0.375rem,env(safe-area-inset-left))] max-md:pr-[max(0.375rem,env(safe-area-inset-right))] max-md:pt-[max(0.25rem,env(safe-area-inset-top))] md:gap-2 md:px-2 md:py-1.5">
       <Link
         to="/dashboard/draw"
-        className="flex items-center gap-1 rounded px-1.5 py-1 font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+        aria-label="Boards"
+        className="flex h-11 min-w-11 items-center justify-center gap-1 rounded px-1.5 font-medium text-muted-foreground hover:bg-accent hover:text-foreground md:h-auto md:min-w-0 md:justify-start md:py-1"
         title="All boards"
       >
-        <ChevronLeft className="h-3.5 w-3.5" /> Boards
+        <ChevronLeft className="h-4 w-4 md:h-3.5 md:w-3.5" />
+        <span className="hidden md:inline">Boards</span>
       </Link>
-      <div className="mx-1 h-4 w-px bg-border" />
+      <div className="mx-1 hidden h-4 w-px bg-border md:block" />
       <button
         type="button"
         onClick={onTogglePalette}
         aria-pressed={paletteOpen}
         className={cn(
-          "flex items-center gap-1.5 rounded px-2 py-1 font-medium transition-colors",
+          "hidden items-center gap-1.5 rounded px-2 py-1 font-medium transition-colors md:flex",
           paletteOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground",
         )}
         title="Toggle shapes & icons"
       >
         <Boxes className="h-3.5 w-3.5" /> Insert
       </button>
-      <span className="max-w-[16rem] truncate font-medium">{title}</span>
+      <span className="min-w-0 max-w-[16rem] truncate font-medium max-md:flex-1">{title}</span>
       <span
         className={cn(
-          "text-muted-foreground",
+          "shrink-0 text-muted-foreground max-md:text-[10px]",
           saveState === "conflict" && "text-amber-500",
           saveState === "failed" && "text-destructive",
         )}
       >
         {saveLabel}
       </span>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto hidden items-center gap-1 md:flex">
         <button
           type="button"
           onClick={onNormalize}
           title="Apply the clean architect style to every element on this board"
-          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className={actionClass}
         >
           <Sparkles className="h-3.5 w-3.5" /> Clean
         </button>
-        <button
-          type="button"
-          onClick={() => onExport("png")}
-          title="Export PNG"
-          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
+        <button type="button" onClick={() => onExport("png")} title="Export PNG" className={actionClass}>
           <Download className="h-3.5 w-3.5" /> PNG
         </button>
-        <button
-          type="button"
-          onClick={() => onExport("svg")}
-          title="Export SVG"
-          className="flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
+        <button type="button" onClick={() => onExport("svg")} title="Export SVG" className={actionClass}>
           <Download className="h-3.5 w-3.5" /> SVG
         </button>
         <button
@@ -756,6 +814,29 @@ export function TopBar({
           {docOpen ? "Hide notes" : "Notes"}
         </button>
       </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="More actions"
+            className="ml-auto flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:hidden"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52 touch-manipulation">
+          <DropdownMenuItem onSelect={onNormalize} className="h-11 gap-2">
+            <Sparkles className="h-4 w-4" /> Clean
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onExport("png")} className="h-11 gap-2">
+            <Download className="h-4 w-4" /> Export PNG
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onExport("svg")} className="h-11 gap-2">
+            <Download className="h-4 w-4" /> Export SVG
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }
