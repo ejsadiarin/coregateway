@@ -36,7 +36,7 @@ import { formatPeso, formatSigned } from "@/lib/format";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/components/ui/toast";
 import { ExpenseDetailDialog } from "@/components/budget/expense-detail-dialog";
-import type { Expense, Income, UpdateIncomeRequest, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
+import type { BudgetPeriod, Expense, Income, UpdateIncomeRequest, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 
 export default function BudgetDashboard() {
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ export default function BudgetDashboard() {
   const [newEntry, setNewEntry] = useState<"expense" | "income" | null>(null);
   const [editingIncome, setEditingIncome] = useState<Income | null>(null);
 
-  const selectPeriod = (nextPeriod: typeof period, nextDate: string) => {
+  const selectPeriod = (nextPeriod: BudgetPeriod, nextDate: string) => {
     const params = new URLSearchParams(searchParams);
     params.set("period", nextPeriod);
     params.set("date", nextDate);
@@ -168,12 +168,12 @@ export default function BudgetDashboard() {
     <div className="px-4 md:px-6 py-6">
       {/* Header */}
       <motion.div
-        className="mb-8 flex items-center justify-between"
+        className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 mb-2">
             <h1 className="text-primary">BUDGET TRACKER</h1>
             {isGuest && (
@@ -188,7 +188,7 @@ export default function BudgetDashboard() {
               : "Track and manage your expenses and income"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <Button
             onClick={() => { handleActionClick(); if (!isGuest) setNewEntry("income"); }}
             disabled={isGuest}

@@ -25,7 +25,7 @@ function Metric({
       <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">{label}</p>
       <p
         className={`mt-1 text-lg font-semibold font-mono tabular-nums ${
-          tone === 'negative' ? 'text-red-500' : tone === 'positive' ? 'text-emerald-500' : ''
+          tone === 'negative' ? 'text-destructive' : tone === 'positive' ? 'text-[var(--chart-2)]' : ''
         }`}
       >
         {value}

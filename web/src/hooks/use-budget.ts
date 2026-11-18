@@ -601,7 +601,7 @@ export function usePeriodBudget(period: BudgetPeriod, date: string) {
   return useQuery<PeriodBudgetResponse>({
     queryKey: budgetKeys.periodBudget(period, date),
     queryFn: () => fetchPeriodBudget(period, date),
-    staleTime: 30000
+    staleTime: 60000
   });
 }
 

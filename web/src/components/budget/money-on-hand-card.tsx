@@ -32,7 +32,7 @@ export function MoneyOnHandCard({ className }: MoneyOnHandCardProps) {
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Today</p>
               <p
                 className={`mt-1 text-3xl font-bold font-mono tabular-nums ${
-                  Number(data.total_money) < 0 ? 'text-red-500' : ''
+                  Number(data.total_money) < 0 ? 'text-destructive' : ''
                 }`}
               >
                 {formatPeso(data.total_money)}

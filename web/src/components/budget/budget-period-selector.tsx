@@ -31,6 +31,7 @@ export function BudgetPeriodSelector({ period, date, onChange, className }: Budg
             size="sm"
             variant={value === period ? 'default' : 'outline'}
             aria-pressed={value === period}
+            className="max-md:h-11 max-md:px-3"
             onClick={() => onChange(value, date)}
           >
             {BUDGET_PERIOD_LABELS[value]}
@@ -43,6 +44,7 @@ export function BudgetPeriodSelector({ period, date, onChange, className }: Budg
           size="icon"
           variant="ghost"
           aria-label="Previous period"
+          className="max-md:h-11 max-md:w-11"
           onClick={() => onChange(period, stepBudgetDate(period, date, -1))}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -55,11 +57,18 @@ export function BudgetPeriodSelector({ period, date, onChange, className }: Budg
           size="icon"
           variant="ghost"
           aria-label="Next period"
+          className="max-md:h-11 max-md:w-11"
           onClick={() => onChange(period, stepBudgetDate(period, date, 1))}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => onChange(period, todayISODate())}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="max-md:h-11 max-md:px-3"
+          onClick={() => onChange(period, todayISODate())}
+        >
           Today
         </Button>
       </div>
