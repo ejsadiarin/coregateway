@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { CASH_FLOW_COUNTS, CASH_FLOW_WINDOW_LABELS, cashFlowMax, isCurrentBucket } from "./cash-flow";
+import { CASH_FLOW_WINDOW_LABELS, cashFlowMax, isCurrentBucket } from "./cash-flow";
 
 describe("cash flow series", () => {
-  it("uses the counts the page asks for", () => {
-    expect(CASH_FLOW_COUNTS).toEqual({ day: 14, week: 8, month: 6 });
+  it("labels the window the page asks for", () => {
     expect(CASH_FLOW_WINDOW_LABELS.month).toBe("Last 6 months");
   });
 

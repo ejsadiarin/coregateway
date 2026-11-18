@@ -29,7 +29,7 @@ export function WhereItWentCard({ period, date, className }: WhereItWentCardProp
   );
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="where-it-went-card">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">Where it went</CardTitle>
       </CardHeader>
@@ -92,35 +92,31 @@ export function WhereItWentCard({ period, date, className }: WhereItWentCardProp
               ))}
             </div>
 
-            <div className="mt-4 grid gap-3 border-t border-border/60 pt-3 sm:grid-cols-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Needs</p>
-                <p className="text-sm font-semibold font-mono tabular-nums">
-                  {formatPeso(priorities.needs)}{' '}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {formatRate(priorities.needsShare * 100, 0)}
-                  </span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Wants</p>
-                <p className="text-sm font-semibold font-mono tabular-nums">
-                  {formatPeso(priorities.wants)}{' '}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {formatRate(priorities.wantsShare * 100, 0)}
-                  </span>
-                </p>
-              </div>
+            <div className="mt-4 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t border-border/60 pt-3">
+              <p className="flex items-baseline gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Needs</span>
+                <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.needs)}</span>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {formatRate(priorities.needsShare * 100, 0)}
+                </span>
+              </p>
+              <p className="flex items-baseline gap-2">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Wants</span>
+                <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.wants)}</span>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {formatRate(priorities.wantsShare * 100, 0)}
+                </span>
+              </p>
               {priorities.savings > 0 ? (
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Savings</p>
-                  <p className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.savings)}</p>
-                </div>
+                <p className="flex items-baseline gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Savings</span>
+                  <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.savings)}</span>
+                </p>
               ) : (
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Total spent</p>
-                  <p className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.total)}</p>
-                </div>
+                <p className="flex items-baseline gap-2">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Total spent</span>
+                  <span className="text-sm font-semibold font-mono tabular-nums">{formatPeso(priorities.total)}</span>
+                </p>
               )}
             </div>
           </>

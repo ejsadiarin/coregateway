@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { SectionReveal } from "@/components/budget/section-reveal";
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { IncomeForm } from "@/components/budget/income-form";
@@ -212,72 +213,37 @@ export default function BudgetDashboard() {
         </div>
       </motion.div>
 
-      <motion.div
-        className="mb-4"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
-      >
+      <SectionReveal className="mb-4">
         <MoneyOnHandCard />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-4"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.05 }}
-      >
+      <SectionReveal className="mb-4" delay={0.06}>
         <BudgetPeriodSelector period={period} date={anchor} onChange={selectPeriod} />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.1 }}
-      >
+      <SectionReveal className="mb-8" delay={0.12}>
         <PeriodBudgetCard
           data={periodBudget}
           isLoading={periodBudgetLoading}
           isPast={(periodBudget?.end_date ?? bounds.end_date) < today}
         />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.15 }}
-      >
+      <SectionReveal className="mb-8" delay={0.18}>
         <WhereItWentCard period={period} date={anchor} />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.2 }}
-      >
+      <SectionReveal className="mb-8" delay={0.24}>
         <ComingUpCard />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.25 }}
-      >
+      <SectionReveal className="mb-8" delay={0.3}>
         <CashFlowCard period={period} />
-      </motion.div>
+      </SectionReveal>
 
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, delay: 0.3 }}
-      >
+      <SectionReveal className="mb-8" delay={0.3}>
         <SpendingCalendarCard date={anchor} onSelectDay={(date) => selectPeriod("day", date)} />
-      </motion.div>
+      </SectionReveal>
 
       {/* Recent Transactions */}
       <motion.div

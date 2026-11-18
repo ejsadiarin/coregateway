@@ -39,7 +39,7 @@ function Metric({
 export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodBudgetCardProps) {
   if (isLoading) {
     return (
-      <Card className={className}>
+      <Card className={className} data-testid="period-budget-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Period budget</CardTitle>
         </CardHeader>
@@ -59,7 +59,7 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
 
   if (!data) {
     return (
-      <Card className={className}>
+      <Card className={className} data-testid="period-budget-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">Period budget</CardTitle>
         </CardHeader>
@@ -85,7 +85,7 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
         : `${formatPeso(data.spent)} this ${unit} · ${formatPeso(data.previous_spent_to_point)} by the same point last ${unit}`;
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="period-budget-card">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">Period budget</CardTitle>
       </CardHeader>

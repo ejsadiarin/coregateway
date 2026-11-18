@@ -62,7 +62,7 @@ test("categories show amount, share and change from the previous period", async 
     await addExpense(500, daysAgo(1), transportation.id, "want");
 
     await page.goto(`/dashboard/budget?period=day&date=${today()}`);
-    const card = page.getByText("Where it went", { exact: true }).locator("..").locator("..");
+    const card = page.getByTestId("where-it-went-card");
 
     await expect(card).toContainText("food");
     await expect(card).toContainText(peso(100));
@@ -95,7 +95,7 @@ test("categories show amount, share and change from the previous period", async 
     // An empty day says so instead of showing an empty grid.
     await page.goto(`/dashboard/budget?period=day&date=${daysAgo(3)}`);
     await expect(
-      page.getByText("Where it went", { exact: true }).locator("..").locator(".."),
+      page.getByTestId("where-it-went-card"),
     ).toContainText("No spending in this period.");
   } finally {
     for (const row of created) {
@@ -126,7 +126,7 @@ test("a category with no previous spending is marked new", async ({ page }) => {
     created.push(`expenses/${row.id}`);
 
     await page.goto(`/dashboard/budget?period=day&date=${today()}`);
-    const card = page.getByText("Where it went", { exact: true }).locator("..").locator("..");
+    const card = page.getByTestId("where-it-went-card");
     await expect(card).toContainText("travel");
     await expect(card).toContainText("new");
   } finally {

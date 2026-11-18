@@ -101,12 +101,12 @@ test("reimbursements reduce spent and are not funding", async ({ page }) => {
     created.push(`incomes/${reimbursementIncome.id}`);
 
     await page.goto(`/dashboard/budget?period=day&date=${date}`);
-    const card = page.getByText("Period budget", { exact: true }).locator("..").locator("..");
+    const card = page.getByTestId("period-budget-card");
     // Funding rises by the salary only; spent falls by the reimbursement.
     await expect(card).toContainText(peso(Number(before.funded) + 20000));
     await expect(card).toContainText(peso(Number(before.spent) + 600 - 500));
 
-    const moneyCard = page.getByText("Money on hand", { exact: true }).locator("..").locator("..");
+    const moneyCard = page.getByTestId("money-on-hand-card");
     await expect(moneyCard).toContainText(peso(Number(beforeMoney.total_money) + 20000 + 500 - 600));
   } finally {
     for (const row of created) await remove(row);
@@ -136,7 +136,7 @@ test("a reimbursement alone never appears as funding", async ({ page }) => {
     created.push(`incomes/${row.id}`);
 
     await page.goto(`/dashboard/budget?period=day&date=${date}`);
-    const card = page.getByText("Period budget", { exact: true }).locator("..").locator("..");
+    const card = page.getByTestId("period-budget-card");
     await expect(card).toContainText(peso(Number(before.funded)));
     await expect(card).toContainText(peso(Number(before.spent) - 750));
   } finally {

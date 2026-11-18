@@ -29,7 +29,7 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
   const hasData = buckets.some((bucket) => Number(bucket.income) !== 0 || Number(bucket.spent) !== 0);
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="cash-flow-card">
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
@@ -57,11 +57,12 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
           <p className="text-sm text-muted-foreground">No cash flow in this window yet.</p>
         ) : (
           <>
-            <div
-              className="flex h-36 items-end gap-1"
-              role="group"
-              aria-label={`Income and spending for ${CASH_FLOW_WINDOW_LABELS[period].toLowerCase()}`}
-            >
+            <div className="overflow-x-auto pb-1">
+              <div
+                className="flex h-36 min-w-full items-end gap-1"
+                role="group"
+                aria-label={`Income and spending for ${CASH_FLOW_WINDOW_LABELS[period].toLowerCase()}`}
+              >
               {buckets.map((bucket, index) => {
                 const current = isCurrentBucket(index, buckets.length);
                 const range = budgetPeriodTitle(period, bucket.start_date, bucket.end_date);
@@ -74,7 +75,7 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
                     aria-label={`${range}: income ${formatPeso(bucket.income)}, spent ${formatPeso(
                       bucket.spent,
                     )}, net ${formatPeso(bucket.net)}`}
-                    className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-sm pb-1 outline-none transition-colors hover:bg-accent/30 focus-visible:ring-2 focus-visible:ring-ring ${
+                    className={`flex min-w-11 flex-1 flex-col items-center gap-1 rounded-sm pb-1 outline-none transition-colors hover:bg-accent/30 focus-visible:ring-2 focus-visible:ring-ring ${
                       index === activeIndex ? 'bg-accent/20' : ''
                     }`}
                     onClick={() => setSelected(index)}
@@ -103,7 +104,8 @@ export function CashFlowCard({ period, className }: CashFlowCardProps) {
                     </span>
                   </button>
                 );
-              })}
+                })}
+              </div>
             </div>
 
             {active && (

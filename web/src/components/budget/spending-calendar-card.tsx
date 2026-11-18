@@ -4,6 +4,7 @@ import { useCashFlow } from '@/hooks/use-budget';
 import { todayISODate } from '@/lib/budget-period';
 import { formatPeso } from '@/lib/format';
 import {
+  CALENDAR_MAX_DAYS,
   calendarAvailable,
   calendarDays,
   noSpendDays,
@@ -37,7 +38,7 @@ export function SpendingCalendarCard({ date, onSelectDay, className }: SpendingC
   const noSpend = noSpendDays(days);
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="spending-calendar-card">
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
@@ -49,12 +50,12 @@ export function SpendingCalendarCard({ date, onSelectDay, className }: SpendingC
           </p>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 pt-0 sm:p-6 sm:pt-0">
         {!available ? (
           <p className="text-sm text-muted-foreground">
             {needed === 0
               ? 'This month has not started yet.'
-              : 'The calendar only keeps the last 62 days.'}
+              : `The calendar only keeps the last ${CALENDAR_MAX_DAYS} days.`}
           </p>
         ) : isLoading ? (
           <div className="grid grid-cols-7 gap-1 animate-pulse">
@@ -66,12 +67,12 @@ export function SpendingCalendarCard({ date, onSelectDay, className }: SpendingC
           <p className="text-sm text-muted-foreground">Failed to load the calendar</p>
         ) : (
           <>
-            <div className="mb-1 grid grid-cols-7 gap-1 text-center font-mono text-[10px] text-muted-foreground">
+            <div className="mb-1 grid grid-cols-7 gap-0.5 text-center font-mono text-[10px] text-muted-foreground sm:gap-1">
               {WEEKDAYS.map((day) => (
                 <span key={day}>{day}</span>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
               {days.map((day, index) => {
                 if (!day) return <span key={`blank-${index}`} aria-hidden="true" />;
                 const isToday = day.date === today;
@@ -88,7 +89,7 @@ export function SpendingCalendarCard({ date, onSelectDay, className }: SpendingC
                     aria-label={label}
                     title={label}
                     onClick={() => onSelectDay(day.date)}
-                    className={`flex aspect-square flex-col items-center justify-center rounded border text-xs font-mono tabular-nums transition-colors ${
+                    className={`flex aspect-square min-h-11 flex-col items-center justify-center rounded border text-xs font-mono tabular-nums transition-colors ${
                       day.future
                         ? 'border-transparent text-muted-foreground/30'
                         : `${SHADES[spendLevel(day.spent, maxSpent)]} border-border/40 hover:border-primary/60`

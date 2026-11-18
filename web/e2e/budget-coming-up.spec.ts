@@ -65,9 +65,7 @@ test("coming up shows rules and future expenses for the next 7 days", async ({ p
 
     // Anchored on today even when a past period is selected.
     await page.goto(`/dashboard/budget?period=day&date=${daysFromToday(-3)}`);
-    const card = page
-      .getByRole("heading", { name: "Coming up" })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+    const card = page.getByTestId("coming-up-card");
 
     await expect(card).toContainText(incomeDescription);
     await expect(card).toContainText(expenseDescription);

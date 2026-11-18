@@ -23,7 +23,7 @@ export function ComingUpCard({ className }: ComingUpCardProps) {
   const shown = items.slice(0, 8);
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="coming-up-card">
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>

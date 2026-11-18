@@ -61,9 +61,7 @@ test("calendar marks no-spend days and selects a tapped date", async ({ page }) 
     const todaySpent = series.buckets.find((bucket) => bucket.start_date === todayISO)?.spent ?? 0;
 
     await page.goto(`/dashboard/budget?period=day&date=${todayISO}`);
-    const card = page
-      .getByRole("heading", { name: "Spending calendar" })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+    const card = page.getByTestId("spending-calendar-card");
 
     await expect(card).toContainText(`${noSpend} no-spend days so far`);
     await expect(card.getByRole("button", { name: new RegExp(`^${now.getDate()} .*${peso(Number(todaySpent))}`) })).toBeVisible();
@@ -91,9 +89,7 @@ test("calendar marks no-spend days and selects a tapped date", async ({ page }) 
 test("calendar fits a phone width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/dashboard/budget?period=day&date=${ymd(today())}`);
-  const card = page
-    .getByRole("heading", { name: "Spending calendar" })
-    .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+  const card = page.getByTestId("spending-calendar-card");
   await expect(card).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

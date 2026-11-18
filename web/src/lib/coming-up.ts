@@ -1,4 +1,5 @@
 import { addDays, format, startOfDay } from "date-fns";
+import { addCurrencyAmount } from "@/lib/format";
 import { withDueDates, type Entry, type LedgerKind, type Rule } from "@/lib/ledger";
 
 export interface UpcomingWindow {
@@ -31,6 +32,24 @@ export function sevenDayWindow(now = new Date()): UpcomingWindow {
  * Future-dated expenses are real records, so they appear once; a rule entry
  * written ahead of time is one of them, not a second item.
  */
+function ruleItems(
+  kind: LedgerKind,
+  rules: Rule[],
+  entries: Entry[],
+  window: UpcomingWindow,
+): UpcomingItem[] {
+  return withDueDates(rules, entries, window.from, window.until).flatMap((rule) =>
+    rule.dates.map((date) => ({
+      key: `${kind}-rule-${rule.id}-${date}`,
+      date,
+      description: rule.description,
+      amount: rule.amount,
+      currency: rule.currency,
+      kind,
+    })),
+  );
+}
+
 export function comingUp(
   expenseRules: Rule[],
   expenseEntries: Entry[],
@@ -38,32 +57,11 @@ export function comingUp(
   incomeEntries: Entry[],
   window: UpcomingWindow,
 ): UpcomingItem[] {
-  const items: UpcomingItem[] = [];
+  const items: UpcomingItem[] = [
+    ...ruleItems("expense", expenseRules, expenseEntries, window),
+    ...ruleItems("income", incomeRules, incomeEntries, window),
+  ];
 
-  for (const rule of withDueDates(expenseRules, expenseEntries, window.from, window.until)) {
-    for (const date of rule.dates) {
-      items.push({
-        key: `expense-rule-${rule.id}-${date}`,
-        date,
-        description: rule.description,
-        amount: rule.amount,
-        currency: rule.currency,
-        kind: "expense",
-      });
-    }
-  }
-  for (const rule of withDueDates(incomeRules, incomeEntries, window.from, window.until)) {
-    for (const date of rule.dates) {
-      items.push({
-        key: `income-rule-${rule.id}-${date}`,
-        date,
-        description: rule.description,
-        amount: rule.amount,
-        currency: rule.currency,
-        kind: "income",
-      });
-    }
-  }
   for (const entry of expenseEntries) {
     if (entry.kind !== "expense" || entry.status === "skipped") continue;
     if (entry.date <= window.from || entry.date > window.until) continue;
@@ -89,9 +87,7 @@ export function comingUp(
 export function comingUpNet(items: UpcomingItem[]): Map<string, number> {
   const byCurrency = new Map<string, number>();
   for (const item of items) {
-    const code = (item.currency || "PHP").toUpperCase();
-    const signed = item.kind === "income" ? item.amount : -item.amount;
-    byCurrency.set(code, (byCurrency.get(code) ?? 0) + signed);
+    addCurrencyAmount(byCurrency, item.currency, item.kind === "income" ? item.amount : -item.amount);
   }
   return byCurrency;
 }

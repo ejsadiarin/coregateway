@@ -81,9 +81,7 @@ test("cash flow follows the period kind and shows the current bucket", async ({ 
     const earlier = daily[daily.length - 3];
 
     await page.goto(`/dashboard/budget?period=day&date=${today()}`);
-    const card = page
-      .getByRole("heading", { name: "Cash flow" })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+    const card = page.getByTestId("cash-flow-card");
 
     await expect(card).toContainText("Last 14 days");
     await expect(card.getByRole("button")).toHaveCount(14);
@@ -119,9 +117,7 @@ test("cash flow follows the period kind and shows the current bucket", async ({ 
 test("cash flow fits a phone width", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/dashboard/budget?period=day&date=${today()}`);
-  const card = page
-    .getByRole("heading", { name: "Cash flow" })
-    .locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]");
+  const card = page.getByTestId("cash-flow-card");
   await expect(card).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

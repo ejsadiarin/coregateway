@@ -10,7 +10,7 @@ export function MoneyOnHandCard({ className }: MoneyOnHandCardProps) {
   const { data, isLoading, error } = useCurrentTotalMoney();
 
   return (
-    <Card className={className}>
+    <Card className={className} data-testid="money-on-hand-card">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">Money on hand</CardTitle>
       </CardHeader>

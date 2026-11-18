@@ -58,7 +58,7 @@ export function calendarDays(
 }
 
 export function noSpendDays(days: (CalendarDay | null)[]): number {
-  return days.filter((day): day is CalendarDay => !!day && !day.future && day.noSpend).length;
+  return days.filter((day): day is CalendarDay => !!day && day.noSpend).length;
 }
 
 /** A shade level from 0 (no spend) to 4 (the month's largest day). */

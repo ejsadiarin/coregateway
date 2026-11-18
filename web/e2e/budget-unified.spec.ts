@@ -18,7 +18,7 @@ const peso = (value: number) =>
   }).format(value);
 
 const periodCard = (page: import("@playwright/test").Page) =>
-  page.getByText("Period budget", { exact: true }).locator("..").locator("..");
+  page.getByTestId("period-budget-card");
 
 test.beforeEach(async ({ page }) => {
   await login(page);
@@ -35,7 +35,7 @@ test("headline shows money on hand, committed and runway", async ({ page }) => {
   };
 
   await page.goto(`/dashboard/budget?period=day&date=${today()}`);
-  const card = page.getByText("Money on hand", { exact: true }).locator("..").locator("..");
+  const card = page.getByTestId("money-on-hand-card");
   await expect(card).toContainText(peso(Number(money.total_money)));
   await expect(card).toContainText(peso(Number(money.committed)));
   if (money.runway_days === null) {
@@ -162,7 +162,7 @@ test("adding an expense refreshes the headline and period budget", async ({ page
     await expect(dialog).toBeHidden();
 
     await expect(periodCard(page)).toContainText(peso(Number(budget.spent) + amount));
-    const moneyCard = page.getByText("Money on hand", { exact: true }).locator("..").locator("..");
+    const moneyCard = page.getByTestId("money-on-hand-card");
     await expect(moneyCard).toContainText(peso(Number(money.total_money) - amount));
   } finally {
     if (createdId) {
