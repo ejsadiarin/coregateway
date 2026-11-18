@@ -745,6 +745,10 @@ export interface CanvasAdapter {
   historyState(): { undo: boolean; redo: boolean };
   undo(): void;
   redo(): void;
+  // Pen mode: Excalidraw turns it on at the first stylus touch and hides the
+  // toggle in its own hidden toolbar, so our UI mirrors and drives it.
+  penState(): { detected: boolean; active: boolean };
+  setPenMode(active: boolean): void;
   // Zoom is read from appState; the actions keep the view centred where the
   // engine allows it and clamp to Excalidraw's range.
   currentZoom(): number;

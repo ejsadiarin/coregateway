@@ -7,7 +7,7 @@
 // excalidraw-overrides.css) because our rail and TopBar replace them; its
 // context menu and style panel are kept.
 
-import { useCallback, useRef, type ComponentProps } from "react";
+import { useCallback, useEffect, useRef, type ComponentProps } from "react";
 import {
   CaptureUpdateAction,
   Excalidraw,
@@ -62,6 +62,146 @@ export interface ExcalidrawCanvasProps {
   onChange: () => void;
 }
 
+// Excalidraw 0.18 swallows a single-finger touch while pen mode is on and
+// disables pinch-zoom for the freedraw tool. Its intent is palm rejection, but
+// the spec wants fingers to pan and pinch without drawing, so we handle touch
+// pointers ourselves while pen mode is on.
+function installTouchPanZoom(
+  container: HTMLElement,
+  apiRef: { current: ExcalidrawImperativeAPI | null },
+): () => void {
+  const touches = new Map<number, { x: number; y: number }>();
+  let gesture:
+    | {
+        mode: "pan";
+        startX: number;
+        startY: number;
+        startScrollX: number;
+        startScrollY: number;
+      }
+    | {
+        mode: "pinch";
+        startDist: number;
+        startMidX: number;
+        startMidY: number;
+        startScrollX: number;
+        startScrollY: number;
+        startZoom: number;
+      }
+    | null = null;
+
+  const shouldHandle = (event: PointerEvent) =>
+    event.pointerType === "touch" && !!apiRef.current?.getAppState().penMode;
+
+  function beginPinch() {
+    const api = apiRef.current;
+    if (!api) return;
+    const [a, b] = [...touches.values()];
+    const appState = api.getAppState();
+    gesture = {
+      mode: "pinch",
+      startDist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      startMidX: (a.x + b.x) / 2,
+      startMidY: (a.y + b.y) / 2,
+      startScrollX: appState.scrollX,
+      startScrollY: appState.scrollY,
+      startZoom: appState.zoom.value,
+    };
+  }
+
+  const onDown = (event: PointerEvent) => {
+    if (!shouldHandle(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touches.size === 1) {
+      const api = apiRef.current!;
+      const appState = api.getAppState();
+      gesture = {
+        mode: "pan",
+        startX: event.clientX,
+        startY: event.clientY,
+        startScrollX: appState.scrollX,
+        startScrollY: appState.scrollY,
+      };
+    } else if (touches.size === 2) {
+      beginPinch();
+    }
+  };
+
+  const onMove = (event: PointerEvent) => {
+    if (!shouldHandle(event) || !touches.has(event.pointerId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const api = apiRef.current!;
+    const appState = api.getAppState();
+
+    if (touches.size >= 2) {
+      if (gesture?.mode !== "pinch") beginPinch();
+      if (gesture?.mode !== "pinch") return;
+      const [a, b] = [...touches.values()];
+      const dist = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+      const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, gesture.startZoom * (dist / gesture.startDist)));
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const sceneX = (gesture.startMidX - appState.offsetLeft - gesture.startScrollX) / gesture.startZoom;
+      const sceneY = (gesture.startMidY - appState.offsetTop - gesture.startScrollY) / gesture.startZoom;
+      api.updateScene({
+        appState: {
+          scrollX: midX - appState.offsetLeft - sceneX * zoom,
+          scrollY: midY - appState.offsetTop - sceneY * zoom,
+          zoom: { value: zoom } as AppState["zoom"],
+        },
+      });
+      return;
+    }
+
+    if (gesture?.mode === "pan") {
+      const point = touches.values().next().value!;
+      api.updateScene({
+        appState: {
+          scrollX: gesture.startScrollX + (point.x - gesture.startX) / appState.zoom.value,
+          scrollY: gesture.startScrollY + (point.y - gesture.startY) / appState.zoom.value,
+        },
+      });
+    }
+  };
+
+  const onUp = (event: PointerEvent) => {
+    if (event.pointerType !== "touch" || !touches.has(event.pointerId)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    touches.delete(event.pointerId);
+    if (touches.size === 1) {
+      const api = apiRef.current;
+      if (!api) return;
+      const appState = api.getAppState();
+      const point = touches.values().next().value!;
+      gesture = {
+        mode: "pan",
+        startX: point.x,
+        startY: point.y,
+        startScrollX: appState.scrollX,
+        startScrollY: appState.scrollY,
+      };
+    } else if (touches.size === 0) {
+      gesture = null;
+    }
+  };
+
+  container.addEventListener("pointerdown", onDown, { capture: true });
+  container.addEventListener("pointermove", onMove, { capture: true });
+  container.addEventListener("pointerup", onUp, { capture: true });
+  container.addEventListener("pointercancel", onUp, { capture: true });
+  return () => {
+    container.removeEventListener("pointerdown", onDown, { capture: true });
+    container.removeEventListener("pointermove", onMove, { capture: true });
+    container.removeEventListener("pointerup", onUp, { capture: true });
+    container.removeEventListener("pointercancel", onUp, { capture: true });
+  };
+}
+
 export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: ExcalidrawCanvasProps) {
   // Excalidraw only reads `initialData` on mount, so freeze it. The page keys
   // this component per load, so opening a different board (or reloading)
@@ -77,14 +217,23 @@ export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: Exc
   onChangeRef.current = onChange;
   const onAdapterReadyRef = useRef(onAdapterReady);
   onAdapterReadyRef.current = onAdapterReady;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
 
   const handleApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
     // Excalidraw restores `currentItem*` from this browser's localStorage, so a
     // profile that has seen the sketchy defaults would ignore `initialData`.
     // Re-assert the formal defaults once per mount; the values are not part of
     // the persisted snapshot, so this does not dirty the board.
+    apiRef.current = api;
     api.updateScene({ appState: FORMAL_DRAW_DEFAULTS });
     onAdapterReadyRef.current(createCanvasAdapter(api));
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return installTouchPanZoom(container, apiRef);
   }, []);
 
   const handleChange = useCallback(() => {
@@ -92,7 +241,7 @@ export function ExcalidrawCanvas({ initialScene, onAdapterReady, onChange }: Exc
   }, []);
 
   return (
-    <div className="coredraw-canvas">
+    <div ref={containerRef} className="coredraw-canvas">
       <Excalidraw
         initialData={initialData}
         excalidrawAPI={handleApiReady}
@@ -269,6 +418,13 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
     },
     undo: () => historyButton("button-undo")?.click(),
     redo: () => historyButton("button-redo")?.click(),
+    penState: () => {
+      const appState = api.getAppState();
+      return { detected: !!appState.penDetected, active: !!appState.penMode };
+    },
+    setPenMode: (active: boolean) => {
+      api.updateScene({ appState: { penMode: active } });
+    },
     currentZoom: () => api.getAppState().zoom.value,
     zoomIn: () => setZoom(api, api.getAppState().zoom.value * ZOOM_STEP),
     zoomOut: () => setZoom(api, api.getAppState().zoom.value / ZOOM_STEP),

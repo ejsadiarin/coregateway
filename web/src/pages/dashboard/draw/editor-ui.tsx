@@ -14,6 +14,7 @@ import {
   Layers,
   Maximize2,
   MoreHorizontal,
+  PenTool,
   Redo2,
   Search,
   Shapes,
@@ -109,12 +110,18 @@ export function ToolRail({
   paletteOpen,
   paletteTab,
   onOpenPalette,
+  penDetected,
+  penMode,
+  onTogglePenMode,
 }: {
   activeTool: RailToolId | null;
   onSelectTool: (id: RailToolId) => void;
   paletteOpen: boolean;
   paletteTab: PaletteTab;
   onOpenPalette: (tab: PaletteTab) => void;
+  penDetected: boolean;
+  penMode: boolean;
+  onTogglePenMode: () => void;
 }) {
   return (
     <div
@@ -132,6 +139,12 @@ export function ToolRail({
           <t.icon className="h-[18px] w-[18px]" />
         </ToolButton>
       ))}
+
+      {penDetected && (
+        <ToolButton title="Pen mode" active={penMode} onClick={onTogglePenMode}>
+          <PenTool className="h-[18px] w-[18px]" />
+        </ToolButton>
+      )}
 
       <div className="my-1 h-px w-6 bg-border" />
 
@@ -155,17 +168,20 @@ export function ToolRail({
 
 // The phone toolbar. A tablet keeps the side rail, so this only renders below
 // the md breakpoint. The eight drawing tools fill the first row; style, insert,
-// history and zoom share the second.
-export interface HistoryZoomControlsProps {
-  canUndo: boolean;
-  canRedo: boolean;
+// pen mode and zoom share the second. Undo/redo sit in the compact top bar.
+export interface ZoomControlsProps {
   zoom: number;
-  onUndo: () => void;
-  onRedo: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
   onZoomToFit: () => void;
+}
+
+export interface HistoryZoomControlsProps extends ZoomControlsProps {
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 export function MobileToolbar({
@@ -176,11 +192,10 @@ export function MobileToolbar({
   styleOpen,
   styleColor,
   onOpenStyle,
-  canUndo,
-  canRedo,
+  penDetected,
+  penMode,
+  onTogglePenMode,
   zoom,
-  onUndo,
-  onRedo,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -193,7 +208,10 @@ export function MobileToolbar({
   styleOpen: boolean;
   styleColor: string;
   onOpenStyle: () => void;
-} & HistoryZoomControlsProps) {
+  penDetected: boolean;
+  penMode: boolean;
+  onTogglePenMode: () => void;
+} & ZoomControlsProps) {
   return (
     <div
       data-draw-toolbar
@@ -212,6 +230,16 @@ export function MobileToolbar({
           <t.icon className="h-5 w-5" />
         </ToolButton>
       ))}
+      {penDetected && (
+        <ToolButton
+          size="toolbar"
+          title="Pen mode"
+          active={penMode}
+          onClick={onTogglePenMode}
+        >
+          <PenTool className="h-5 w-5" />
+        </ToolButton>
+      )}
       <ToolButton size="toolbar" title="Style" active={styleOpen} onClick={onOpenStyle}>
         <span
           aria-hidden
@@ -221,12 +249,6 @@ export function MobileToolbar({
       </ToolButton>
       <ToolButton size="toolbar" title="Insert" active={paletteOpen} onClick={onTogglePalette}>
         <Boxes className="h-5 w-5" />
-      </ToolButton>
-      <ToolButton size="toolbar" title="Undo" disabled={!canUndo} onClick={onUndo}>
-        <Undo2 className="h-5 w-5" />
-      </ToolButton>
-      <ToolButton size="toolbar" title="Redo" disabled={!canRedo} onClick={onRedo}>
-        <Redo2 className="h-5 w-5" />
       </ToolButton>
       <ToolButton size="toolbar" title="Zoom out" onClick={onZoomOut}>
         <ZoomOut className="h-5 w-5" />
@@ -972,6 +994,10 @@ export function TopBar({
   onTogglePalette,
   onExport,
   onNormalize,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: {
   title: string;
   saveLabel: string;
@@ -982,6 +1008,10 @@ export function TopBar({
   onTogglePalette: () => void;
   onExport: (format: "png" | "svg") => void;
   onNormalize: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }) {
   const actionClass =
     "flex items-center gap-1 rounded px-2 py-1 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground";
@@ -1020,6 +1050,24 @@ export function TopBar({
       >
         {saveLabel}
       </span>
+      <button
+        type="button"
+        aria-label="Undo"
+        disabled={!canUndo}
+        onClick={onUndo}
+        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 md:hidden"
+      >
+        <Undo2 className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Redo"
+        disabled={!canRedo}
+        onClick={onRedo}
+        className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40 md:hidden"
+      >
+        <Redo2 className="h-5 w-5" />
+      </button>
       <div className="ml-auto hidden items-center gap-1 md:flex">
         <button
           type="button"

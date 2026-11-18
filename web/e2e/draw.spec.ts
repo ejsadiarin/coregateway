@@ -1,8 +1,9 @@
 import { API_URL, expect, login, newDrawBoard, test } from "./fixtures";
 
-// Excalidraw 0.18 logs two known warnings before/while it mounts (an App
-// setState warning and Chrome's unload permissions-policy notice). They are
-// not our bugs, but a real console error still fails the run.
+// Excalidraw 0.18 under React 19 logs a few known warnings (an App setState
+// warning, Chrome's unload permissions-policy notice, and an update-inside-
+// update notice on pen detection). They are not our bugs, but a real console
+// error still fails the run.
 // sync.ts debounces saves for 1500ms. Waiting a little longer proves that a
 // view-only change did not arm one.
 const SAVE_SETTLE_MS = 1800;
@@ -11,6 +12,7 @@ function dropExcalidrawNoise(errors: string[]) {
   const known = [
     /Can't call %s on a component that is not yet mounted/,
     /Permissions policy violation: unload is not allowed/,
+    /scheduled from inside an update function/,
   ];
   for (let i = errors.length - 1; i >= 0; i--) {
     if (known.some((pattern) => pattern.test(errors[i]))) errors.splice(i, 1);
@@ -425,6 +427,107 @@ test.describe("draw phone sheets", () => {
     await expect(search).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(search).toHaveCount(0);
+
+    dropExcalidrawNoise(consoleErrors);
+  });
+});
+
+test.describe("draw pen mode", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("detects a stylus, separates pen from fingers and toggles", async ({ page, consoleErrors }) => {
+    test.setTimeout(60_000);
+    await login(page);
+    await newDrawBoard(page, "pen mode");
+    const boardId = page.url().split("/").pop();
+    if (!boardId) throw new Error("board id missing");
+    const savedStrokes = async () => {
+      const res = await page.request.get(`${API_URL}/api/coredraw/boards/${boardId}`);
+      const saved = await res.json();
+      return (saved.snapshot?.elements ?? []).filter(
+        (el: { type: string }) => el.type === "freedraw",
+      ).length;
+    };
+    const canvas = page.locator(".coredraw-canvas");
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("no canvas");
+    const x = box.x + box.width * 0.4;
+    const y = box.y + box.height * 0.4;
+
+    const cdp = await page.context().newCDPSession(page);
+    const pen = async (type: "mousePressed" | "mouseMoved" | "mouseReleased", px: number, py: number) => {
+      await cdp.send("Input.dispatchMouseEvent", {
+        type,
+        x: px,
+        y: py,
+        button: "left",
+        buttons: type === "mouseReleased" ? 0 : 1,
+        clickCount: 1,
+        pointerType: "pen",
+        force: type === "mouseReleased" ? 0 : 0.7,
+      });
+    };
+    const touch = async (type: "touchStart" | "touchMove" | "touchEnd", points: { x: number; y: number }[]) => {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: points.map((p, id) => ({ x: p.x, y: p.y, id })),
+      });
+    };
+    const touchDrag = async (dx: number, dy: number) => {
+      await touch("touchStart", [{ x, y }]);
+      for (let i = 1; i <= 20; i++) {
+        await touch("touchMove", [{ x: x + (dx * i) / 20, y: y + (dy * i) / 20 }]);
+        await page.waitForTimeout(16);
+      }
+      await touch("touchEnd", []);
+    };
+
+    // The toggle only exists once a pen has been detected.
+    const penToggle = page.getByRole("button", { name: "Pen mode", exact: true });
+    await expect(penToggle).toHaveCount(0);
+
+    // A stylus tap is detected by Excalidraw and turns pen mode on itself.
+    await pen("mousePressed", x, y);
+    await pen("mouseReleased", x, y);
+    await expect(penToggle).toBeVisible();
+    await expect(penToggle).toHaveAttribute("aria-pressed", "true");
+
+    // A stylus stroke draws with a drawing tool active.
+    await page.getByRole("button", { name: "Draw", exact: true }).click();
+    await pen("mousePressed", x, y);
+    for (let i = 1; i <= 20; i++) {
+      await pen("mouseMoved", x + i * 5, y + Math.sin(i / 3) * 30);
+      await page.waitForTimeout(16);
+    }
+    await pen("mouseReleased", x + 100, y + 20);
+    await expect.poll(savedStrokes, { timeout: 5000 }).toBe(1);
+
+    // With pen mode on, a finger drag pans and a two-finger pinch zooms,
+    // without adding any ink.
+    const beforePan = await canvas.screenshot();
+    await touchDrag(120, 60);
+    await expect.poll(async () => (await canvas.screenshot()).equals(beforePan)).toBe(false);
+
+    const zoomLabel = page.getByRole("button", { name: /reset to 100%/ });
+    await expect(zoomLabel).toHaveText("100%");
+    await touch("touchStart", [
+      { x: x - 30, y },
+      { x: x + 30, y },
+    ]);
+    await touch("touchMove", [
+      { x: x - 70, y },
+      { x: x + 70, y },
+    ]);
+    await touch("touchEnd", []);
+    await expect(zoomLabel).not.toHaveText("100%");
+    await page.waitForTimeout(SAVE_SETTLE_MS);
+    expect(await savedStrokes()).toBe(1);
+
+    // Turning it off lets a finger draw with the active tool.
+    await penToggle.click();
+    await expect(penToggle).toHaveAttribute("aria-pressed", "false");
+    await touchDrag(160, 80);
+    await expect.poll(savedStrokes, { timeout: 5000 }).toBe(2);
 
     dropExcalidrawNoise(consoleErrors);
   });

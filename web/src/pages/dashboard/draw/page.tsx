@@ -79,6 +79,8 @@ export default function DrawPage() {
   const zoomRef = useRef(1);
   const [history, setHistory] = useState({ undo: false, redo: false });
   const historyRef = useRef(history);
+  const [pen, setPen] = useState({ detected: false, active: false });
+  const penRef = useRef(pen);
 
   const adapterRef = useRef<CanvasAdapter | null>(null);
 
@@ -136,6 +138,11 @@ export default function DrawPage() {
       zoomRef.current = nextZoom;
       setZoom(nextZoom);
     }
+    const nextPen = adapter.penState();
+    if (nextPen.detected !== penRef.current.detected || nextPen.active !== penRef.current.active) {
+      penRef.current = nextPen;
+      setPen(nextPen);
+    }
     if (adapter.noteSceneChange()) {
       queueHistorySync();
       scheduleSave();
@@ -152,6 +159,9 @@ export default function DrawPage() {
     const nextZoom = adapter.currentZoom();
     zoomRef.current = nextZoom;
     setZoom(nextZoom);
+    const nextPen = adapter.penState();
+    penRef.current = nextPen;
+    setPen(nextPen);
   }, []);
 
   const handleSelectTool = useCallback((id: CanvasTool) => {
@@ -248,6 +258,13 @@ export default function DrawPage() {
     adapterRef.current?.zoomToFit();
     syncZoom();
   }, [syncZoom]);
+
+  const handleTogglePenMode = useCallback(() => {
+    const next = { ...penRef.current, active: !penRef.current.active };
+    penRef.current = next;
+    setPen(next);
+    adapterRef.current?.setPenMode(next.active);
+  }, []);
 
   // eraser.io-style keyboard: `/` opens icon search, and bare tool keys
   // (v/h/d/e/t/r/o/a/l/f) select the matching tool. Bound on the window in the
@@ -358,6 +375,10 @@ export default function DrawPage() {
         }}
         onExport={handleExport}
         onNormalize={handleNormalize}
+        canUndo={history.undo}
+        canRedo={history.redo}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
       />
       {!isPhone && <StyleBar style={style} onChange={handleStyleChange} />}
 
@@ -373,6 +394,9 @@ export default function DrawPage() {
             if (isPhone) openPhoneSheet("palette");
             else setPaletteOpen(true);
           }}
+          penDetected={pen.detected}
+          penMode={pen.active}
+          onTogglePenMode={handleTogglePenMode}
         />
         {!isPhone && <IconPalette {...paletteProps} />}
         <div className="relative min-h-0 min-w-0 flex-1">
@@ -435,11 +459,10 @@ export default function DrawPage() {
         styleOpen={styleOpen}
         styleColor={style.strokeColor}
         onOpenStyle={() => openPhoneSheet(styleOpen ? null : "style")}
-        canUndo={history.undo}
-        canRedo={history.redo}
+        penDetected={pen.detected}
+        penMode={pen.active}
+        onTogglePenMode={handleTogglePenMode}
         zoom={zoom}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
