@@ -24,3 +24,20 @@
   max-height: 100%;
   overflow: hidden;
 }
+
+/* Vaul ships an unlayered near-white handle, which beats Tailwind utilities
+   and ignores the runtime themes. Restate it with theme tokens. */
+.coredraw-draw-handle[data-vaul-handle] {
+  height: 0.25rem !important;
+  width: 2.5rem !important;
+  border-radius: 9999px !important;
+  background: color-mix(in srgb, var(--foreground) 25%, transparent) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-vaul-drawer],
+  [data-vaul-overlay] {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

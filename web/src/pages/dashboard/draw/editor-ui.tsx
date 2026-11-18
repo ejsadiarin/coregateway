@@ -22,6 +22,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -149,11 +150,17 @@ export function MobileToolbar({
   onSelectTool,
   paletteOpen,
   onTogglePalette,
+  styleOpen,
+  styleColor,
+  onOpenStyle,
 }: {
   activeTool: RailToolId | null;
   onSelectTool: (id: RailToolId) => void;
   paletteOpen: boolean;
   onTogglePalette: () => void;
+  styleOpen: boolean;
+  styleColor: string;
+  onOpenStyle: () => void;
 }) {
   return (
     <div
@@ -173,6 +180,13 @@ export function MobileToolbar({
           <t.icon className="h-5 w-5" />
         </ToolButton>
       ))}
+      <ToolButton size="toolbar" title="Style" active={styleOpen} onClick={onOpenStyle}>
+        <span
+          aria-hidden
+          className="block h-5 w-5 rounded-full border border-foreground/30"
+          style={{ background: styleColor }}
+        />
+      </ToolButton>
       <ToolButton size="toolbar" title="Insert" active={paletteOpen} onClick={onTogglePalette}>
         <Boxes className="h-5 w-5" />
       </ToolButton>
@@ -265,6 +279,8 @@ export function IconPalette({
   onPickIcon,
   onPickShape,
   onPickTemplate,
+  sheet = false,
+  focusOnOpen = true,
 }: {
   open: boolean;
   tab: PaletteTab;
@@ -276,6 +292,11 @@ export function IconPalette({
   onPickIcon: (iconId: string) => void;
   onPickShape: (kind: ShapeKind) => void;
   onPickTemplate: (templateId: string) => void;
+  // Inside a phone bottom sheet, fill the sheet instead of the side column.
+  sheet?: boolean;
+  // A phone tap should not raise the soft keyboard over the icon grid; only a
+  // keyboard `/` open asks for search focus.
+  focusOnOpen?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<string>("all");
@@ -286,14 +307,14 @@ export function IconPalette({
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open) {
+    if (open && focusOnOpen) {
       const t = setTimeout(() => {
         inputRef.current?.focus();
         inputRef.current?.select();
       }, 30);
       return () => clearTimeout(t);
     }
-  }, [open, focusNonce]);
+  }, [open, focusNonce, focusOnOpen]);
 
   // Typing highlights the top hit, so `/` → "s3" → Enter needs no arrow keys.
   useEffect(() => {
@@ -380,10 +401,16 @@ export function IconPalette({
     onClose();
   }
 
-  if (!open) return null;
+  // Inside a sheet, keep the content mounted while the sheet animates out.
+  if (!open && !sheet) return null;
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-background">
+    <aside
+      className={cn(
+        "flex flex-col bg-background",
+        sheet ? "min-h-0 flex-1" : "w-60 shrink-0 border-r border-border",
+      )}
+    >
       <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-1.5 py-1.5">
         <button
           type="button"
@@ -568,11 +595,23 @@ const STROKE_STYLES: { value: DrawStyle["strokeStyle"]; label: string }[] = [
 ];
 const OPACITIES = [100, 60, 30];
 
-function StyleGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function StyleGroup({
+  label,
+  children,
+  stacked = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  stacked?: boolean;
+}) {
   return (
-    <div className="flex items-center gap-1">
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(stacked ? "flex flex-col gap-2" : "flex items-center gap-1")}
+    >
       <span className="text-[9px] uppercase tracking-wide text-muted-foreground/60">{label}</span>
-      <div className="flex items-center gap-1">{children}</div>
+      <div className={cn("flex items-center gap-1", stacked && "flex-wrap")}>{children}</div>
     </div>
   );
 }
@@ -613,6 +652,151 @@ function Swatch({
   );
 }
 
+function StrokeSwatches({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <>
+      {STROKE_COLORS.map((color) => (
+        <Swatch
+          key={color.value}
+          name={color.name}
+          value={color.value}
+          active={style.strokeColor === color.value}
+          onClick={() => onChange({ strokeColor: color.value })}
+        />
+      ))}
+    </>
+  );
+}
+
+function FillSwatches({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <>
+      {FILL_COLORS.map((color) => (
+        <Swatch
+          key={color.value}
+          name={color.name}
+          value={color.value}
+          active={style.backgroundColor === color.value}
+          onClick={() =>
+            onChange({
+              backgroundColor: color.value,
+              fillStyle: color.value === "transparent" ? "solid" : style.fillStyle,
+            })
+          }
+        />
+      ))}
+    </>
+  );
+}
+
+function WidthOptions({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <>
+      {STROKE_WIDTHS.map((width) => (
+        <button
+          key={width}
+          type="button"
+          title={`${width}px stroke`}
+          aria-label={`${width}px stroke`}
+          aria-pressed={style.strokeWidth === width}
+          onClick={() => onChange({ strokeWidth: width })}
+          className={cn(
+            "flex h-11 w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:w-6",
+            style.strokeWidth === width
+              ? "border-foreground/40 bg-muted text-foreground"
+              : "border-transparent text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          <span className="block w-3.5 rounded-full bg-current" style={{ height: width }} />
+        </button>
+      ))}
+    </>
+  );
+}
+
+function DashOptions({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <>
+      {STROKE_STYLES.map((item) => (
+        <button
+          key={item.value}
+          type="button"
+          title={item.label}
+          aria-label={item.label}
+          aria-pressed={style.strokeStyle === item.value}
+          onClick={() => onChange({ strokeStyle: item.value })}
+          className={cn(
+            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:min-w-0 md:w-7",
+            style.strokeStyle === item.value
+              ? "border-foreground/40 bg-muted text-foreground"
+              : "border-transparent text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          <span
+            className="block w-3.5 border-t-2 border-current"
+            style={{ borderTopStyle: item.value }}
+          />
+        </button>
+      ))}
+    </>
+  );
+}
+
+function OpacityOptions({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <>
+      {OPACITIES.map((opacity) => (
+        <button
+          key={opacity}
+          type="button"
+          title={`${opacity}% opacity`}
+          aria-label={`${opacity}% opacity`}
+          aria-pressed={style.opacity === opacity}
+          onClick={() => onChange({ opacity })}
+          className={cn(
+            "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border px-1.5 text-[10px] transition-colors md:h-6 md:min-w-0",
+            style.opacity === opacity
+              ? "border-foreground/40 bg-muted text-foreground"
+              : "border-transparent text-muted-foreground hover:bg-muted/60",
+          )}
+        >
+          {opacity}%
+        </button>
+      ))}
+    </>
+  );
+}
+
 export function StyleBar({
   style,
   onChange,
@@ -623,106 +807,51 @@ export function StyleBar({
   return (
     <div className="flex shrink-0 touch-manipulation items-center gap-2 overflow-x-auto border-b border-border bg-background px-2 py-1">
       <StyleGroup label="Stroke">
-        {STROKE_COLORS.map((color) => (
-          <Swatch
-            key={color.value}
-            name={color.name}
-            value={color.value}
-            active={style.strokeColor === color.value}
-            onClick={() => onChange({ strokeColor: color.value })}
-          />
-        ))}
+        <StrokeSwatches style={style} onChange={onChange} />
       </StyleGroup>
-
       <div className="h-4 w-px shrink-0 bg-border" />
-
       <StyleGroup label="Fill">
-        {FILL_COLORS.map((color) => (
-          <Swatch
-            key={color.value}
-            name={color.name}
-            value={color.value}
-            active={style.backgroundColor === color.value}
-            onClick={() =>
-              onChange({
-                backgroundColor: color.value,
-                fillStyle: color.value === "transparent" ? "solid" : style.fillStyle,
-              })
-            }
-          />
-        ))}
+        <FillSwatches style={style} onChange={onChange} />
       </StyleGroup>
-
       <div className="h-4 w-px shrink-0 bg-border" />
-
       <StyleGroup label="Width">
-        {STROKE_WIDTHS.map((width) => (
-          <button
-            key={width}
-            type="button"
-            title={`${width}px stroke`}
-            aria-label={`${width}px stroke`}
-            aria-pressed={style.strokeWidth === width}
-            onClick={() => onChange({ strokeWidth: width })}
-            className={cn(
-              "flex h-11 w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:w-6",
-              style.strokeWidth === width
-                ? "border-foreground/40 bg-muted text-foreground"
-                : "border-transparent text-muted-foreground hover:bg-muted/60",
-            )}
-          >
-            <span className="block w-3.5 rounded-full bg-current" style={{ height: width }} />
-          </button>
-        ))}
+        <WidthOptions style={style} onChange={onChange} />
       </StyleGroup>
-
       <div className="h-4 w-px shrink-0 bg-border" />
-
       <StyleGroup label="Dash">
-        {STROKE_STYLES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            title={item.label}
-            aria-label={item.label}
-            aria-pressed={style.strokeStyle === item.value}
-            onClick={() => onChange({ strokeStyle: item.value })}
-            className={cn(
-              "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border transition-colors md:h-6 md:min-w-0 md:w-7",
-              style.strokeStyle === item.value
-                ? "border-foreground/40 bg-muted text-foreground"
-                : "border-transparent text-muted-foreground hover:bg-muted/60",
-            )}
-          >
-            <span
-              className="block w-3.5 border-t-2 border-current"
-              style={{ borderTopStyle: item.value }}
-            />
-          </button>
-        ))}
+        <DashOptions style={style} onChange={onChange} />
       </StyleGroup>
-
       <div className="h-4 w-px shrink-0 bg-border" />
-
       <StyleGroup label="Opacity">
-        {OPACITIES.map((opacity) => (
-          <button
-            key={opacity}
-            type="button"
-            title={`${opacity}% opacity`}
-            aria-label={`${opacity}% opacity`}
-            aria-pressed={style.opacity === opacity}
-            onClick={() => onChange({ opacity })}
-            className={cn(
-              "flex h-11 min-w-11 touch-manipulation items-center justify-center rounded border px-1.5 text-[10px] transition-colors md:h-6 md:min-w-0",
-              style.opacity === opacity
-                ? "border-foreground/40 bg-muted text-foreground"
-                : "border-transparent text-muted-foreground hover:bg-muted/60",
-            )}
-          >
-            {opacity}%
-          </button>
-        ))}
+        <OpacityOptions style={style} onChange={onChange} />
+      </StyleGroup>
+    </div>
+  );
+}
+
+export function StyleSheet({
+  style,
+  onChange,
+}: {
+  style: DrawStyle;
+  onChange: (patch: Partial<DrawStyle>) => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pb-6 pt-2">
+      <StyleGroup stacked label="Stroke colour">
+        <StrokeSwatches style={style} onChange={onChange} />
+      </StyleGroup>
+      <StyleGroup stacked label="Fill">
+        <FillSwatches style={style} onChange={onChange} />
+      </StyleGroup>
+      <StyleGroup stacked label="Width">
+        <WidthOptions style={style} onChange={onChange} />
+      </StyleGroup>
+      <StyleGroup stacked label="Dash">
+        <DashOptions style={style} onChange={onChange} />
+      </StyleGroup>
+      <StyleGroup stacked label="Opacity">
+        <OpacityOptions style={style} onChange={onChange} />
       </StyleGroup>
     </div>
   );
@@ -837,6 +966,10 @@ export function TopBar({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onExport("svg")} className="h-11 gap-2">
             <Download className="h-4 w-4" /> Export SVG
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onToggleDoc} className="h-11 gap-2">
+            {docOpen ? "Hide notes" : "Show notes"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

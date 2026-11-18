@@ -65,6 +65,12 @@ export default defineConfig({
     // instance, or hooks crash with "invalid hook call" in dev.
     dedupe: ["react", "react-dom"],
   },
+  // Draw's bottom sheet is lazy-loaded with the editor chunk. Pre-bundle vaul
+  // so the first board open in dev does not trigger an optimise-and-reload in
+  // the middle of the lazy import.
+  optimizeDeps: {
+    include: ["vaul"],
+  },
   server: {
     port: 3000,
   },

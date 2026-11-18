@@ -1,4 +1,4 @@
-import { expect, login, newDrawBoard, test } from "./fixtures";
+import { API_URL, expect, login, newDrawBoard, test } from "./fixtures";
 
 // Excalidraw 0.18 logs two known warnings before/while it mounts (an App
 // setState warning and Chrome's unload permissions-policy notice). They are
@@ -172,6 +172,160 @@ test("saves a drawn stroke once and never on pan, zoom or selection", async ({ p
   expect(saves).toHaveLength(3);
 
   dropExcalidrawNoise(consoleErrors);
+});
+
+test.describe("draw phone sheets", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test("inserts an icon, restyles, saves notes and dismisses sheets", async ({ page, consoleErrors }) => {
+    test.setTimeout(60_000);
+    await login(page);
+    await newDrawBoard(page, "phone sheets");
+    const boardId = page.url().split("/").pop();
+    if (!boardId) throw new Error("board id missing");
+    const board = async () =>
+      (await page.request.get(`${API_URL}/api/coredraw/boards/${boardId}`)).json();
+    const canvas = page.locator(".coredraw-canvas");
+    const canvasBox = async () => {
+      const box = await canvas.boundingBox();
+      if (!box) throw new Error("no canvas");
+      return box;
+    };
+    const initialCanvas = await canvasBox();
+
+    // Palette sheet: search, insert, and close so the element is visible.
+    await page.getByRole("button", { name: "Insert", exact: true }).click();
+    const search = page.getByPlaceholder("Search icons…");
+    await expect(search).toBeVisible();
+    // A tap opens without raising the keyboard; sheets overlay the canvas
+    // instead of shrinking it.
+    await expect(search).not.toBeFocused();
+    expect((await canvasBox()).width).toBe(initialCanvas.width);
+    expect((await canvasBox()).height).toBe(initialCanvas.height);
+
+    // The sheet handle follows theme tokens and the workspace radius rather
+    // than vaul's hardcoded near-white handle.
+    const sheetChrome = await page.locator(".coredraw-draw-handle").evaluate((el) => {
+      const handle = getComputedStyle(el);
+      const content = getComputedStyle(el.closest('[role="dialog"]') as Element);
+      return {
+        height: handle.height,
+        width: handle.width,
+        background: handle.backgroundColor,
+        radius: content.borderTopLeftRadius,
+      };
+    });
+    expect(sheetChrome.height).toBe("4px");
+    expect(sheetChrome.width).toBe("40px");
+    expect(sheetChrome.background).not.toBe("rgb(226, 226, 228)");
+    expect(sheetChrome.radius).toBe("12px");
+
+    await search.fill("lambda");
+    await page.getByRole("button", { name: "Lambda", exact: true }).click();
+    await expect(search).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const saved = await board();
+        return (saved.snapshot?.elements ?? []).some(
+          (el: { type: string; customData?: { iconId?: string } }) =>
+            el.type === "image" && el.customData?.iconId === "logos:aws-lambda",
+        );
+      })
+      .toBe(true);
+
+    // Style sheet: the toolbar dot follows the choice and new strokes use it.
+    const blueStroke = page
+      .getByRole("group", { name: "Stroke colour" })
+      .getByRole("button", { name: "Blue", exact: true });
+    const styleButton = page.getByRole("button", { name: "Style", exact: true });
+    await styleButton.click();
+    await blueStroke.click();
+    expect((await canvasBox()).height).toBe(initialCanvas.height);
+    await page.keyboard.press("Escape");
+    await expect(blueStroke).toHaveCount(0);
+    await expect
+      .poll(() => styleButton.locator("span").evaluate((el) => getComputedStyle(el).backgroundColor))
+      .toBe("rgb(37, 99, 235)");
+
+    await page.getByRole("button", { name: "Draw", exact: true }).click();
+    const box = await canvasBox();
+    const x = box.x + box.width * 0.3;
+    const y = box.y + box.height * 0.45;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 180, y + 60, { steps: 20 });
+    await page.mouse.up();
+    await expect
+      .poll(async () => {
+        const saved = await board();
+        const strokes = (saved.snapshot?.elements ?? []).filter(
+          (el: { type: string }) => el.type === "freedraw",
+        );
+        return strokes.at(-1)?.strokeColor;
+      })
+      .toBe("#2563eb");
+
+    // Styling a selection (select all) updates the existing stroke.
+    await page.keyboard.press("Control+a");
+    await styleButton.click();
+    await page
+      .getByRole("group", { name: "Stroke colour" })
+      .getByRole("button", { name: "Green", exact: true })
+      .click();
+    await page.keyboard.press("Escape");
+    await expect
+      .poll(async () => {
+        const saved = await board();
+        const strokes = (saved.snapshot?.elements ?? []).filter(
+          (el: { type: string }) => el.type === "freedraw",
+        );
+        return strokes.at(-1)?.strokeColor;
+      })
+      .toBe("#16a34a");
+
+    // Notes sheet: editing still rides the board save.
+    await page.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Show notes" }).click();
+    const notes = page.getByPlaceholder(/Board notes in markdown/);
+    await expect(notes).toBeVisible();
+    expect((await canvasBox()).width).toBe(initialCanvas.width);
+    expect((await canvasBox()).height).toBe(initialCanvas.height);
+    await notes.fill("note from the phone sheet");
+    await expect.poll(async () => (await board()).doc).toBe("note from the phone sheet");
+    await page.keyboard.press("Escape");
+    await expect(notes).toHaveCount(0);
+
+    // Opening another sheet, then Escape and an overlay tap both dismiss.
+    await page.getByRole("button", { name: "Insert", exact: true }).click();
+    await expect(search).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(search).toHaveCount(0);
+    await styleButton.click();
+    await expect(blueStroke).toBeVisible();
+    await page.mouse.click(10, 10);
+    await expect(blueStroke).toHaveCount(0);
+
+    // Swiping the handle down dismisses too.
+    await page.getByRole("button", { name: "Insert", exact: true }).click();
+    await expect(search).toBeVisible();
+    const handle = page.locator(".coredraw-draw-handle");
+    const hb = await handle.boundingBox();
+    if (!hb) throw new Error("no sheet handle");
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + 280, { steps: 20 });
+    await page.mouse.up();
+    await expect(search).toHaveCount(0);
+
+    // `/` opens the sheet from the keyboard with search focused.
+    await page.keyboard.press("/");
+    await expect(search).toBeVisible();
+    await expect(search).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(search).toHaveCount(0);
+
+    dropExcalidrawNoise(consoleErrors);
+  });
 });
 
 test.describe("draw tablet and desktop shell", () => {

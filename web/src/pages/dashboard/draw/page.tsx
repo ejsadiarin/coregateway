@@ -15,10 +15,12 @@ import {
   type ShapeKind,
 } from "@/pages/dashboard/draw/engine";
 import { DocPane } from "@/pages/dashboard/draw/docpane";
+import { DrawSheet } from "@/pages/dashboard/draw/draw-sheet";
 import {
   IconPalette,
   MobileToolbar,
   StyleBar,
+  StyleSheet,
   TopBar,
   ToolRail,
   type PaletteTab,
@@ -44,15 +46,26 @@ export default function DrawPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteTab, setPaletteTab] = useState<PaletteTab>("icons");
   // Bumped when `/` is pressed so the palette's search refocuses even when the
-  // panel is already open.
+  // panel is already open. A phone tap opens the palette without focusing.
   const [paletteFocusNonce, setPaletteFocusNonce] = useState(0);
+  const [paletteAutoFocus, setPaletteAutoFocus] = useState(true);
   // Phones open with the notes pane closed so the canvas gets the screen, and
   // close it again if the viewport shrinks to phone width while it is open.
   const isPhone = useIsPhone();
   const [docOpen, setDocOpen] = useState(() => !isPhone);
+  const [styleOpen, setStyleOpen] = useState(false);
   useEffect(() => {
-    if (isPhone) setDocOpen(false);
+    if (!isPhone) return;
+    setDocOpen(false);
+    setStyleOpen(false);
   }, [isPhone]);
+
+  // Phones show at most one panel as a bottom sheet over the canvas.
+  const openPhoneSheet = useCallback((sheet: "palette" | "style" | "notes" | null) => {
+    setPaletteOpen(sheet === "palette");
+    setStyleOpen(sheet === "style");
+    setDocOpen(sheet === "notes");
+  }, []);
   const [activeTool, setActiveTool] = useState<RailToolId | null>("select");
   const activeToolRef = useRef<RailToolId | null>("select");
   const [style, setStyle] = useState<DrawStyle>(DEFAULT_DRAW_STYLE);
@@ -126,17 +139,35 @@ export default function DrawPage() {
     adapterRef.current?.applyStyle(next);
   }, []);
 
-  const handlePickIcon = useCallback((iconId: string) => {
-    adapterRef.current?.insertIcon(iconId);
-  }, []);
+  // Inserting from the phone palette closes the sheet so the owner sees the
+  // element land on the canvas. The desktop palette stays open for repeat use.
+  const closePhonePalette = useCallback(() => {
+    if (isPhone) setPaletteOpen(false);
+  }, [isPhone]);
 
-  const handlePickShape = useCallback((kind: ShapeKind) => {
-    adapterRef.current?.insertShape(kind);
-  }, []);
+  const handlePickIcon = useCallback(
+    (iconId: string) => {
+      adapterRef.current?.insertIcon(iconId);
+      closePhonePalette();
+    },
+    [closePhonePalette],
+  );
 
-  const handlePickTemplate = useCallback((templateId: string) => {
-    adapterRef.current?.insertTemplate(templateId);
-  }, []);
+  const handlePickShape = useCallback(
+    (kind: ShapeKind) => {
+      adapterRef.current?.insertShape(kind);
+      closePhonePalette();
+    },
+    [closePhonePalette],
+  );
+
+  const handlePickTemplate = useCallback(
+    (templateId: string) => {
+      adapterRef.current?.insertTemplate(templateId);
+      closePhonePalette();
+    },
+    [closePhonePalette],
+  );
 
   const handleExport = useCallback((format: "png" | "svg") => {
     void adapterRef.current?.exportImage(format);
@@ -161,7 +192,9 @@ export default function DrawPage() {
         e.preventDefault();
         e.stopPropagation();
         setPaletteTab("icons");
-        setPaletteOpen(true);
+        setPaletteAutoFocus(true);
+        if (isPhone) openPhoneSheet("palette");
+        else setPaletteOpen(true);
         setPaletteFocusNonce((n) => n + 1);
         return;
       }
@@ -175,7 +208,7 @@ export default function DrawPage() {
     }
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [handleSelectTool]);
+  }, [handleSelectTool, isPhone, openPhoneSheet]);
 
   if (sync.phase === "loading") {
     return (
@@ -210,6 +243,18 @@ export default function DrawPage() {
     );
   }
 
+  const paletteProps = {
+    open: paletteOpen,
+    tab: paletteTab,
+    focusNonce: paletteFocusNonce,
+    focusOnOpen: paletteAutoFocus,
+    onTabChange: setPaletteTab,
+    onClose: () => setPaletteOpen(false),
+    onPickIcon: handlePickIcon,
+    onPickShape: handlePickShape,
+    onPickTemplate: handlePickTemplate,
+  };
+
   const { saveState, conflict } = sync;
   const saveLabel =
     saveState === "saving"
@@ -230,13 +275,19 @@ export default function DrawPage() {
         saveLabel={saveLabel}
         saveState={saveState}
         docOpen={docOpen}
-        onToggleDoc={() => setDocOpen((open) => !open)}
+        onToggleDoc={() => {
+          if (isPhone) openPhoneSheet(docOpen ? null : "notes");
+          else setDocOpen((open) => !open);
+        }}
         paletteOpen={paletteOpen}
-        onTogglePalette={() => setPaletteOpen((open) => !open)}
+        onTogglePalette={() => {
+          setPaletteAutoFocus(true);
+          setPaletteOpen((open) => !open);
+        }}
         onExport={handleExport}
         onNormalize={handleNormalize}
       />
-      <StyleBar style={style} onChange={handleStyleChange} />
+      {!isPhone && <StyleBar style={style} onChange={handleStyleChange} />}
 
       <div className="flex min-h-0 flex-1">
         <ToolRail
@@ -246,19 +297,12 @@ export default function DrawPage() {
           paletteTab={paletteTab}
           onOpenPalette={(tab) => {
             setPaletteTab(tab);
-            setPaletteOpen(true);
+            setPaletteAutoFocus(true);
+            if (isPhone) openPhoneSheet("palette");
+            else setPaletteOpen(true);
           }}
         />
-        <IconPalette
-          open={paletteOpen}
-          tab={paletteTab}
-          focusNonce={paletteFocusNonce}
-          onTabChange={setPaletteTab}
-          onClose={() => setPaletteOpen(false)}
-          onPickIcon={handlePickIcon}
-          onPickShape={handlePickShape}
-          onPickTemplate={handlePickTemplate}
-        />
+        {!isPhone && <IconPalette {...paletteProps} />}
         <div className="relative min-h-0 min-w-0 flex-1">
           <ExcalidrawCanvas
             key={`${meta.id}:${loadEpoch}`}
@@ -294,14 +338,51 @@ export default function DrawPage() {
             </div>
           )}
         </div>
-        {docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
+        {!isPhone && docOpen && <DocPane doc={meta.doc} onChange={updateDoc} />}
       </div>
       <MobileToolbar
         activeTool={activeTool}
         onSelectTool={handleSelectTool}
         paletteOpen={paletteOpen}
-        onTogglePalette={() => setPaletteOpen((open) => !open)}
+        onTogglePalette={() => {
+          setPaletteAutoFocus(false);
+          openPhoneSheet(paletteOpen ? null : "palette");
+        }}
+        styleOpen={styleOpen}
+        styleColor={style.strokeColor}
+        onOpenStyle={() => openPhoneSheet(styleOpen ? null : "style")}
       />
+
+      {isPhone && (
+        <>
+          <DrawSheet
+            open={paletteOpen}
+            onOpenChange={setPaletteOpen}
+            title="Insert"
+            description="Search and insert icons, shapes and templates."
+            className="h-[78dvh]"
+          >
+            <IconPalette {...paletteProps} sheet />
+          </DrawSheet>
+          <DrawSheet
+            open={styleOpen}
+            onOpenChange={setStyleOpen}
+            title="Style"
+            description="Stroke, fill and opacity for selected and new elements."
+          >
+            <StyleSheet style={style} onChange={handleStyleChange} />
+          </DrawSheet>
+          <DrawSheet
+            open={docOpen}
+            onOpenChange={setDocOpen}
+            title="Board notes"
+            description="Board notes in markdown."
+            className="h-[78dvh]"
+          >
+            <DocPane sheet doc={meta.doc} onChange={updateDoc} />
+          </DrawSheet>
+        </>
+      )}
     </div>
   );
 }

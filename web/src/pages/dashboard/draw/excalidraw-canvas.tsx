@@ -123,6 +123,26 @@ function appendElements(api: ExcalidrawImperativeAPI, elements: ExcalidrawElemen
   api.updateScene({ appState: { selectedElementIds } });
 }
 
+function currentStyleFrom(appState: ReturnType<ExcalidrawImperativeAPI["getAppState"]>): DrawStyle {
+  return {
+    strokeColor: appState.currentItemStrokeColor ?? DEFAULT_DRAW_STYLE.strokeColor,
+    backgroundColor: appState.currentItemBackgroundColor ?? DEFAULT_DRAW_STYLE.backgroundColor,
+    strokeWidth: appState.currentItemStrokeWidth ?? DEFAULT_DRAW_STYLE.strokeWidth,
+    strokeStyle: (appState.currentItemStrokeStyle ??
+      DEFAULT_DRAW_STYLE.strokeStyle) as DrawStyle["strokeStyle"],
+    fillStyle: (appState.currentItemFillStyle ??
+      DEFAULT_DRAW_STYLE.fillStyle) as DrawStyle["fillStyle"],
+    opacity: appState.currentItemOpacity ?? DEFAULT_DRAW_STYLE.opacity,
+  };
+}
+
+// New elements built by the palette use the same style as a freshly drawn one.
+function styleNewElements(elements: ExcalidrawElement[], style: DrawStyle): ExcalidrawElement[] {
+  const selected: Record<string, true> = {};
+  for (const el of elements) selected[el.id] = true;
+  return applyStyleToElements(elements, selected, style);
+}
+
 function download(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -188,7 +208,7 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
       const built = buildDiagramTemplate(templateId, x, y);
       if (!built) return;
       api.addFiles(Object.values(built.files));
-      appendElements(api, built.elements);
+      appendElements(api, styleNewElements(built.elements, currentStyleFrom(api.getAppState())));
     },
     applyStyle: (style: DrawStyle) => {
       const appState = api.getAppState();
@@ -204,28 +224,17 @@ export function createCanvasAdapter(api: ExcalidrawImperativeAPI): CanvasAdapter
         },
       });
     },
-    currentStyle: (): DrawStyle => {
-      const appState = api.getAppState();
-      return {
-        strokeColor: appState.currentItemStrokeColor ?? DEFAULT_DRAW_STYLE.strokeColor,
-        backgroundColor: appState.currentItemBackgroundColor ?? DEFAULT_DRAW_STYLE.backgroundColor,
-        strokeWidth: appState.currentItemStrokeWidth ?? DEFAULT_DRAW_STYLE.strokeWidth,
-        strokeStyle: (appState.currentItemStrokeStyle ??
-          DEFAULT_DRAW_STYLE.strokeStyle) as DrawStyle["strokeStyle"],
-        fillStyle: (appState.currentItemFillStyle ??
-          DEFAULT_DRAW_STYLE.fillStyle) as DrawStyle["fillStyle"],
-        opacity: appState.currentItemOpacity ?? DEFAULT_DRAW_STYLE.opacity,
-      };
-    },
+    currentStyle: (): DrawStyle => currentStyleFrom(api.getAppState()),
     insertIcon: (iconId: string) => {
       const { x, y } = viewportCenter(api);
       const { elements, file } = buildIconInsertion(iconId, x - ICON_SIZE / 2, y - ICON_SIZE / 2);
       api.addFiles([file]);
-      appendElements(api, elements);
+      appendElements(api, styleNewElements(elements, currentStyleFrom(api.getAppState())));
     },
     insertShape: (kind: ShapeKind) => {
       const { x, y } = viewportCenter(api);
-      appendElements(api, [buildShapeElement(kind, x, y)]);
+      const shape = buildShapeElement(kind, x, y);
+      appendElements(api, styleNewElements([shape], currentStyleFrom(api.getAppState())));
     },
     normalizeBoard: () => {
       api.updateScene({ elements: applyFormalStyle(api.getSceneElements()) });
