@@ -158,7 +158,7 @@ Before raising k3s to a new minor, check
 ### Workstation tools
 
 Install on the laptop: `kubectl`, `helm`, `flux`, `cilium` (cilium-cli),
-`sops`, `age`, `cloudflared`, `gh`. Only `kubectl` is present today.
+`sops`, `age`, `cloudflared`, `gh`, `pluto` (section 19). Only `kubectl` is present today.
 
 ### Accounts and credentials to create
 
@@ -618,6 +618,16 @@ spec:
   decryption:
     provider: sops
     secretRef: {name: sops-age}
+  patches:
+    - target: {kind: HelmRelease}
+      patch: |
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: all                   # ignored; target selects every HelmRelease
+        spec:
+          install: {crds: CreateReplace}
+          upgrade: {crds: CreateReplace}
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
@@ -655,6 +665,16 @@ spec:
   decryption:
     provider: sops
     secretRef: {name: sops-age}
+  patches:                        # same CRD policy as infra-controllers, see section 9
+    - target: {kind: HelmRelease}
+      patch: |
+        apiVersion: helm.toolkit.fluxcd.io/v2
+        kind: HelmRelease
+        metadata:
+          name: all                   # ignored; target selects every HelmRelease
+        spec:
+          install: {crds: CreateReplace}
+          upgrade: {crds: CreateReplace}
 ```
 
 `prune: true` means deleting a file from Git deletes the object. Volumes are
@@ -707,10 +727,8 @@ spec:
       version: v1.21.3
       sourceRef: {kind: HelmRepository, name: jetstack}
   install:
-    crds: CreateReplace
     remediation: {retries: 3}
   upgrade:
-    crds: CreateReplace
     remediation: {retries: 3}
   values:
     crds:
@@ -723,6 +741,16 @@ spec:
     dns01RecursiveNameserversOnly: true
     dns01RecursiveNameservers: "1.1.1.1:53,1.0.0.1:53"
 ```
+
+**CRDs on upgrade.** Helm creates the CRDs in a chart's `crds/` directory on
+install and never touches them again. Flux does the same unless told
+otherwise, so a chart bump can ship new controllers against stale CRDs and
+nothing reports it. kube-prometheus-stack is the known case in this cluster.
+The `patches` block on the `infra-controllers` and `apps` Kustomizations
+(section 8.3) sets `install.crds` and `upgrade.crds` to `CreateReplace` on
+every HelmRelease, so no release needs it written out. Charts that keep CRDs
+in `templates/` (Longhorn, CloudNativePG) are unaffected, and `CreateReplace`
+never deletes a CRD.
 
 The full set:
 
@@ -774,6 +802,7 @@ with the claim and k3s re-applies its own manifest on every restart.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  # renovate: datasource=github-releases depName=rancher/local-path-provisioner
   - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
   - storageclass-retain.yaml
 ```
@@ -2184,31 +2213,132 @@ Longhorn volume to a new name and read a file from it, monthly.
 
 ## 19. Upgrades
 
-### Charts and images: Renovate
+Renovate opens pull requests against `core-infra`, you merge them, Flux
+applies them. Nothing merges by itself: `core-infra` has no CI to gate an
+automerge, and a weekly batch takes minutes to review by hand.
 
-Install the hosted Renovate GitHub app on `core-infra`. `renovate.json`:
+### What is tracked
+
+| What | Where the version lives | Picked up by |
+|---|---|---|
+| Helm charts | `chart.spec.version` in each HelmRelease | Renovate's `flux` manager |
+| Flux itself | `clusters/homelab/flux-system/gotk-components.yaml` | `flux` manager (its default file) |
+| Images in plain manifests (cloudflared, ntfy) | `image:` under `apps/` and `infrastructure/` | `kubernetes` manager |
+| k3s | `version:` in both upgrade Plans (below) | `# renovate:` comment |
+| local-path-provisioner, system-upgrade-controller | Release URLs in their `kustomization.yaml` | `# renovate:` comment |
+| Gateway API CRDs | Applied by hand (5.1) | Not tracked: they follow Cilium, see below |
+| Your own images (`ghcr.io/ejsadiarin/*`) | `sha-` tags in `apps/coregateway/` | Not tracked: see below |
+
+A `# renovate:` comment goes on the line directly above a version that no
+manager understands on its own, and names where to look for releases:
+
+```yaml
+# renovate: datasource=github-releases depName=k3s-io/k3s
+version: v1.36.6+k3s1
+```
+
+### Renovate
+
+Install the hosted Renovate GitHub app on `core-infra` (no token to keep).
+`renovate.json` at the repo root:
 
 ```json
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "flux": {"managerFilePatterns": ["/\\.ya?ml$/"]},
-  "kubernetes": {"managerFilePatterns": ["/^apps/.+\\.ya?ml$/"]},
+  "schedule": ["before 9am on saturday"],
+  "minimumReleaseAge": "3 days",
+  "flux": {"managerFilePatterns": ["/^(clusters|infrastructure|apps)/.+\\.ya?ml$/"]},
+  "kubernetes": {"managerFilePatterns": ["/^(infrastructure|apps)/.+\\.ya?ml$/"]},
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Versions marked with a # renovate: comment on the line above",
+      "managerFilePatterns": ["/^(clusters|infrastructure|apps)/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[^\\n]*?(?<currentValue>v\\d+\\.\\d+\\.\\d+(?:\\+k3s\\d+)?)"
+      ]
+    }
+  ],
   "packageRules": [
     {"matchUpdateTypes": ["major"], "dependencyDashboardApproval": true},
-    {"matchPackageNames": ["cilium", "longhorn"], "groupName": "storage-and-network", "automerge": false}
+    {"matchPackageNames": ["ghcr.io/ejsadiarin/**"], "enabled": false},
+    {
+      "matchPackageNames": ["k3s-io/k3s"],
+      "versioning": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\+k3s(?<build>\\d+)$"
+    },
+    {
+      "matchPackageNames": ["k3s-io/k3s"],
+      "matchUpdateTypes": ["minor"],
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": ["Kubernetes minor: check Cilium compatibility and run pluto first (homelab-k3s.md section 19)."]
+    },
+    {
+      "matchPackageNames": ["cilium", "longhorn", "k3s-io/k3s"],
+      "separateMultipleMinor": true
+    },
+    {
+      "matchPackageNames": ["cilium", "longhorn"],
+      "prBodyNotes": ["Read this version's upgrade notes before merging. One minor at a time."]
+    },
+    {
+      "matchPackageNames": ["immich"],
+      "prBodyNotes": ["Before merging: immich-k3s-backup-restore.md section 4."]
+    }
   ]
 }
 ```
 
-Every bump is a pull request. Merge one component at a time and watch
-`flux get helmreleases -A`. Longhorn supports upgrading one minor at a time
-only; Cilium the same. Read both upgrade notes before merging.
+What each part does:
 
-Your own images are bumped by editing the `sha-` tag in `apps/coregateway/`
-after running migrations (15.6).
+- **Saturday, 3 days old.** Pull requests arrive in one weekly batch, and only
+  for releases that have been out three days, so a broken release is usually
+  pulled or patched before you see it.
+- **Majors** wait until you tick them in the Dependency Dashboard issue.
+- **`separateMultipleMinor`** on Cilium, Longhorn and k3s: when one falls two
+  minors behind, you get one pull request per minor instead of a single jump.
+  All three only support upgrading one minor at a time.
+- **No grouping.** Every component gets its own pull request, so a failure
+  points at one change and reverts cleanly.
+- **`prBodyNotes`** puts the matching runbook step in the pull request body.
+- The `-alpine` style suffixes on image tags need nothing: Renovate keeps the
+  suffix and compares the version in front of it.
+
+### Merging
+
+One pull request at a time:
+
+```sh
+gh pr merge <n> --squash          # or merge in the browser
+flux reconcile kustomization infra-controllers --with-source   # or apps
+flux get helmreleases -A          # the bumped release is Ready
+kubectl get pods -A | grep -v Running | grep -v Completed
+```
+
+If it breaks, revert the pull request and Flux rolls the chart back.
+
+**Cilium.** A Cilium minor can change the Gateway API version its docs name.
+If it does, rerun 5.1 with the new `GWAPI` before merging the Cilium bump, and
+update the pinned-versions table.
+
+**Your own images.** Renovate ignores `ghcr.io/ejsadiarin/*`. Bump the `sha-`
+tag by hand after the migrations in 15.6. Flux image automation is not used
+on purpose: it would roll out an image before its migrations run. Revisit once
+the migration Jobs from section 20 exist.
 
 ### k3s: system-upgrade-controller
+
+`infrastructure/controllers/system-upgrade/kustomization.yaml`:
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  # renovate: datasource=github-releases depName=rancher/system-upgrade-controller
+  - https://github.com/rancher/system-upgrade-controller/releases/download/v0.21.0/crd.yaml
+  # renovate: datasource=github-releases depName=rancher/system-upgrade-controller
+  - https://github.com/rancher/system-upgrade-controller/releases/download/v0.21.0/system-upgrade-controller.yaml
+```
 
 `infrastructure/configs/k3s-upgrade.yaml`:
 
@@ -2221,6 +2351,7 @@ metadata:
 spec:
   concurrency: 1
   cordon: true
+  # renovate: datasource=github-releases depName=k3s-io/k3s
   version: v1.36.6+k3s1
   serviceAccountName: system-upgrade
   nodeSelector:
@@ -2237,6 +2368,7 @@ metadata:
 spec:
   concurrency: 1
   cordon: true
+  # renovate: datasource=github-releases depName=k3s-io/k3s
   version: v1.36.6+k3s1
   serviceAccountName: system-upgrade
   nodeSelector:
@@ -2249,8 +2381,31 @@ spec:
     image: rancher/k3s-upgrade
 ```
 
-To upgrade, change `version` in both plans and push. Order for a minor bump:
-check Cilium's compatibility table, upgrade Cilium if needed, then k3s.
+Renovate bumps both Plans in one pull request. Release candidates
+(`-rc1+k3s1`) do not match the versioning pattern and are never offered.
+
+**Patch** (`v1.36.6` → `v1.36.7`): merge it.
+
+**Minor** (`v1.36` → `v1.37`): it waits in the Dependency Dashboard. Before
+ticking it:
+
+1. Check Cilium's compatibility table
+   (<https://docs.cilium.io/en/stable/network/kubernetes/compatibility/>). If
+   the running Cilium does not support the new minor, merge a Cilium bump
+   first.
+2. Find APIs the new version removes, in Git and in the live releases:
+
+   ```sh
+   TARGET=v1.37.0
+   pluto detect-files -d ~/services --target-versions k8s=$TARGET
+   pluto detect-helm -o wide --target-versions k8s=$TARGET
+   ```
+
+   Anything listed as removed gets fixed (usually a chart bump) before the k3s
+   pull request is merged.
+3. Tick the update in the dashboard, merge, and watch
+   `kubectl get nodes -w`: `core-1` upgrades first, then `core-2`.
+
 
 ### Debian
 
