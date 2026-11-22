@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  ArrowLeftRight,
   BanknoteArrowUp,
   BellRing,
   ChevronDown,
@@ -59,6 +60,7 @@ import { formatPeso } from "@/lib/format";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
 import { useTouchDevice } from "@/hooks/use-touch-device";
 import { useAuth } from "@/contexts/auth-context";
+import { ExchangeDialog } from "@/components/exchange/exchange-compare";
 import { AttachmentGrid, AttachmentViewer, UploadTray } from "./attachments";
 import { useUploads } from "./use-uploads";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
@@ -492,6 +494,7 @@ export default function FeedPage() {
   const [reminderDialog, setReminderDialog] = useState<ReminderDialogState | null>(null);
   const [cardDialog, setCardDialog] = useState<CardDialogState | null>(null);
   const [budgetDialog, setBudgetDialog] = useState<BudgetDialogState | null>(null);
+  const [exchangeOpen, setExchangeOpen] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -981,7 +984,7 @@ export default function FeedPage() {
           {status}
         </p>
         {status && <p className="pb-2 text-sm text-muted-foreground">{status}</p>}
-        <div className="flex gap-2 pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           <Button
             type="button"
             variant="outline"
@@ -1008,6 +1011,16 @@ export default function FeedPage() {
           >
             <Wallet className="h-4 w-4" aria-hidden />
             Budget
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            aria-label="Exchange rates"
+            onClick={() => setExchangeOpen(true)}
+          >
+            <ArrowLeftRight className="h-4 w-4" aria-hidden />
+            FX
           </Button>
         </div>
         <UploadTray
@@ -1071,6 +1084,7 @@ export default function FeedPage() {
         onClose={() => setCardDialog(null)}
         onSaved={() => recordSaved(cardDialog?.note === "new")}
       />
+      <ExchangeDialog open={exchangeOpen} onOpenChange={setExchangeOpen} />
       <BudgetDialog
         state={budgetDialog}
         onClose={() => setBudgetDialog(null)}
