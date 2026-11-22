@@ -43,9 +43,20 @@ server {
         try_files /index.html =404;
     }
 
-    # SPA fallback
+    # SPA fallback. The shell, worker and manifest must revalidate on every
+    # load, or a phone keeps running the old build after a deploy.
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+
+    location = /manifest.webmanifest {
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache";
     }
 
     # Cache static assets

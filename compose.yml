@@ -21,6 +21,19 @@ services:
       # plain `docker compose` still works and still never reaches the LAN.
       - "127.0.0.1:3000:80"
       - "${TAILSCALE_IP:-127.0.0.2}:3000:80"
+    # HTTPS on the tailnet through the homelab Traefik (~/services/traefik),
+    # which holds the *.local.ejsadiarin.com wildcard cert. The PWA needs a
+    # secure origin: service worker, install, and the Android share target.
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.core.entrypoints=https
+      - traefik.http.routers.core.rule=Host(`core.local.ejsadiarin.com`)
+      - traefik.http.routers.core.tls=true
+      - traefik.http.services.core.loadbalancer.server.port=80
+      - traefik.docker.network=proxy
+    networks:
+      - default
+      - proxy
     depends_on:
       - coregateway-api
       - corefinance-api
@@ -148,3 +161,8 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
+
+networks:
+  # Traefik's network, created by the homelab Traefik stack.
+  proxy:
+    external: true

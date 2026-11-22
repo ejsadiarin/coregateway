@@ -1,10 +1,23 @@
-// Minimal service worker: offline app shell, network-only API.
-// Bump VERSION to force clients onto fresh assets.
-const VERSION = "core-v3";
+// Service worker: offline app shell, network-only API.
+// - Page loads go to the network first, so a deploy shows up on the next
+//   open; offline, any route gets the cached shell (the SPA routes itself).
+// - /assets/ is content-hashed: cache first, it never changes.
+// - Everything else same-origin, and Google Fonts: cached copy at once,
+//   refreshed in the background.
+// Bump VERSION to drop every cached file (old hashed assets pile up until then).
+const VERSION = "core-v4";
+const FONT_ORIGINS = ["https://fonts.googleapis.com", "https://fonts.gstatic.com"];
 // Files shared from another app, waiting for the Feed to pick them up.
 // Kept apart from VERSION so an update never drops them.
 const SHARED = "core-shared-files";
-const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"];
+const APP_SHELL = [
+  "/",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/icon-192.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -76,29 +89,69 @@ async function keepFiles(files) {
   return id;
 }
 
+function cachePut(request, res) {
+  // Opaque (no-cors) font responses report status 0 but are fine to keep.
+  if (res.ok || res.type === "opaque") {
+    const copy = res.clone();
+    caches.open(VERSION).then((c) => c.put(request, copy));
+  }
+  return res;
+}
+
+function networkFirstPage(request) {
+  return fetch(request)
+    .then((res) => {
+      if (res.ok) cachePut("/index.html", res.clone());
+      return res;
+    })
+    .catch(() => caches.match("/index.html").then((hit) => hit || Response.error()));
+}
+
+function cacheFirst(request) {
+  return caches.match(request).then((hit) => hit || fetch(request).then((res) => cachePut(request, res)));
+}
+
+function staleWhileRevalidate(event) {
+  const { request } = event;
+  return caches.match(request).then((hit) => {
+    const net = fetch(request)
+      .then((res) => cachePut(request, res))
+      .catch(() => hit || Response.error());
+    if (hit) {
+      event.waitUntil(net.catch(() => {}));
+      return hit;
+    }
+    return net;
+  });
+}
+
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  if (event.request.method === "POST" && url.origin === self.location.origin && url.pathname === "/share") {
-    event.respondWith(takeShare(event.request));
+  const { request } = event;
+  const url = new URL(request.url);
+  if (request.method === "POST" && url.origin === self.location.origin && url.pathname === "/share") {
+    event.respondWith(takeShare(request));
     return;
   }
-  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (request.method !== "GET") return;
+  if (FONT_ORIGINS.includes(url.origin)) {
+    event.respondWith(staleWhileRevalidate(event));
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api")) return; // auth API: never cache
   // A share (manifest share_target) carries its content in the query:
   // never cache one, but open the app offline so it can say so and retry.
   if (url.pathname === "/share") {
-    event.respondWith(fetch(event.request).catch(() => caches.match("/index.html")));
+    event.respondWith(fetch(request).catch(() => caches.match("/index.html")));
     return;
   }
-  event.respondWith(
-    caches.match(event.request).then((hit) => {
-      const net = fetch(event.request)
-        .then((res) => {
-          if (res.ok) caches.open(VERSION).then((c) => c.put(event.request, res.clone()));
-          return res;
-        })
-        .catch(() => hit);
-      return hit || net;
-    }),
-  );
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirstPage(request));
+    return;
+  }
+  if (url.pathname.startsWith("/assets/")) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+  event.respondWith(staleWhileRevalidate(event));
 });

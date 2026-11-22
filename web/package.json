@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "icons:gen": "node scripts/gen-icon-sprite.mjs",
+    "icons:pwa": "node scripts/gen-pwa-icons.mjs",
     "e2e": "playwright test",
     "perf:draw": "node scripts/measure-draw-frame-times.mjs"
   },

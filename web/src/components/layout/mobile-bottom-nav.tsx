@@ -121,7 +121,7 @@ function OverflowMenu({
           {/* menu panel */}
           <motion.div
             className={cn(
-              "fixed bottom-20 left-4 right-4 z-50",
+              "fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50",
               "rounded-xl border border-sidebar-border bg-sidebar/95 backdrop-blur-xl",
               "shadow-2xl shadow-black/40",
               "p-2",
@@ -251,7 +251,6 @@ export function MobileBottomNav() {
           "fixed bottom-0 left-0 right-0 z-50 md:hidden",
           "border-t border-sidebar-border/80",
           "bg-sidebar/90 backdrop-blur-xl",
-          "safe-area-bottom",
         )}
         initial={{ y: 60 }}
         animate={{ y: 0 }}

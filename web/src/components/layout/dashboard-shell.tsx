@@ -29,7 +29,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           key={pathname}
           className={cn(
             "flex-1 overflow-y-auto",
-            isDrawEditor ? "min-h-0 max-md:overflow-hidden max-md:pb-0" : "pb-16 md:pb-0",
+            isDrawEditor ? "min-h-0 max-md:overflow-hidden max-md:pb-0" : "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
           )}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
