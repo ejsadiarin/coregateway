@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from "react";
 import type { User, UserRole } from "@/types/api";
 import * as api from "@/lib/api";
 
@@ -29,12 +29,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    const retry = useRef<{ timer?: ReturnType<typeof setTimeout>; attempt: number }>({ attempt: 0 });
+
+    // refreshUser resolves once the session is known. Only the gateway saying
+    // 401 signs the owner out; a failed check (offline, gateway or database
+    // waking up) keeps whoever was signed in and tries again with backoff.
     const refreshUser = useCallback(async () => {
-        try {
-            const currentUser = await api.fetchCurrentUser();
-            setUser(currentUser);
-        } catch {
-            setUser(null);
+        clearTimeout(retry.current.timer);
+        for (;;) {
+            try {
+                setUser(await api.fetchCurrentUser());
+                retry.current.attempt = 0;
+                return;
+            } catch {
+                const wait = api.sessionRetryDelay(retry.current.attempt++);
+                await new Promise<void>((resolve) => {
+                    retry.current.timer = setTimeout(resolve, wait);
+                });
+            }
         }
     }, []);
 
@@ -72,6 +84,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
         };
         initAuth();
+        // Back online: check now rather than waiting out the backoff.
+        const recheck = () => {
+            retry.current.attempt = 0;
+            void refreshUser();
+        };
+        window.addEventListener("online", recheck);
+        return () => {
+            window.removeEventListener("online", recheck);
+            clearTimeout(retry.current.timer);
+        };
     }, [refreshUser]);
 
     return (

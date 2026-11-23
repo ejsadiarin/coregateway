@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
@@ -35,9 +37,16 @@ func AuthMiddleware(svc *Service) func(http.Handler) http.Handler {
 			}
 
 			user, err := svc.GetSessionUser(r.Context(), token)
-			if err != nil {
+			if errors.Is(err, ErrSessionInvalid) {
 				session.ClearCookie(w)
 				next.ServeHTTP(w, r)
+				return
+			}
+			if err != nil {
+				// The session may be fine; the lookup failed. Keep the
+				// cookie and let the client retry rather than signing out.
+				slog.Error("auth.AuthMiddleware: session lookup failed", "error", err)
+				helper.RespondErrorJSON(w, http.StatusServiceUnavailable, "Session check unavailable, try again")
 				return
 			}
 

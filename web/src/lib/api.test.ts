@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  fetchCurrentUser,
   isRateUnavailableError,
   isUnknownCategoryError,
   isUnsupportedCurrencyError,
+  sessionRetryDelay,
   throwApiError,
 } from "./api";
 
@@ -62,5 +64,35 @@ describe("throwApiError", () => {
     const error = await throwApiError(res, "Error creating expense: 500").catch((e: unknown) => e);
 
     expect(error).toMatchObject({ status: 500, detail: "Error creating expense: 500" });
+  });
+});
+
+describe("sessionRetryDelay", () => {
+  it("backs off from 1s, doubling, capped at 15s", () => {
+    expect([0, 1, 2, 3, 4, 10].map(sessionRetryDelay)).toEqual([1000, 2000, 4000, 8000, 15000, 15000]);
+  });
+});
+
+describe("fetchCurrentUser", () => {
+  const respond = (status: number, body: unknown = {}) =>
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify(body), { status }));
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("is null only when the gateway says the session is gone", async () => {
+    respond(401);
+    await expect(fetchCurrentUser()).resolves.toBeNull();
+  });
+
+  it("throws, not signs out, when the check itself fails", async () => {
+    respond(503);
+    await expect(fetchCurrentUser()).rejects.toThrow();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(fetchCurrentUser()).rejects.toThrow("Failed to fetch");
+  });
+
+  it("returns the signed-in user", async () => {
+    respond(200, { id: "u1", email: "owner@example.com", role: "admin" });
+    await expect(fetchCurrentUser()).resolves.toMatchObject({ id: "u1" });
   });
 });

@@ -162,14 +162,25 @@ export async function logout(): Promise<void> {
   }
 }
 
-export async function fetchCurrentUser(): Promise<User> {
+// fetchCurrentUser answers who is signed in: the user, or null only when the
+// gateway says the session is gone (401). Anything else (no network while a
+// phone wakes and Tailscale reconnects, the gateway restarting, the database
+// waking up) throws, so the caller retries instead of signing the owner out.
+export async function fetchCurrentUser(): Promise<User | null> {
   const res = await fetch(url + '/api/auth/me', {
     credentials: 'include'
   });
+  if (res.status === 401) return null;
   if (!res.ok) {
-    throw new Error('Not authenticated');
+    throw new ApiError(res.status, 'Session check failed');
   }
   return res.json();
+}
+
+// sessionRetryDelay is how long to wait before checking the session again
+// after the check itself failed: 1s, 2s, 4s… up to 15s.
+export function sessionRetryDelay(attempt: number): number {
+  return Math.min(15000, 1000 * 2 ** Math.max(0, attempt));
 }
 
 export async function demoLogin(): Promise<User> {

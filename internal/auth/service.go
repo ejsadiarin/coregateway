@@ -9,9 +9,9 @@ import (
 
 	"github.com/ejsadiarin/coregateway/internal/crypto"
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
-	usertypes "github.com/ejsadiarin/coregateway/internal/user/v1"
 	"github.com/ejsadiarin/coregateway/internal/session"
 	"github.com/ejsadiarin/coregateway/internal/timezone"
+	usertypes "github.com/ejsadiarin/coregateway/internal/user/v1"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -118,15 +118,27 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return s.queries.DeleteSessionByTokenHash(ctx, tokenHash)
 }
 
+// ErrSessionInvalid means the session token is unknown, expired, or its user
+// is gone: the client is signed out. Any other GetSessionUser error is the
+// lookup itself failing (database waking up or unreachable), which must not
+// sign anyone out.
+var ErrSessionInvalid = errors.New("invalid or expired session")
+
 func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.User, error) {
 	slog.Debug("auth.Service.GetSessionUser")
 	tokenHash := crypto.HashSessionToken(token)
 	session, err := s.queries.GetSessionByTokenHash(ctx, tokenHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrSessionInvalid
+	}
 	if err != nil {
-		return nil, fmt.Errorf("invalid or expired session: %w", err)
+		return nil, fmt.Errorf("look up session: %w", err)
 	}
 
 	user, err := s.queries.GetUser(ctx, session.UserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrSessionInvalid
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
