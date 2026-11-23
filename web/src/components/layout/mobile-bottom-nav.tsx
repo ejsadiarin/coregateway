@@ -73,11 +73,7 @@ function NavButton({
       )}
     >
       {isActive && (
-        <motion.div
-          className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary"
-          layoutId="mobile-nav-indicator"
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary" />
       )}
       <item.icon className={cn(
         "h-5 w-5 shrink-0",
@@ -111,7 +107,7 @@ function OverflowMenu({
         <>
           {/* backdrop */}
           <motion.div
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -122,7 +118,7 @@ function OverflowMenu({
           <motion.div
             className={cn(
               "fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-4 right-4 z-50",
-              "rounded-xl border border-sidebar-border bg-sidebar/95 backdrop-blur-xl",
+              "rounded-xl border border-sidebar-border bg-sidebar",
               "shadow-2xl shadow-black/40",
               "p-2",
             )}
@@ -250,18 +246,14 @@ export function MobileBottomNav() {
         className={cn(
           "fixed bottom-0 left-0 right-0 z-50 md:hidden",
           "border-t border-sidebar-border/80",
-          "bg-sidebar/90 backdrop-blur-xl",
+          "bg-sidebar",
         )}
         initial={{ y: 60 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
       >
         {/* subtle top glow line */}
-        <motion.div
-          className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent"
-          animate={{ opacity: [0.3, 0.6, 0.3] }}
-          transition={{ duration: 4, repeat: Infinity }}
-        />
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-50" />
 
         <div className="flex items-stretch h-14 px-1">
           {primaryItems.map((item) => (
@@ -285,11 +277,7 @@ export function MobileBottomNav() {
             )}
           >
             {isOverflowActive && !isOverflowOpen && (
-              <motion.div
-                className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary"
-                layoutId="mobile-nav-indicator"
-                transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary" />
             )}
             <MoreHorizontal className={cn(
               "h-5 w-5 shrink-0",

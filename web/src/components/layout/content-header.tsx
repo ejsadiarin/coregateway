@@ -81,7 +81,7 @@ export function ContentHeader() {
 
   return (
     <motion.header
-      className="sticky top-0 z-30 flex items-center justify-between border-b border-border/50 bg-background/60 backdrop-blur-lg px-4 md:px-6 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-6 md:pr-6"
+      className="sticky top-0 z-30 flex items-center justify-between border-b border-border/50 bg-background px-4 md:px-6 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-6 md:pr-6"
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
