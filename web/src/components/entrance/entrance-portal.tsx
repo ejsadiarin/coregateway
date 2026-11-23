@@ -3,11 +3,18 @@ import { Server, Zap, Shield, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Particles } from "@/components/ui/particles";
 import { themeMeta, useTheme } from "@/lib/theme";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/auth-context";
 
 export function EntrancePortal() {
   const navigate = useNavigate();
   const [theme] = useTheme();
+  const { isAuthenticated, isGuest } = useAuth();
+
+  // Opening the bare address while signed in goes straight to the
+  // dashboard; showing the login button here made a live session look
+  // signed out. The demo guest stays, so it can sign in as the owner.
+  if (isAuthenticated && !isGuest) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="relative min-h-dvh flex items-center justify-center overflow-hidden">

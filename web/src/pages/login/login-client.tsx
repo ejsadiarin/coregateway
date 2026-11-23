@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login, demoLogin } = useAuth();
+  const { login, demoLogin, isAuthenticated, isGuest, user } = useAuth();
   const navigate = useNavigate();
   // Back to the page that sent the reader here (a share, say), else the
   // dashboard; it takes login's place, so Back never returns to the form.
@@ -106,6 +106,17 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             </motion.div>
+          )}
+
+          {/* Already signed in (an old tab or bookmark on /login): say so and
+              offer the way back, while the form stays for switching account. */}
+          {isAuthenticated && !isGuest && !error && (
+            <div className="mb-6 rounded-md border border-border px-4 py-3 text-sm">
+              You're already signed in as <span className="font-medium">{user?.email}</span>.{" "}
+              <Link to={next} replace className="text-primary underline underline-offset-2">
+                Go to the dashboard
+              </Link>
+            </div>
           )}
 
           {/* Login Form */}
