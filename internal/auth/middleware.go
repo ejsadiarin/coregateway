@@ -36,7 +36,7 @@ func AuthMiddleware(svc *Service) func(http.Handler) http.Handler {
 				return
 			}
 
-			user, err := svc.GetSessionUser(r.Context(), token)
+			user, renewed, err := svc.GetSessionUser(r.Context(), token)
 			if errors.Is(err, ErrSessionInvalid) {
 				session.ClearCookie(w)
 				next.ServeHTTP(w, r)
@@ -48,6 +48,10 @@ func AuthMiddleware(svc *Service) func(http.Handler) http.Handler {
 				slog.Error("auth.AuthMiddleware: session lookup failed", "error", err)
 				helper.RespondErrorJSON(w, http.StatusServiceUnavailable, "Session check unavailable, try again")
 				return
+			}
+			if renewed > 0 {
+				// Sliding expiry: the cookie follows the extended session.
+				session.SetCookie(w, token, renewed)
 			}
 
 			id, _ := uuid.Parse(user.Id)

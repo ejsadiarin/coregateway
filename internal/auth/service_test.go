@@ -37,6 +37,8 @@ func (m *mockQuerier) CreateSession(ctx context.Context, arg sqlc.CreateSessionP
 	}
 	return sqlc.CoregatewaySession{}, nil
 }
+func (m *mockQuerier) ExtendSession(context.Context, sqlc.ExtendSessionParams) error { return nil }
+
 func (m *mockQuerier) DeleteSessionByTokenHash(_ context.Context, tokenHash string) error {
 	if m.deleteSessionByHashFn != nil {
 		return m.deleteSessionByHashFn(context.Background(), tokenHash)

@@ -76,10 +76,11 @@ func (m *mockQuerier) CreateSession(context.Context, sqlc.CreateSessionParams) (
 func (m *mockQuerier) CreateUser(context.Context, sqlc.CreateUserParams) (sqlc.CoregatewayUser, error) {
 	return sqlc.CoregatewayUser{}, nil
 }
-func (m *mockQuerier) DeleteExpiredSessions(context.Context) error            { return nil }
-func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error         { return nil }
-func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error { return nil }
-func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error            { return nil }
+func (m *mockQuerier) DeleteExpiredSessions(context.Context) error                   { return nil }
+func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error                { return nil }
+func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error        { return nil }
+func (m *mockQuerier) ExtendSession(context.Context, sqlc.ExtendSessionParams) error { return nil }
+func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error                   { return nil }
 func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
 	return arg.Timezone, nil
 }

@@ -88,10 +88,11 @@ func (m *mockQuerier) CreateService(context.Context, sqlc.CreateServiceParams) (
 func (m *mockQuerier) CreateSession(context.Context, sqlc.CreateSessionParams) (sqlc.CoregatewaySession, error) {
 	return sqlc.CoregatewaySession{}, nil
 }
-func (m *mockQuerier) DeleteExpiredSessions(context.Context) error            { return nil }
-func (m *mockQuerier) DeleteService(context.Context, uuid.UUID) error         { return nil }
-func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error         { return nil }
-func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error { return nil }
+func (m *mockQuerier) DeleteExpiredSessions(context.Context) error                   { return nil }
+func (m *mockQuerier) DeleteService(context.Context, uuid.UUID) error                { return nil }
+func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error                { return nil }
+func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error        { return nil }
+func (m *mockQuerier) ExtendSession(context.Context, sqlc.ExtendSessionParams) error { return nil }
 func (m *mockQuerier) GetAllServicesStats(context.Context) (sqlc.GetAllServicesStatsRow, error) {
 	return sqlc.GetAllServicesStatsRow{}, nil
 }

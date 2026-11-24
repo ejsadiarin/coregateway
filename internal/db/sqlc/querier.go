@@ -29,6 +29,7 @@ type Querier interface {
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
+	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
 	GetAllServicesStats(ctx context.Context) (GetAllServicesStatsRow, error)
 	GetApiKeyByHash(ctx context.Context, keyHash string) (CoregatewayApiKey, error)
 	GetService(ctx context.Context, id uuid.UUID) (CoregatewayService, error)

@@ -146,6 +146,22 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID uuid.UUID) erro
 	return err
 }
 
+const extendSession = `-- name: ExtendSession :exec
+UPDATE coregateway.sessions
+SET expires_at = $2
+WHERE id = $1 AND expires_at > NOW()
+`
+
+type ExtendSessionParams struct {
+	ID        uuid.UUID        `json:"id"`
+	ExpiresAt pgtype.Timestamp `json:"expires_at"`
+}
+
+func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) error {
+	_, err := q.db.Exec(ctx, extendSession, arg.ID, arg.ExpiresAt)
+	return err
+}
+
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
 SELECT s.id, s.user_id, s.token_hash, s.expires_at, s.created_at, u.email, u.role
 FROM coregateway.sessions s

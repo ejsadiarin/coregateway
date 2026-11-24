@@ -60,6 +60,11 @@ JOIN coregateway.users u ON s.user_id = u.id
 WHERE s.token_hash = $1 AND s.expires_at > NOW()
 LIMIT 1;
 
+-- name: ExtendSession :exec
+UPDATE coregateway.sessions
+SET expires_at = $2
+WHERE id = $1 AND expires_at > NOW();
+
 -- name: DeleteSession :exec
 DELETE FROM coregateway.sessions
 WHERE id = $1;

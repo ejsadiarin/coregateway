@@ -124,23 +124,66 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 // sign anyone out.
 var ErrSessionInvalid = errors.New("invalid or expired session")
 
-func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.User, error) {
+// sessionRenewEvery throttles sliding expiry: a session in use is pushed
+// forward at most this often, so browsing doesn't write on every request.
+const sessionRenewEvery = time.Hour
+
+// sessionRenewal decides whether a session that expires at expiresAt should
+// be extended at now, and to when. A session lasts its window from its last
+// use. Only a "Remember me" session can have more than SessionExpiry left, so
+// the time left tells the window without storing it.
+func sessionRenewal(expiresAt, now time.Time) (time.Time, time.Duration, bool) {
+	left := expiresAt.Sub(now)
+	window := session.SessionExpiry
+	if left > session.SessionExpiry {
+		window = session.RememberMeExpiry
+	}
+	if window-left < sessionRenewEvery {
+		return time.Time{}, 0, false
+	}
+	return now.Add(window), window, true
+}
+
+// wallClock reads t's local wall clock as UTC. sessions.expires_at is a
+// timestamp without time zone, written from the local wall clock (pgx drops
+// the zone) and read back labelled UTC, so comparisons use the same reading.
+func wallClock(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+}
+
+// GetSessionUser returns the session's user and, when the session was just
+// extended, the cookie lifetime to send back (zero otherwise).
+func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.User, time.Duration, error) {
 	slog.Debug("auth.Service.GetSessionUser")
 	tokenHash := crypto.HashSessionToken(token)
 	session, err := s.queries.GetSessionByTokenHash(ctx, tokenHash)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrSessionInvalid
+		return nil, 0, ErrSessionInvalid
 	}
 	if err != nil {
-		return nil, fmt.Errorf("look up session: %w", err)
+		return nil, 0, fmt.Errorf("look up session: %w", err)
 	}
 
 	user, err := s.queries.GetUser(ctx, session.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrSessionInvalid
+		return nil, 0, ErrSessionInvalid
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, 0, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	var renewed time.Duration
+	if expiresAt, window, due := sessionRenewal(session.ExpiresAt.Time, wallClock(time.Now())); due {
+		err := s.queries.ExtendSession(ctx, db.ExtendSessionParams{
+			ID:        session.ID,
+			ExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
+		})
+		if err != nil {
+			// The session is still good until its old expiry.
+			slog.Warn("auth.Service.GetSessionUser: extend session failed", "error", err)
+		} else {
+			renewed = window
+		}
 	}
 
 	return &usertypes.User{
@@ -148,7 +191,7 @@ func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.
 		Email:     user.Email,
 		Role:      user.Role,
 		CreatedAt: user.CreatedAt.Time.Format(time.RFC3339),
-	}, nil
+	}, renewed, nil
 }
 
 // UserRecord is what the gateway needs to know about a user to mint their
