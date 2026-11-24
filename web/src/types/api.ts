@@ -108,6 +108,9 @@ export interface Expense {
     rate_date?: string;
     category_id?: string;
     expense_date: string;
+    // When it happened (corefinance#28): a UTC moment, or null for a record
+    // without a time.
+    occurred_at?: string | null;
     notes?: string;
     priority: "need" | "want" | "savings";
     status: "pending" | "posted" | "skipped";
@@ -133,6 +136,8 @@ export interface CreateExpenseRequest {
     currency: string;
     category_id?: string;
     expense_date: string;
+    // HH:mm in the owner's timezone; omit for no time (corefinance#28).
+    time?: string;
     notes?: string;
     priority: "need" | "want" | "savings";
     status: "pending" | "posted" | "skipped";
@@ -146,6 +151,8 @@ export interface UpdateExpenseRequest {
     currency?: string;
     category_id?: string;
     expense_date?: string;
+    // HH:mm in the owner's timezone; omit for no time (corefinance#28).
+    time?: string;
     notes?: string;
     priority?: "need" | "want" | "savings";
     status?: "pending" | "posted" | "skipped";
@@ -187,6 +194,7 @@ export interface Income {
     amount_php?: string | number;
     rate_date?: string;
     date: string;
+    occurred_at?: string | null;
     description?: string;
     category_id?: string;
     notes?: string;
@@ -237,6 +245,8 @@ export interface CreateIncomeRequest {
     amount: number;
     currency: string;
     date: string;
+    // HH:mm in the owner's timezone; omit for no time (corefinance#28).
+    time?: string;
     description?: string;
     category_id?: string;
     notes?: string;
@@ -249,6 +259,8 @@ export interface UpdateIncomeRequest {
     amount?: number;
     currency?: string;
     date?: string;
+    // HH:mm in the owner's timezone; omit for no time (corefinance#28).
+    time?: string;
     description?: string;
     category_id?: string;
     notes?: string;

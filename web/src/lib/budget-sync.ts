@@ -25,19 +25,22 @@ export interface SyncResult {
   moved: number;
 }
 
-// budgetPostedAt is where a record's note sits in the Feed: when the record
-// was entered, if that was on its own date, otherwise local noon of its
-// date.
-export function budgetPostedAt(date: string, createdAt: string): string {
+// budgetPostedAt is where a record's note sits in the Feed: when it
+// happened, if it has a time on its own date here; else when it was
+// entered, if that was on its own date; otherwise local noon of its date.
+// coreban refuses a posted_at off the record's date, so a time that reads
+// as another day here (the owner travelling) falls back too.
+export function budgetPostedAt(date: string, createdAt: string, occurredAt?: string | null): string {
   const day = new Date(`${date}T12:00:00`);
-  const created = new Date(createdAt);
-  const at = isSameDay(created, day) ? created : day;
+  const at = [occurredAt, createdAt]
+    .map((t) => (t ? new Date(t) : undefined))
+    .find((t) => t && isSameDay(t, day)) ?? day;
   return format(at, "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
 
 export function syncRecordOf(kind: BudgetKind, r: Expense | Income): SyncRecord {
   const date = ("expense_date" in r ? r.expense_date : r.date).slice(0, 10);
-  return { kind, id: r.id, date, posted_at: budgetPostedAt(date, r.created_at) };
+  return { kind, id: r.id, date, posted_at: budgetPostedAt(date, r.created_at, r.occurred_at) };
 }
 
 // notYet tells a record dated after today: its note waits for its date,

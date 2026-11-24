@@ -18,6 +18,7 @@ import {
   byCategory,
   byMonth,
   cadenceLabel,
+  clockOf,
   counted,
   ended,
   money,
@@ -488,12 +489,18 @@ function CategoryOption({ category, on, count, onPick }: { category: Category; o
 
 function EntryRow({ entry, category, tags, rule, onOpen }: { entry: Entry; category?: Category; tags: Tag[]; rule?: Rule; onOpen: () => void }) {
   const skipped = entry.status === "skipped";
+  const clock = clockOf(entry.occurredAt);
   return (
     <button type="button" onClick={onOpen} className={cn("flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-foreground/[0.03]", skipped && "opacity-55")}>
       <CategoryBadge category={category} />
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="flex min-w-0 items-baseline gap-2">
           <span className="truncate text-[15px] font-medium text-foreground">{entry.description || "(no description)"}</span>
+          {clock && (
+            <time dateTime={entry.occurredAt} className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">
+              {clock}
+            </time>
+          )}
           {entry.notes && <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground md:inline">{entry.notes}</span>}
         </span>
         <span className="flex flex-wrap gap-1.5">

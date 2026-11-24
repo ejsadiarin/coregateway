@@ -9,12 +9,14 @@ import { useExpenseCategories } from "@/hooks/use-budget";
 import { CategorySelect } from "./category-select";
 import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
 import { todayISODate } from "@/lib/budget-period";
+import { clockOf } from "@/lib/ledger";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import type { CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 
 interface ExpenseFormProps {
-  initialData?: UpdateExpenseRequest & { id?: string };
+  initialData?: UpdateExpenseRequest & { id?: string; occurred_at?: string | null };
   onSubmit: (data: CreateExpenseRequest | UpdateExpenseRequest) => void | Promise<void>;
   onCancel?: () => void;
 }
@@ -24,6 +26,13 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
   const categories = categoriesQuery.data;
 
   const [error, setError] = useState("");
+  // The record's time, as the owner's wall clock in their saved zone (which
+  // corefinance reads it in): a new record starts at now, an edit at the
+  // time it has. An edit always sends it, since one without clears it.
+  const zone = useUserTimezone().data?.timezone;
+  const [time, setTime] = useState(() =>
+    initialData ? (clockOf(initialData.occurred_at ?? undefined, zone) ?? "") : (clockOf(new Date().toISOString(), zone) ?? ""),
+  );
   const [formData, setFormData] = useState<CreateExpenseRequest>({
     description: initialData?.description || "",
     // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
@@ -42,7 +51,7 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
     e.preventDefault();
     setError("");
     try {
-      await onSubmit(formData);
+      await onSubmit({ ...formData, time: time || undefined });
     } catch (err) {
       if (isUnknownCategoryError(err)) {
         await categoriesQuery.refetch();
@@ -140,6 +149,19 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
           value={formData.expense_date}
           onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
         />
+      </div>
+
+      {/* Time (optional) */}
+      <div className="space-y-2">
+        <Label htmlFor="expense_time">Time</Label>
+        <div className="flex gap-2">
+          <Input id="expense_time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          {time && (
+            <Button type="button" variant="ghost" onClick={() => setTime("")}>
+              No time
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Notes */}

@@ -18,13 +18,14 @@ export function EditExpenseDialog({ expense, open, onOpenChange, onSubmit }: Edi
 
   if (!expense) return null;
 
-  const initialData: UpdateExpenseRequest & { id: string } = {
+  const initialData: UpdateExpenseRequest & { id: string; occurred_at?: string | null } = {
     id: expense.id,
     description: expense.description,
     amount: expense.amount,
     currency: expense.currency,
     category_id: expense.category_id,
     expense_date: expense.expense_date,
+    occurred_at: expense.occurred_at,
     notes: expense.notes,
     priority: expense.priority,
     status: expense.status,

@@ -26,6 +26,28 @@ describe("budgetPostedAt", () => {
 });
 
 describe("syncRecordOf", () => {
+  it("puts a timed record's note at its time, whenever it was entered", () => {
+    const at = local("2026-05-05T21:15:00");
+    const e = {
+      id: "e1",
+      expense_date: "2026-05-05",
+      occurred_at: at.toISOString(),
+      created_at: "2026-11-14T08:49:20Z",
+    } as Expense;
+    expect(new Date(syncRecordOf("expense", e).posted_at).getTime()).toBe(at.getTime());
+  });
+
+  it("falls back when the time lands on another day here (read in another timezone)", () => {
+    const e = {
+      id: "e1",
+      expense_date: "2026-05-05",
+      occurred_at: local("2026-05-06T01:00:00").toISOString(),
+      created_at: "2026-11-14T08:49:20Z",
+    } as Expense;
+    const posted = new Date(syncRecordOf("expense", e).posted_at);
+    expect([posted.getDate(), posted.getHours()]).toEqual([5, 12]);
+  });
+
   it("reads an expense's date and an income's date", () => {
     const e = { id: "e1", expense_date: "2026-05-05T00:00:00Z", created_at: "2026-11-14T08:49:20Z" } as Expense;
     const i = { id: "i1", date: "2026-06-02", created_at: "2026-11-14T08:49:20Z" } as Income;

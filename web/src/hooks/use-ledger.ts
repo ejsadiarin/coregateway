@@ -84,6 +84,9 @@ export interface EntryInput {
   amount: number;
   currency: string;
   date: string;
+  // time is when on date it happened, HH:mm in the owner's zone; empty or
+  // absent for no time.
+  time?: string;
   categoryId?: string;
   priority: Priority;
   notes: string;
@@ -95,7 +98,9 @@ export interface EntryInput {
 // TagPick is a tag picked in the sheet: an existing one, or a new name.
 export type TagPick = { id: string; name: string } | { id?: undefined; name: string };
 
-function body(kind: LedgerKind, e: EntryInput) {
+// entryRequest is the create or update body for an entry. An update without
+// a time clears the record's time, so an edit always sends the time it has.
+export function entryRequest(kind: LedgerKind, e: EntryInput) {
   const shared = {
     description: e.description,
     amount: e.amount,
@@ -107,7 +112,10 @@ function body(kind: LedgerKind, e: EntryInput) {
     status: e.status ?? (e.date > today() ? "pending" : "posted"),
     source_rule_id: e.ruleId,
   };
-  return kind === "expense" ? { ...shared, expense_date: e.date, is_debt: false } : { ...shared, date: e.date };
+  const at = e.time ? { time: e.time } : {};
+  return kind === "expense"
+    ? { ...shared, ...at, expense_date: e.date, is_debt: false }
+    : { ...shared, ...at, date: e.date };
 }
 
 // useSaveEntry creates or updates an entry and sets its tags.
@@ -135,14 +143,14 @@ export function useSaveEntry(kind: LedgerKind) {
       // it, not a synced one.
       fromFeed?: boolean;
     }) => {
-      const b = body(kind, input);
+      const b = entryRequest(kind, input);
       let record: Expense | Income;
       if (fromFeed && !id) {
         if (isGuest) throw new GuestBlockedError();
         record = kind === "expense" ? await createExpense(b as Parameters<typeof createExpense>[0]) : await createIncome(b as Parameters<typeof createIncome>[0]);
         qc.invalidateQueries({ queryKey: budgetKeys.all });
       } else if (kind === "expense") {
-        // The cast drops the income-only shape; body() built an expense.
+        // The cast drops the income-only shape; entryRequest() built an expense.
         record = id
           ? await updateE.mutateAsync({ id, data: b as Parameters<typeof updateE.mutateAsync>[0]["data"] })
           : await createE.mutateAsync(b as Parameters<typeof createE.mutateAsync>[0]);

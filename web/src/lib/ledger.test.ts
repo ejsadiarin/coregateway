@@ -7,6 +7,7 @@ import {
   dueDatesWithin,
   canSkip,
   cleanNotes,
+  clockOf,
   ended,
   entryOf,
   hueOf,
@@ -67,6 +68,54 @@ describe("cleanNotes", () => {
     expect(cleanNotes("[backfill:messenger-2026-11] dump L846")).toBe("");
     expect(cleanNotes(undefined)).toBe("");
     expect(cleanNotes("plain note")).toBe("plain note");
+  });
+});
+
+describe("record time", () => {
+  it("reads a record's moment as the wall clock in a zone", () => {
+    const e = entryOf("expense", {
+      id: "e1",
+      description: "late dinner",
+      amount: 250,
+      currency: "PHP",
+      expense_date: "2026-11-24",
+      occurred_at: "2026-11-24T15:30:00Z",
+      priority: "want",
+      status: "posted",
+      is_debt: false,
+      created_at: "2026-11-24T15:31:00Z",
+      updated_at: "2026-11-24T15:31:00Z",
+    });
+    expect(e.occurredAt).toBe("2026-11-24T15:30:00Z");
+    expect(clockOf(e.occurredAt, "Asia/Manila")).toBe("23:30");
+    expect(clockOf(e.occurredAt, "UTC")).toBe("15:30");
+  });
+
+  it("puts timed entries first within a day, latest first, then untimed ones by entry", () => {
+    const untimedFirst = entry({ date: "2026-11-24", createdAt: "2026-11-24T01:00:00Z" });
+    const morning = entry({ date: "2026-11-24", occurredAt: "2026-11-24T00:00:00Z", createdAt: "2026-11-24T02:00:00Z" });
+    const evening = entry({ date: "2026-11-24", occurredAt: "2026-11-24T12:00:00Z", createdAt: "2026-11-24T03:00:00Z" });
+    const untimedLater = entry({ date: "2026-11-24", createdAt: "2026-11-24T04:00:00Z" });
+    const nextDay = entry({ date: "2026-11-25", createdAt: "2026-11-25T01:00:00Z" });
+    const [month] = byMonth([untimedFirst, morning, evening, untimedLater, nextDay]);
+    expect(month.days.flatMap((d) => d.entries)).toEqual([nextDay, evening, morning, untimedLater, untimedFirst]);
+  });
+
+  it("has no clock for a record without a time", () => {
+    const e = entryOf("income", {
+      id: "i1",
+      description: "pay",
+      amount: 1,
+      currency: "PHP",
+      date: "2026-11-24",
+      occurred_at: null,
+      priority: "need",
+      status: "posted",
+      created_at: "2026-11-24T01:00:00Z",
+      updated_at: "2026-11-24T01:00:00Z",
+    });
+    expect(e.occurredAt).toBeUndefined();
+    expect(clockOf(e.occurredAt)).toBeUndefined();
   });
 });
 

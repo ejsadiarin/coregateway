@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
-import { CalendarDays, Plus, Repeat, Tags, X } from "lucide-react";
+import { CalendarDays, Clock, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { categoryIcon, hueClasses } from "./chips";
 import { cn } from "@/lib/utils";
@@ -19,8 +19,10 @@ import {
   tagsOf,
   type TagPick,
 } from "@/hooks/use-ledger";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import {
   cadencePhrase,
+  clockOf,
   money,
   recents as recentsOf,
   signed,
@@ -97,6 +99,12 @@ function EntryForm({
   const [description, setDescription] = useState(from?.description ?? feed?.prefill ?? "");
   const [categoryId, setCategoryId] = useState<string | undefined>(from?.categoryId);
   const [date, setDate] = useState(entry?.date ?? rule?.startDate ?? today());
+  // The time is the owner's wall clock in their saved zone, which corefinance
+  // reads it in; a new entry starts at now, an edit at the time it has.
+  const zone = useUserTimezone().data?.timezone;
+  const [time, setTime] = useState(() =>
+    entry ? (clockOf(entry.occurredAt, zone) ?? "") : rule ? "" : (clockOf(new Date().toISOString(), zone) ?? ""),
+  );
   const [priority, setPriority] = useState<Priority>(from?.priority ?? "want");
   const [notes, setNotes] = useState(from?.notes ?? "");
   const [showNotes, setShowNotes] = useState(!!from?.notes);
@@ -169,6 +177,7 @@ function EntryForm({
             amount: value,
             currency,
             date,
+            time,
             categoryId,
             priority,
             notes: notes.trim(),
@@ -366,6 +375,18 @@ function EntryForm({
           </div>
         </Field>
 
+        {/* Time: a single entry's, not a rule's (rules are date-only). */}
+        {!repeat && (
+          <Field label="Time">
+            <div className="flex flex-wrap gap-2">
+              <TimePill value={time} onChange={setTime} />
+              <Pill on={!time} onClick={() => setTime("")}>
+                No time
+              </Pill>
+            </div>
+          </Field>
+        )}
+
         {/* Priority */}
         <Field label="Priority">
           <Segmented label="Priority" options={PRIORITIES} value={priority} onChange={setPriority} />
@@ -499,6 +520,29 @@ function Switch({ on, label, onChange }: { on: boolean; label: string; onChange?
     </button>
   ) : (
     <span role="presentation">{knob}</span>
+  );
+}
+
+// TimePill is a pill that opens the device's time picker; it reads "Set a
+// time" while there is none.
+function TimePill({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+  return (
+    <span
+      className={cn(
+        "relative inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm",
+        value ? "bg-foreground font-semibold text-background" : "border border-foreground/15 font-medium",
+      )}
+    >
+      <Clock className="h-3.5 w-3.5" aria-hidden />
+      <span className="font-mono tabular-nums">{value || "Set a time"}</span>
+      <input
+        type="time"
+        aria-label="Time of day"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      />
+    </span>
   );
 }
 

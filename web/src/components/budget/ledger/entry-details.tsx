@@ -6,7 +6,7 @@ import { CategoryBadge, CategoryChip, NeedChip, StatusChip, TagChip } from "./ch
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { useDeleteEntry, useToggleSkip } from "@/hooks/use-ledger";
-import { cadenceLabel, signed, today, type Entry, type Rule } from "@/lib/ledger";
+import { cadenceLabel, clockOf, signed, today, type Entry, type Rule } from "@/lib/ledger";
 import { conversionLabel } from "@/lib/conversion";
 import type { Category, Tag } from "@/types/api";
 
@@ -57,7 +57,10 @@ export function EntryDetails({
         <CategoryBadge category={category} className="h-12 w-12 rounded-2xl" />
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 className="truncate text-xl font-semibold">{entry.description}</h2>
-          <p className="text-sm text-muted-foreground">{format(parseISO(entry.date), "EEEE, MMM d, yyyy")}</p>
+          <p className="text-sm text-muted-foreground">
+            {format(parseISO(entry.date), "EEEE, MMM d, yyyy")}
+            {clockOf(entry.occurredAt) && ` · ${clockOf(entry.occurredAt)}`}
+          </p>
         </div>
         <span className="font-mono text-xl">{signed(entry.kind, entry.amount, entry.currency)}</span>
       </div>

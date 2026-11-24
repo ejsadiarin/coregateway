@@ -436,6 +436,7 @@ export default function BudgetDashboard() {
                 amount: editingIncome.amount,
                 currency: editingIncome.currency,
                 date: editingIncome.date,
+                occurred_at: editingIncome.occurred_at,
                 description: editingIncome.description,
                 category_id: editingIncome.category_id,
                 source_rule_id: editingIncome.source_rule_id,

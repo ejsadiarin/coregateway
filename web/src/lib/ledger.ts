@@ -30,6 +30,9 @@ export interface Entry {
   amountPHP?: number;
   conversion?: Conversion;
   date: string; // YYYY-MM-DD
+  // occurredAt is when it happened, a UTC moment (RFC 3339); absent for an
+  // entry without a time. The date stays what totals count.
+  occurredAt?: string;
   categoryId?: string;
   notes: string; // without the backfill marker
   marker?: string; // the backfill marker, kept when the entry is saved again
@@ -68,6 +71,15 @@ export function cleanNotes(notes?: string | null): string {
     .trim();
 }
 
+// clockOf is an entry's time as HH:mm in timeZone (the device's when not
+// given), or undefined for an entry without one.
+export function clockOf(occurredAt: string | undefined, timeZone?: string): string | undefined {
+  if (!occurredAt) return undefined;
+  const at = new Date(occurredAt);
+  if (Number.isNaN(at.getTime())) return undefined;
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone }).format(at);
+}
+
 export function entryOf(kind: LedgerKind, r: Expense | Income): Entry {
   const currency = r.currency || "PHP";
   const exchangeRate = Number(r.exchange_rate);
@@ -92,6 +104,7 @@ export function entryOf(kind: LedgerKind, r: Expense | Income): Entry {
     amountPHP: hasAmountPHP ? amountPHP : undefined,
     conversion,
     date: day("expense_date" in r ? r.expense_date : r.date),
+    occurredAt: r.occurred_at || undefined,
     categoryId: r.category_id || undefined,
     notes: cleanNotes(r.notes),
     marker: r.notes?.match(/\[backfill:[^\]]*\]/)?.[0],
@@ -359,12 +372,24 @@ export interface MonthGroup {
   days: DayGroup[];
 }
 
-// byMonth groups entries newest first: months, then days, then the latest
-// entered first within a day.
+// newestFirst orders entries newest day first; within a day, timed entries
+// latest first, then untimed ones latest entered first (as corefinance
+// lists them).
+export function newestFirst(a: Entry, b: Entry): number {
+  if (a.date !== b.date) return b.date.localeCompare(a.date);
+  if (a.occurredAt && b.occurredAt) {
+    const d = Date.parse(b.occurredAt) - Date.parse(a.occurredAt);
+    if (d !== 0) return d;
+  } else if (a.occurredAt || b.occurredAt) {
+    return a.occurredAt ? -1 : 1;
+  }
+  return b.createdAt.localeCompare(a.createdAt);
+}
+
+// byMonth groups entries newest first: months, then days, then within a day
+// as newestFirst orders them.
 export function byMonth(entries: Entry[]): MonthGroup[] {
-  const sorted = [...entries].sort(
-    (a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt),
-  );
+  const sorted = [...entries].sort(newestFirst);
   const months: MonthGroup[] = [];
   for (const e of sorted) {
     const key = e.date.slice(0, 7);
@@ -414,7 +439,7 @@ export interface Recent {
 export function recents(entries: Entry[], n = 6): Recent[] {
   const seen = new Set<string>();
   const out: Recent[] = [];
-  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+  const sorted = [...entries].sort(newestFirst);
   for (const e of sorted) {
     const key = e.description.trim().toLowerCase();
     if (!key || e.ruleId || seen.has(key)) continue;
