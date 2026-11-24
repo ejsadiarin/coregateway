@@ -20,6 +20,7 @@ import type { Category, Tag, BudgetExportPayload, BudgetImportResult } from "@/t
 import { Link } from "react-router-dom";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
+import { todayISODate } from "@/lib/budget-period";
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -101,7 +102,7 @@ export default function SettingsPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = downloadUrl;
-      anchor.download = `budget-export-${new Date().toISOString().split("T")[0]}.json`;
+      anchor.download = `budget-export-${todayISODate()}.json`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);

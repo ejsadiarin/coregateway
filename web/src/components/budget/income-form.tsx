@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useIncomeCategories } from "@/hooks/use-budget";
 import { CategorySelect } from "./category-select";
 import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
+import { todayISODate } from "@/lib/budget-period";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import type { CreateIncomeRequest, UpdateIncomeRequest } from "@/types/api";
@@ -26,7 +27,7 @@ export function IncomeForm({ initialData, onSubmit, onCancel, isLoading }: Incom
     // corefinance sends amounts as decimal strings ("250.00") but takes numbers.
     amount: Number(initialData?.amount) || 0,
     currency: initialData?.currency || "PHP",
-    date: initialData?.date || new Date().toISOString().split('T')[0],
+    date: initialData?.date || todayISODate(),
     description: initialData?.description || "",
     category_id: initialData?.category_id,
     // corefinance requires both; the form doesn't ask, so keep what an

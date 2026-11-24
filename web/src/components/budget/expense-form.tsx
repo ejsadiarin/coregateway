@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useExpenseCategories } from "@/hooks/use-budget";
 import { CategorySelect } from "./category-select";
 import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
+import { todayISODate } from "@/lib/budget-period";
 import { PICK_ANOTHER_CATEGORY } from "@/lib/category-error";
 import { RATE_UNAVAILABLE, UNSUPPORTED_CURRENCY } from "@/lib/rate-error";
 import type { CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
@@ -29,7 +30,7 @@ export function ExpenseForm({ initialData, onSubmit, onCancel }: ExpenseFormProp
     amount: Number(initialData?.amount) || 0,
     currency: initialData?.currency || "PHP",
     category_id: initialData?.category_id,
-    expense_date: initialData?.expense_date || new Date().toISOString().split('T')[0],
+    expense_date: initialData?.expense_date || todayISODate(),
     notes: initialData?.notes,
     priority: initialData?.priority || "need",
     status: initialData?.status || "posted",
