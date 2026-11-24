@@ -358,6 +358,12 @@ export function deleteRecordPrompt(note: Note): string | null {
   return `Delete ${what}? It leaves the budget for good; its note stays in the Feed marked deleted.`;
 }
 
+// canErase says whether permanently deleting a note removes it for good. A
+// live expense or income's note can't go while its record lives: the sync
+// gives every budget record a note (coreban ADR-0005), so it would be back
+// the next time the Feed opens. Delete the record instead.
+export const canErase = (note: Note): boolean => !isBudgetLink(note.link) || note.link.deleted;
+
 // notePreview is the one line a collapsed note shows: its text, a linked
 // note's record, or what its attachments are when it has no caption.
 export function notePreview(

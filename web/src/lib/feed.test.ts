@@ -6,6 +6,7 @@ import {
   dayNet,
   feedDays,
   archivePrompt,
+  canErase,
   deleteRecordPrompt,
   enterSends,
   feedNotes,
@@ -328,6 +329,19 @@ describe("deleteRecordPrompt", () => {
   it("asks nothing for a record already gone or a note that isn't a budget record's", () => {
     expect(deleteRecordPrompt(expenseNote("n", "e1", true, lunch))).toBeNull();
     expect(deleteRecordPrompt(note("plain"))).toBeNull();
+  });
+});
+
+describe("canErase", () => {
+  it("keeps a live expense or income note: the sync would bring it back", () => {
+    expect(canErase(expenseNote("n", "e1", false, lunch))).toBe(false);
+    expect(canErase(linked({ kind: "income", deleted: false, record_id: "i1" }))).toBe(false);
+  });
+  it("erases any other note", () => {
+    expect(canErase(note("plain"))).toBe(true);
+    expect(canErase(expenseNote("n", "e1", true, lunch))).toBe(true);
+    expect(canErase(linked({ kind: "reminder", deleted: false, reminder }))).toBe(true);
+    expect(canErase(linked({ kind: "card", deleted: false, card }))).toBe(true);
   });
 });
 

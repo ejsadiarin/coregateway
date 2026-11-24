@@ -59,8 +59,12 @@ interface SharedFile {
 }
 
 // waitForWorker opens the app and waits until its service worker controls
-// the page, as it does in the installed app.
+// the page, as it does in the installed app. Only a production build has
+// one, so the test is skipped on the dev server (which serves Vite's client).
 async function waitForWorker(page: Page) {
+  const client = await page.request.get("/@vite/client");
+  const dev = (client.headers()["content-type"] ?? "").includes("javascript");
+  test.skip(dev, "the service worker needs a production build: start the stack with E2E_HOST");
   await page.goto("/");
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;

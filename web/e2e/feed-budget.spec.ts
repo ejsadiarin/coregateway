@@ -10,8 +10,9 @@ const unique = (prefix: string) => `${prefix} ${Date.now().toString(36)}${Math.r
 
 const feed = (page: Page) => page.getByRole("log", { name: "Feed" });
 const noteItem = (page: Page, text: string) => feed(page).getByRole("listitem").filter({ hasText: text });
-// The Feed's own capture buttons, not the nav's "Budget" link.
-const captureButton = (page: Page, name: string) => page.getByRole("main").getByRole("button", { name, exact: true });
+// The capture buttons above the chat box, not the "Budget" filter.
+const captureButton = (page: Page, name: string) =>
+  page.locator("form", { has: page.getByRole("textbox", { name: "New note" }) }).getByRole("button", { name, exact: true });
 
 async function noteAction(page: Page, text: string, action: string) {
   await noteItem(page, text).getByRole("button", { name: "Note actions" }).click();
@@ -24,10 +25,10 @@ async function captureExpense(page: Page, description: string, amount: string): 
   await page.getByRole("textbox", { name: "New note" }).fill(description);
   await captureButton(page, "Budget").click();
   const dialog = page.getByRole("dialog", { name: "New expense" });
-  await expect(dialog.getByLabel("Description")).toHaveValue(description);
+  await expect(dialog.getByLabel("What was it?")).toHaveValue(description);
   await dialog.getByLabel("Amount").fill(amount);
   const created = page.waitForResponse((r) => r.url().endsWith("/api/budget/expenses") && r.request().method() === "POST");
-  await dialog.getByRole("button", { name: "Create Expense" }).click();
+  await dialog.getByRole("button", { name: /^Add expense/ }).click();
   const { id } = await (await created).json();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("textbox", { name: "New note" })).toHaveValue("");
@@ -46,7 +47,7 @@ test.beforeEach(async ({ page }) => {
 test("+ Budget captures an expense shown live; editing or deleting it elsewhere shows in its note", async ({ page }) => {
   const lunch = unique("Lunch");
   const id = await captureExpense(page, lunch, "250");
-  await expect(noteItem(page, lunch)).toContainText(`₱250.00 · ${lunch}`);
+  await expect(noteItem(page, lunch)).toContainText("−₱250.00");
 
   // Edited on the Expenses page: the note shows the change.
   const current = await (await page.request.get(`${api}/api/budget/expenses/${id}`)).json();
@@ -67,40 +68,66 @@ test("+ Budget captures an expense shown live; editing or deleting it elsewhere 
   await expect(noteItem(page, `${lunch} with drinks`)).toContainText(`₱320.00 · ${lunch} with drinks (deleted)`);
 });
 
-test("archiving an expense's note deletes the expense first, after naming it", async ({ page }) => {
+test("deleting an expense from its note names it, then leaves a deleted line that can be archived", async ({ page }) => {
   const taxi = unique("Taxi");
   const id = await captureExpense(page, taxi, "180");
 
-  await noteAction(page, taxi, "Archive");
+  await noteAction(page, taxi, "Delete expense");
   const confirm = page.getByRole("alertdialog");
-  await expect(confirm).toContainText(`delete its expense “${taxi}” (₱180.00)`);
-  await confirm.getByRole("button", { name: "Archive" }).click();
-  await expect(noteItem(page, taxi).getByRole("button", { name: /Archived/ })).toBeVisible();
+  await expect(confirm).toContainText(`Delete the expense “${taxi}” (₱180.00)`);
+  await confirm.getByRole("button", { name: "Delete" }).click();
+  await expect(noteItem(page, taxi)).toContainText(`₱180.00 · ${taxi} (deleted)`);
   expect(await expenseStatus(page, id)).toBe(404);
 
   await page.reload();
-  await noteItem(page, taxi).getByRole("button", { name: /Archived/ }).click();
   await expect(noteItem(page, taxi)).toContainText(`₱180.00 · ${taxi} (deleted)`);
+  await noteAction(page, taxi, "Archive");
+  await expect(noteItem(page, taxi)).toHaveCount(0);
 });
 
-test("going offline between the two archive steps leaves the expense gone and the note deleted", async ({ page }) => {
+test("a live expense's note can't be erased; a deleted one's can, for good", async ({ page }) => {
+  const snack = unique("Snack");
+  // A second expense stays, so the Feed's sync has something to send.
+  await captureExpense(page, unique("Bus"), "15");
+  const id = await captureExpense(page, snack, "60");
+  const actions = noteItem(page, snack).getByRole("button", { name: "Note actions" });
+
+  // The sync would bring a live record's note back (coreban ADR-0005).
+  await actions.click();
+  await expect(page.getByRole("menuitem", { name: "Delete expense" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Permanently delete" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  expect((await page.request.delete(`${api}/api/budget/expenses/${id}`)).ok()).toBe(true);
+  await page.reload();
+  await expect(noteItem(page, snack)).toContainText("(deleted)");
+  await noteAction(page, snack, "Permanently delete");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Permanently delete" }).click();
+  await expect(noteItem(page, snack)).toHaveCount(0);
+
+  const synced = page.waitForResponse((r) => r.url().endsWith("/api/coreban/notes/sync"));
+  await page.reload();
+  await synced;
+  await expect(feed(page)).toHaveAttribute("aria-busy", "false");
+  await expect(noteItem(page, snack)).toHaveCount(0);
+});
+
+test("going offline between the two delete steps leaves the expense gone and the note deleted", async ({ page }) => {
   const coffee = unique("Coffee");
   const id = await captureExpense(page, coffee, "95");
 
-  // The expense is deleted; archiving the note never reaches coreban.
+  // The expense is deleted; saving its snapshot never reaches coreban.
   await page.route("**/api/coreban/notes/*", (route) =>
     route.request().method() === "PATCH" ? route.abort("internetdisconnected") : route.continue(),
   );
-  await noteAction(page, coffee, "Archive");
-  await page.getByRole("alertdialog").getByRole("button", { name: "Archive" }).click();
+  await noteAction(page, coffee, "Delete expense");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(page.getByText("Failed to fetch")).toBeVisible();
   expect(await expenseStatus(page, id)).toBe(404);
 
   await page.unrouteAll();
   await page.reload();
-  const note = noteItem(page, coffee);
-  await expect(note).toContainText(`₱95.00 · ${coffee} (deleted)`);
-  await expect(note.getByRole("button", { name: /Archived/ })).toHaveCount(0);
+  await expect(noteItem(page, coffee)).toContainText(`₱95.00 · ${coffee} (deleted)`);
 });
 
 test("+ Budget switches to income, and tapping its note edits it in corefinance", async ({ page }) => {
@@ -109,16 +136,16 @@ test("+ Budget switches to income, and tapping its note edits it in corefinance"
   await captureButton(page, "Budget").click();
   await page.getByRole("radio", { name: "income" }).click();
   const dialog = page.getByRole("dialog", { name: "New income" });
-  await expect(dialog.getByLabel("Description")).toHaveValue(salary);
+  await expect(dialog.getByLabel("Where from?")).toHaveValue(salary);
   await dialog.getByLabel("Amount").fill("20000");
-  await dialog.getByRole("button", { name: "Add Income" }).click();
+  await dialog.getByRole("button", { name: /^Add income/ }).click();
   await expect(dialog).toBeHidden();
-  await expect(noteItem(page, salary)).toContainText(`₱20,000.00 · ${salary}`);
+  await expect(noteItem(page, salary)).toContainText("+₱20,000.00");
 
   await noteItem(page, salary).getByRole("button", { name: new RegExp(salary) }).click();
   const editor = page.getByRole("dialog", { name: "Edit income" });
-  await editor.getByLabel("Description").fill(`${salary} (Nov)`);
-  await editor.getByRole("button", { name: "Update Income" }).click();
+  await editor.getByLabel("Where from?").fill(`${salary} (Nov)`);
+  await editor.getByRole("button", { name: "Save changes" }).click();
   await expect(editor).toBeHidden();
   await expect(noteItem(page, `${salary} (Nov)`)).toContainText("₱20,000.00");
 

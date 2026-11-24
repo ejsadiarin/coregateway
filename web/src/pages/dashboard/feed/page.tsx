@@ -28,6 +28,7 @@ import {
 import {
   appendNote,
   archivePrompt,
+  canErase,
   copyText,
   dayNet,
   deleteRecordPrompt,
@@ -299,11 +300,15 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
             Archive
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className={`${item} text-destructive focus:text-destructive`} onSelect={actions.erase}>
-          <Trash2 className="h-4 w-4" aria-hidden />
-          Permanently delete
-        </DropdownMenuItem>
+        {canErase(note) && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className={`${item} text-destructive focus:text-destructive`} onSelect={actions.erase}>
+              <Trash2 className="h-4 w-4" aria-hidden />
+              Permanently delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -469,10 +474,12 @@ function ArchivedNote({
           )}
           <NoteTime note={note} />
           <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" className="min-h-11 text-destructive hover:text-destructive" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" aria-hidden />
-              Permanently delete
-            </Button>
+            {canErase(note) && (
+              <Button variant="ghost" className="min-h-11 text-destructive hover:text-destructive" onClick={onDelete}>
+                <Trash2 className="h-4 w-4" aria-hidden />
+                Permanently delete
+              </Button>
+            )}
             <Button variant="outline" className="min-h-11" onClick={onRestore} disabled={restoring}>
               Restore
             </Button>
@@ -688,10 +695,9 @@ export default function FeedPage() {
     onError: fail("Couldn't edit this note"),
   });
 
-  // Archiving a live expense or income note deletes the record in
-  // corefinance first, then archives the note with what it last showed.
-  // Never the other way round: if the second step fails, the next load
-  // finds the record gone and the note reads deleted.
+  // Archiving hides the note and, in coreban, archives its card or deletes
+  // its reminder. A live expense or income note offers Delete instead
+  // (coreban ADR-0006).
   const archiveMutation = useMutation({
     mutationFn: async ({ note, archived }: { note: Note; archived: boolean }) => {
       return setNoteArchived(note.id, archived);

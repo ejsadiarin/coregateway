@@ -30,6 +30,10 @@
 # whenever the phone switches apps, because its HMR socket drops while the
 # tab is suspended. The API URL, CORS origin and ntfy follow that host. The
 # gateway and coreban bind every interface either way.
+#
+# Only a production build registers the service worker, so the dev server
+# skips most of e2e/feed-share-files.spec.ts. To run it, set E2E_HOST as
+# above, then: cd web && E2E_BASE_URL=http://$E2E_HOST:3001 pnpm e2e
 set -euo pipefail
 
 HOST=${E2E_HOST:-localhost}

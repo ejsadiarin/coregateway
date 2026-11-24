@@ -21,6 +21,11 @@ async function noteAction(page: Page, text: string, action: string) {
   await page.getByRole("menuitem", { name: action }).click();
 }
 
+// Archived notes are left out of the Feed unless asked for (coreban ADR-0006).
+const toggleArchived = (page: Page) =>
+  page.getByRole("group", { name: "Show" }).getByRole("button", { name: "Archived" }).click();
+const archivedRow = (page: Page, text: string) => noteItem(page, text).getByRole("button", { name: /Archived/ });
+
 test.beforeEach(async ({ page }) => {
   await login(page);
   await page.goto("/dashboard/feed");
@@ -55,37 +60,39 @@ test("editing a note's text saves it", async ({ page }) => {
   await expect(noteItem(page, edited)).toBeVisible();
 });
 
-test("an archived note stays in place, collapsed, and can be restored or erased", async ({ page }) => {
+test("an archived note leaves the Feed; Archived shows it in its place, to restore or erase", async ({ page }) => {
   const text = unique("old thought");
   const after = unique("newer thought");
   await post(page, text);
   await post(page, after);
 
   await noteAction(page, text, "Archive");
-  const archived = noteItem(page, text);
-  const toggle = archived.getByRole("button", { name: /Archived/ });
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-
-  // Still before the newer note after a reload.
+  await expect(noteItem(page, text)).toHaveCount(0);
   await page.reload();
-  // allTextContents doesn't wait: let the Feed load first.
   await expect(noteItem(page, after)).toBeVisible();
+  await expect(noteItem(page, text)).toHaveCount(0);
+
+  // Shown on request, collapsed, still before the newer note.
+  await toggleArchived(page);
+  await expect(archivedRow(page, text)).toHaveAttribute("aria-expanded", "false");
   const items = await feed(page).getByRole("listitem").allTextContents();
   const at = items.findIndex((t) => t.includes(text));
-  expect(at).toBeGreaterThanOrEqual(0);
-  expect(items[at]).toContain("Archived");
   expect(items[at + 1]).toContain(after);
 
-  await toggle.click();
-  await archived.getByRole("button", { name: "Restore" }).click();
+  await archivedRow(page, text).click();
+  await noteItem(page, text).getByRole("button", { name: "Restore" }).click();
+  await expect(noteItem(page, text).getByRole("button", { name: "Note actions" })).toBeVisible();
+  await toggleArchived(page);
   await expect(noteItem(page, text).getByRole("button", { name: "Note actions" })).toBeVisible();
 
   await noteAction(page, text, "Archive");
-  await noteItem(page, text).getByRole("button", { name: /Archived/ }).click();
+  await toggleArchived(page);
+  await archivedRow(page, text).click();
   await noteItem(page, text).getByRole("button", { name: "Permanently delete" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Permanently delete" }).click();
   await expect(noteItem(page, text)).toHaveCount(0);
   await page.reload();
+  await toggleArchived(page);
   await expect(noteItem(page, after)).toBeVisible();
   await expect(noteItem(page, text)).toHaveCount(0);
 });
@@ -122,7 +129,10 @@ test("+ Reminder captures a reminder from the chat box, shown live in the Feed",
   const confirm = page.getByRole("alertdialog");
   await expect(confirm).toContainText(`delete its reminder “${message} back”`);
   await confirm.getByRole("button", { name: "Archive" }).click();
-  await expect(noteItem(page, `${message} back`).getByRole("button", { name: /Archived/ })).toBeVisible();
+  await expect(noteItem(page, `${message} back`)).toHaveCount(0);
+  await toggleArchived(page);
+  await archivedRow(page, `${message} back`).click();
+  await expect(noteItem(page, `${message} back`)).toContainText(`${message} back (deleted)`);
   await page.goto("/dashboard/kanban/reminders");
   await expect(page.getByRole("main").getByText(`${message} back`, { exact: true })).toHaveCount(0);
 });
@@ -149,14 +159,15 @@ test("Make card converts a note in place; archiving it archives the card and Res
   await noteAction(page, title, "Archive");
   await expect(page.getByRole("alertdialog")).toContainText(`archive its card “${title}”`);
   await page.getByRole("alertdialog").getByRole("button", { name: "Archive" }).click();
-  await expect(noteItem(page, title).getByRole("button", { name: /Archived/ })).toBeVisible();
+  await expect(noteItem(page, title)).toHaveCount(0);
 
   await page.goto("/dashboard/kanban");
   await page.getByRole("main").getByText(board, { exact: true }).click();
   await expect(page.getByRole("main").getByText(title, { exact: true })).toHaveCount(0);
 
   await page.goto("/dashboard/feed");
-  await noteItem(page, title).getByRole("button", { name: /Archived/ }).click();
+  await toggleArchived(page);
+  await archivedRow(page, title).click();
   await noteItem(page, title).getByRole("button", { name: "Restore" }).click();
   await noteItem(page, title).getByRole("button", { name: new RegExp(title) }).click();
   await expect(page.getByRole("dialog", { name: "Edit card" })).toBeVisible();
