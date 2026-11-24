@@ -19,11 +19,13 @@ import {
   Pencil,
   Plus,
   ReceiptText,
+  Search,
   SendHorizontal,
   SquareKanban,
   SkipForward,
   Trash2,
   Wallet,
+  X,
 } from "lucide-react";
 import {
   appendNote,
@@ -38,6 +40,7 @@ import {
   enterSends,
   feedNotes,
   fetchFeed,
+  isFeedData,
   linkKindName,
   linkSummary,
   MAX_NOTE_LENGTH,
@@ -49,6 +52,7 @@ import {
   removeNote,
   replaceNote,
   saveSnapshot,
+  searchFeed,
   setNoteArchived,
   splitLinks,
   type FeedData,
@@ -59,6 +63,8 @@ import type { FeedFilter, Note, NoteLink } from "@/types/feed";
 import { syncAllBudgetNotes } from "@/lib/budget-sync";
 import { formatPeso } from "@/lib/format";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
+import { useBudgetSearch } from "./use-budget-search";
+import { MAX_SEARCH_LENGTH, MAX_SEARCH_RECORDS } from "@/lib/feed-search";
 import { useTouchDevice } from "@/hooks/use-touch-device";
 import { useAuth } from "@/contexts/auth-context";
 import { ExchangeDialog } from "@/components/exchange/exchange-compare";
@@ -68,6 +74,7 @@ import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
@@ -518,25 +525,54 @@ export default function FeedPage() {
   const [filter, setFilter] = useState<FeedFilter>("all");
   // Archived notes are hidden unless asked for (coreban ADR-0006).
   const [showArchived, setShowArchived] = useState(false);
-  const key = useMemo(() => [...feedKey, filter, showArchived], [filter, showArchived]);
+
+  // The search box, when open, and what is typed in it. The Feed follows a
+  // moment after typing stops; with nothing typed it is the whole Feed.
+  const [query, setQuery] = useState<string | null>(null);
+  const searchOpen = query !== null;
+  const typed = (query ?? "").trim();
+  const [settled, setSettled] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(typed), 300);
+    return () => clearTimeout(t);
+  }, [typed]);
+  const term = typed && settled;
+  const searching = term !== "";
+  const budget = useBudgetSearch(term, searching && filter !== "notes");
+
+  const key = useMemo(
+    () =>
+      searching
+        ? [...feedKey, "search", term, filter, showArchived, budget.records]
+        : [...feedKey, filter, showArchived],
+    [searching, term, filter, showArchived, budget.records],
+  );
   const feedQuery = useInfiniteQuery({
     queryKey: key,
-    queryFn: ({ pageParam }) => fetchFeed(pageParam, filter, showArchived),
+    queryFn: ({ pageParam }) =>
+      searching
+        ? searchFeed(term, budget.records, pageParam, filter, showArchived)
+        : fetchFeed(pageParam, filter, showArchived),
+    enabled: !budget.loading,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
   const feed = feedNotes(feedQuery.data);
-  const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
+  const { hasNextPage, isFetchingNextPage, fetchNextPage, isPending: feedPending } = feedQuery;
   const pageCount = feedQuery.data?.pages.length ?? 0;
 
   const update = (f: (data: FeedData | undefined) => FeedData | undefined) =>
     queryClient.setQueryData<FeedData>(key, f);
+  // A changed or deleted note changes in every view that has it: the Feed
+  // under a search, and its filters.
+  const updateAll = (f: (data: FeedData | undefined) => FeedData | undefined) =>
+    queryClient.setQueriesData<FeedData>({ queryKey: feedKey, predicate: (q) => isFeedData(q.state.data) }, f);
 
   const { notes, categoryName } = useBudgetRecords(
     feed,
     key,
-    (saved) => update((d) => replaceNote(d, saved)),
-    (id) => update((d) => removeNote(d, id)),
+    (saved) => updateAll((d) => replaceNote(d, saved)),
+    (id) => updateAll((d) => removeNote(d, id)),
   );
   // A note archived just now leaves the view at once.
   const days = feedDays(showArchived ? notes : notes.filter((n) => !n.archived_at));
@@ -561,7 +597,7 @@ export default function FeedPage() {
   const noteDays = useMemo(() => new Set(days.map((d) => d.key)), [days]);
   const [jumpTo, setJumpTo] = useState<string | null>(null);
   useEffect(() => {
-    if (!jumpTo) return;
+    if (!jumpTo || feedPending) return;
     const oldest = days[0]?.key;
     if (hasNextPage && (!oldest || oldest > jumpTo)) {
       if (!isFetchingNextPage) fetchNextPage();
@@ -570,7 +606,7 @@ export default function FeedPage() {
     const target = days.find((d) => d.key >= jumpTo) ?? days[days.length - 1];
     if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start" });
     setJumpTo(null);
-  }, [jumpTo, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [jumpTo, feedPending, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const toggleArchived = () => {
     toBottom.current = true;
@@ -579,6 +615,22 @@ export default function FeedPage() {
   const pickFilter = (f: FeedFilter) => {
     toBottom.current = true;
     setFilter(f);
+  };
+
+  // Results, and the Feed after them, open on the newest note. This runs
+  // before the layout effect below that does the scrolling.
+  useLayoutEffect(() => {
+    toBottom.current = true;
+    keepFromBottom.current = null;
+  }, [term]);
+  const searchButton = useRef<HTMLButtonElement>(null);
+  const closeSearch = () => {
+    toBottom.current = true;
+    setQuery(null);
+  };
+  const pickDay = (date: string) => {
+    setQuery(null);
+    setJumpTo(date);
   };
 
   const fail = (fallback: string) => (err: unknown) =>
@@ -690,7 +742,7 @@ export default function FeedPage() {
     mutationFn: ({ id, text }: { id: string; text: string; done: () => void }) => editNoteText(id, text),
     onSuccess: (note, { done }) => {
       done();
-      update((d) => replaceNote(d, note));
+      updateAll((d) => replaceNote(d, note));
     },
     onError: fail("Couldn't edit this note"),
   });
@@ -703,7 +755,7 @@ export default function FeedPage() {
       return setNoteArchived(note.id, archived);
     },
     onSuccess: (note) => {
-      update((d) => replaceNote(d, note));
+      updateAll((d) => replaceNote(d, note));
       // Archiving or restoring may have archived, restored, or deleted the
       // note's record: let its own pages read it afresh.
       if (isBudgetLink(note.link)) queryClient.invalidateQueries({ queryKey: budgetKeys.all });
@@ -724,7 +776,7 @@ export default function FeedPage() {
       return last ? saveSnapshot(note.id, last) : note;
     },
     onSuccess: (note) => {
-      update((d) => replaceNote(d, note));
+      updateAll((d) => replaceNote(d, note));
       queryClient.invalidateQueries({ queryKey: budgetKeys.all });
     },
     onError: fail("Couldn't delete this record"),
@@ -748,7 +800,7 @@ export default function FeedPage() {
     mutationFn: (id: string) => deleteNote(id),
     onSuccess: (_, id) => {
       setDeleting(null);
-      update((d) => removeNote(d, id));
+      updateAll((d) => removeNote(d, id));
     },
     onError: (err) => {
       setDeleting(null);
@@ -849,7 +901,52 @@ export default function FeedPage() {
     <div className="mx-auto flex h-full w-full max-w-3xl gap-6 lg:max-w-[1400px] lg:pr-6">
     <div className="flex min-w-0 flex-[2] flex-col">
       <div className="px-4 pt-4 md:px-6 md:pt-6">
-        <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Feed</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Feed</h1>
+          <Button
+            ref={searchButton}
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="-my-2 h-11 w-11 shrink-0"
+            aria-label={searchOpen ? "Close search" : "Search"}
+            aria-expanded={searchOpen}
+            onClick={() => (searchOpen ? closeSearch() : setQuery(""))}
+          >
+            {searchOpen ? <X className="h-4 w-4" aria-hidden /> : <Search className="h-4 w-4" aria-hidden />}
+          </Button>
+        </div>
+        {searchOpen && (
+          <form role="search" className="mt-3" onSubmit={(e) => e.preventDefault()}>
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                closeSearch();
+                searchButton.current?.focus();
+              }}
+              aria-label="Search the Feed"
+              placeholder="Search notes, reminders, cards, budget"
+              maxLength={MAX_SEARCH_LENGTH}
+              enterKeyHint="search"
+              autoFocus
+              className="h-11 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {searching && budget.failed && (
+              <p className="pt-2 text-sm text-muted-foreground">
+                Your budget couldn't be read, so expenses and incomes aren't included.
+              </p>
+            )}
+            {searching && budget.total > MAX_SEARCH_RECORDS && (
+              <p className="pt-2 text-sm text-muted-foreground">
+                Too many budget records match: showing the newest {MAX_SEARCH_RECORDS.toLocaleString()} of{" "}
+                {budget.total.toLocaleString()}.
+              </p>
+            )}
+          </form>
+        )}
         <div role="group" aria-label="Show" className="mt-3 flex gap-2">
           {(
             [
@@ -888,7 +985,7 @@ export default function FeedPage() {
         ref={scroller}
         role="log"
         aria-label="Feed"
-        aria-busy={feedQuery.isLoading || isFetchingNextPage}
+        aria-busy={feedQuery.isPending || isFetchingNextPage}
         className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6"
       >
         {hasNextPage && (
@@ -896,14 +993,15 @@ export default function FeedPage() {
             <div className="h-3 w-32 animate-pulse rounded bg-muted" />
           </div>
         )}
-        {feedQuery.isSuccess && !hasNextPage && notes.length > 0 && (
+        {feedQuery.isSuccess && !hasNextPage && !searching && notes.length > 0 && (
           <p className="pb-4 text-center font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             Start of your Feed
           </p>
         )}
 
-        {feedQuery.isLoading && (
+        {(feedQuery.isLoading || budget.loading) && (
           <div className="grid gap-3">
+            {budget.loading && <p className="text-sm text-muted-foreground">Reading your budget to search it too…</p>}
             {[0, 1, 2].map((i) => (
               <div key={i} className="ml-auto h-14 w-2/3 animate-pulse rounded-xl bg-muted" />
             ))}
@@ -912,14 +1010,18 @@ export default function FeedPage() {
 
         {feedQuery.error && (
           <div>
-            <p className="text-sm text-destructive">Couldn't load the Feed.</p>
+            <p className="text-sm text-destructive">{searching ? "Couldn't search the Feed." : "Couldn't load the Feed."}</p>
             <Button variant="outline" className="mt-2 min-h-11" onClick={() => feedQuery.refetch()}>
               Retry
             </Button>
           </div>
         )}
 
-        {isEmpty && (
+        {isEmpty && searching && (
+          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">No notes match “{term}”.</p>
+        )}
+
+        {isEmpty && !searching && (
           <div className="flex h-full flex-col items-start justify-end gap-3 pb-2">
             <MessageSquareText className="h-6 w-6 text-muted-foreground" aria-hidden />
             <p className="max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
@@ -939,7 +1041,8 @@ export default function FeedPage() {
                     <span className="h-px flex-1 bg-border" />
                     <h2 className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                       {day.label}
-                      {any && (
+                      {/* A search shows part of a day, so no net for it. */}
+                      {any && !searching && (
                         <span className="tabular-nums">
                           {" "}
                           · net {net < 0 ? "\u2212" : "+"}
@@ -983,13 +1086,15 @@ export default function FeedPage() {
           e.preventDefault();
           send();
         }}
-        className="border-t border-border px-4 pb-3 pt-2 md:px-6"
+        className={cn("px-4 md:px-6", !searchOpen && "border-t border-border pb-3 pt-2")}
       >
         {actionError && <p className="pb-2 text-sm text-destructive">{actionError}</p>}
         <p role="status" className="sr-only">
           {status}
         </p>
         {status && <p className="pb-2 text-sm text-muted-foreground">{status}</p>}
+        {/* The chat box waits, with what is in it, while the search is open. */}
+        <div className={cn(searchOpen && "hidden")}>
         <div className="flex gap-2 overflow-x-auto pb-2">
           <Button
             type="button"
@@ -1078,6 +1183,7 @@ export default function FeedPage() {
             Send
           </Button>
         </div>
+        </div>
       </form>
 
       <ReminderDialog
@@ -1163,7 +1269,7 @@ export default function FeedPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-    <FeedRail noteDays={noteDays} onPickDay={setJumpTo} />
+    <FeedRail noteDays={noteDays} onPickDay={pickDay} />
     </div>
   );
 }

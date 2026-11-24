@@ -7,6 +7,7 @@ import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
 import { columnOption } from "@/lib/kanban-columns";
 import { formatPeso, phpAmount } from "@/lib/format";
 import { apiBaseUrl } from "@/lib/api";
+import type { RecordRef } from "@/lib/feed-search";
 
 const notesUrl = `${apiBaseUrl}/api/coreban/notes`;
 
@@ -55,6 +56,32 @@ export async function fetchFeed(before?: string, filter: FeedFilter = "all", wit
   const url = q.size ? `${notesUrl}?${q}` : notesUrl;
   const res = await fetch(url, { credentials: "include" });
   await throwIfError(res, "load the Feed");
+  return res.json();
+}
+
+// searchFeed loads one page of the notes matching q, as fetchFeed pages all
+// of them. records are the live expenses and incomes the web found matching
+// itself (matchRecords).
+export async function searchFeed(
+  q: string,
+  records: RecordRef[],
+  before?: string,
+  filter: FeedFilter = "all",
+  withArchived = false,
+): Promise<FeedPage> {
+  const res = await fetch(`${notesUrl}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      q,
+      records,
+      before,
+      only: filter === "all" ? undefined : filter,
+      archived: withArchived ? "include" : undefined,
+    }),
+  });
+  await throwIfError(res, "search the Feed");
   return res.json();
 }
 
@@ -130,6 +157,11 @@ export function feedNotes(data: FeedData | undefined): Note[] {
   }
   return out;
 }
+
+// isFeedData tells the Feed's own cached pages from the other reads kept
+// under feedKey (its budget records, the days with notes).
+export const isFeedData = (data: unknown): data is FeedData =>
+  typeof data === "object" && data !== null && Array.isArray((data as FeedData).pages);
 
 function mapPages(data: FeedData | undefined, f: (page: FeedPage, i: number) => FeedPage): FeedData | undefined {
   return data && { ...data, pages: data.pages.map(f) };
