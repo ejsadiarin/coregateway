@@ -91,12 +91,6 @@ export const navItems: NavItem[] = [
     section: "finance",
   },
   {
-    label: "Settings",
-    icon: SlidersHorizontal,
-    path: "/dashboard/budget/settings",
-    section: "finance",
-  },
-  {
     label: "Exchange",
     icon: ArrowLeftRight,
     path: "/dashboard/exchange",
@@ -106,6 +100,12 @@ export const navItems: NavItem[] = [
     label: "Services",
     icon: Server,
     path: "/dashboard/services",
+    section: "system",
+  },
+  {
+    label: "Settings",
+    icon: SlidersHorizontal,
+    path: "/dashboard/settings",
     section: "system",
   },
   {

@@ -12,11 +12,10 @@ import ServicesPage from "@/pages/dashboard/services";
 import BudgetPage from "@/pages/dashboard/budget/page";
 import ExpensesPage from "@/pages/dashboard/budget/expenses";
 import IncomesPage from "@/pages/dashboard/budget/incomes";
-import SettingsPage from "@/pages/dashboard/budget/settings";
+import SettingsPage from "@/pages/dashboard/settings";
 import UsersPage from "@/pages/dashboard/admin/users";
 import KanbanBoardsPage from "@/pages/dashboard/kanban/boards";
 import KanbanBoardPage from "@/pages/dashboard/kanban/board";
-import KanbanSettingsPage from "@/pages/dashboard/kanban/settings";
 import KanbanRemindersPage from "@/pages/dashboard/kanban/reminders";
 import FeedPage from "@/pages/dashboard/feed/page";
 import ExchangePage from "@/pages/dashboard/exchange";
@@ -68,13 +67,14 @@ export default function App() {
         <Route path="budget" element={<BudgetPage />} />
         <Route path="budget/expenses" element={<ExpensesPage />} />
         <Route path="budget/incomes" element={<IncomesPage />} />
-          <Route path="budget/settings" element={<SettingsPage />} />
+        <Route path="budget/settings" element={<Navigate to="/dashboard/settings#budget" replace />} />
         <Route path="budget/summary" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
         <Route path="kanban" element={<KanbanBoardsPage />} />
-        <Route path="kanban/settings" element={<KanbanSettingsPage />} />
+        <Route path="kanban/settings" element={<Navigate to="/dashboard/settings#reminders" replace />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="kanban/reminders" element={<KanbanRemindersPage />} />
         <Route path="kanban/:boardId" element={<KanbanBoardPage />} />
         <Route

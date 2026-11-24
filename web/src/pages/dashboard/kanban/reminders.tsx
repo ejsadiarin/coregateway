@@ -97,7 +97,7 @@ export default function KanbanRemindersPage() {
           <BellOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <span>
             No notification target yet, so reminders won't be sent.{" "}
-            <Link to="/dashboard/kanban/settings" className="underline underline-offset-4 hover:text-primary">
+            <Link to="/dashboard/settings#reminders" className="underline underline-offset-4 hover:text-primary">
               Set one in Settings
             </Link>
             ; anything that came due meanwhile is then sent once, marked late.

@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BellOff, BellRing } from "lucide-react";
+import { BellOff, BellRing } from "lucide-react";
 import { fetchKanbanSettings, saveKanbanSettings, KanbanRequestError } from "@/lib/kanban";
 import type { KanbanSettings } from "@/types/kanban";
 import { useAuth } from "@/contexts/auth-context";
@@ -50,7 +49,9 @@ const previewTopicName = (input: string) => {
   return /^[A-Za-z0-9_-]+$/.test(name) && topicPrefix.length + name.length <= 64 ? name : "…";
 };
 
-export default function KanbanSettingsPage() {
+// ReminderSettings is the Reminders section of the Settings page: where
+// reminders are pushed, and the timezone their times are read in.
+export function ReminderSettings() {
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
   const timezoneQuery = useUserTimezone();
   const loading = settingsQuery.isLoading || timezoneQuery.isLoading;
@@ -61,28 +62,16 @@ export default function KanbanSettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
-      <Link
-        to="/dashboard/kanban"
-        className="inline-flex min-h-11 items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-3 w-3" aria-hidden />
-        Kanban / Settings
-      </Link>
-      <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Settings</h1>
-      <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
-        Where your reminders are pushed, and the timezone their times are read in.
-      </p>
-
+    <div>
       {loading && (
-        <div className="mt-6 grid gap-4" aria-busy="true">
+        <div className="grid gap-4" aria-busy="true">
           <div className="h-11 animate-pulse rounded bg-muted" />
           <div className="h-11 animate-pulse rounded bg-muted" />
         </div>
       )}
 
       {failed && (
-        <div className="mt-6">
+        <div>
           <p className="text-sm text-destructive">Couldn't load your settings.</p>
           <Button variant="outline" className="mt-2 min-h-11" onClick={retry}>
             Retry
@@ -157,7 +146,7 @@ function SettingsForm({ saved, savedTimezone }: { saved: KanbanSettings; savedTi
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 grid gap-6">
+    <form onSubmit={handleSubmit} className="grid gap-6">
       {saved.ntfy_topic ? (
         <p className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
           <BellRing className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />

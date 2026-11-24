@@ -7,8 +7,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("settings lists the fixed categories read-only", async ({ page }) => {
+  // The old URL lands on the Budget section of the one Settings page.
   await page.goto("/dashboard/budget/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "BUDGET SETTINGS" })).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/settings#budget$/);
+  await expect(page.getByRole("heading", { level: 2, name: "Budget" })).toBeVisible();
 
   await expect(page.getByText("Expense categories", { exact: true })).toBeVisible();
   await expect(page.getByText("Income categories", { exact: true })).toBeVisible();

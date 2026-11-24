@@ -1,7 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import {
-  Bell,
   User,
   LogOut,
   Shield,
@@ -25,6 +24,7 @@ import {
 import { navItems } from "./sidebar-nav-items";
 import { THEMES, useTheme } from "@/lib/theme";
 import { useCurrentPageTitle } from "./page-title";
+import { RemindersBell } from "./reminders-bell";
 
 // isId says a path segment is a record id (a board's UUID), not a word.
 const isId = (segment: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
@@ -165,16 +165,7 @@ export function ContentHeader() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 w-8"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-destructive text-[9px] text-destructive-foreground">
-            3
-          </span>
-        </Button>
+        <RemindersBell />
 
         <div className="w-px h-5 bg-border/50 mx-1 hidden md:block" />
 

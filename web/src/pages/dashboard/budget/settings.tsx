@@ -14,10 +14,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Edit2, Save, X, ArrowLeft, Download, Tags } from "lucide-react";
+import { Plus, Trash2, Edit2, Save, X, Download, Tags } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { Category, Tag, BudgetExportPayload, BudgetImportResult } from "@/types/api";
-import { Link } from "react-router-dom";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
 import { todayISODate } from "@/lib/budget-period";
@@ -61,7 +60,9 @@ function CategoryList({ categories, isLoading }: { categories?: Category[]; isLo
   );
 }
 
-export default function SettingsPage() {
+// BudgetSettings is the Budget section of the Settings page: import and
+// export, the fixed category lists, and tags.
+export function BudgetSettings() {
   const { data: expenseCategories, isLoading: expenseCategoriesLoading } = useExpenseCategories();
   const { data: incomeCategories, isLoading: incomeCategoriesLoading } = useIncomeCategories();
   const { data: tags, isLoading: tagsLoading } = useTags();
@@ -212,26 +213,7 @@ export default function SettingsPage() {
   };
 
   return (
-      <div className="px-4 md:px-6 py-6">
-      {/* Header */}
-      <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <Link to="/dashboard/budget">
-          <Button variant="ghost" size="sm" className="mb-4">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Budget
-          </Button>
-        </Link>
-        <h1 className="text-primary mb-2">BUDGET SETTINGS</h1>
-        <p className="text-sm text-muted-foreground">
-          The fixed category lists, and your tags
-        </p>
-      </motion.div>
-
+      <div>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

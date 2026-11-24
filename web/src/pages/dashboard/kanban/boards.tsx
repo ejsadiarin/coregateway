@@ -136,7 +136,7 @@ export default function KanbanBoardsPage() {
             </Link>
           </Button>
           <Button asChild variant="ghost" className="min-h-11">
-            <Link to="/dashboard/kanban/settings">
+            <Link to="/dashboard/settings#reminders">
               <Settings className="h-4 w-4" aria-hidden />
               Settings
             </Link>
