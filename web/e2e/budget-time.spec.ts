@@ -33,20 +33,20 @@ test("an expense keeps the time it was given until it is cleared", async ({ page
     await expect(sheet).toBeHidden();
 
     const row = page.getByRole("button", { name: new RegExp(description) });
-    await expect(row).toContainText("21:15");
+    await expect(row).toContainText("9:15 PM");
     await row.click();
     const details = page.getByRole("dialog", { name: description });
-    await expect(details).toContainText("· 21:15");
+    await expect(details).toContainText("· 9:15 PM");
 
     // An edit that doesn't touch the time keeps it.
     await details.getByRole("button", { name: "Edit" }).click();
     const edit = page.getByRole("dialog", { name: /Edit/ });
-    await expect(edit.getByText("21:15")).toBeVisible();
+    await expect(edit.getByText("9:15 PM")).toBeVisible();
     await edit.getByLabel("Amount").fill("80");
     const kept = saved("PUT");
     await edit.getByRole("button", { name: "Save changes" }).click();
     expect((await (await kept).json()).occurred_at).toBe(record.occurred_at);
-    await expect(row).toContainText("21:15");
+    await expect(row).toContainText("9:15 PM");
 
     // Clearing it leaves the expense without a time.
     await row.click();
@@ -55,7 +55,7 @@ test("an expense keeps the time it was given until it is cleared", async ({ page
     const cleared = saved("PUT");
     await page.getByRole("dialog", { name: /Edit/ }).getByRole("button", { name: "Save changes" }).click();
     expect((await (await cleared).json()).occurred_at).toBeNull();
-    await expect(row).not.toContainText("21:15");
+    await expect(row).not.toContainText("9:15 PM");
   } finally {
     if (id) await page.request.delete(`${api}/api/budget/expenses/${id}`);
   }

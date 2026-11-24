@@ -114,7 +114,7 @@ describe("comingUp", () => {
       ["2026-11-17", "rule", "baon mom"],
       ["2026-11-21", "rule", "spotify subscription"],
     ]);
-    expect(items[0].time).toBe("09:00");
+    expect(items[0].time).toBe("9:00 AM");
     expect(items[1]).toMatchObject({ ruleKind: "income", amount: 500, count: 3 });
     expect(items[2].count).toBe(1);
   });

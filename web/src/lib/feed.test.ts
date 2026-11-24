@@ -131,15 +131,15 @@ describe("noteTime", () => {
   const now = new Date(2026, 10, 11, 18, 0);
 
   it("shows only the time for a note posted today", () => {
-    expect(noteTime(new Date(2026, 10, 11, 9, 5).toISOString(), now)).toBe("09:05");
+    expect(noteTime(new Date(2026, 10, 11, 9, 5).toISOString(), now)).toBe("9:05 AM");
   });
 
   it("adds the day for an older note", () => {
-    expect(noteTime(new Date(2026, 10, 9, 21, 30).toISOString(), now)).toBe("Mon 9 Nov, 21:30");
+    expect(noteTime(new Date(2026, 10, 9, 21, 30).toISOString(), now)).toBe("Mon 9 Nov, 9:30 PM");
   });
 
   it("adds the year for a note from another year", () => {
-    expect(noteTime(new Date(2025, 0, 2, 7, 0).toISOString(), now)).toBe("Thu 2 Jan 2025, 07:00");
+    expect(noteTime(new Date(2025, 0, 2, 7, 0).toISOString(), now)).toBe("Thu 2 Jan 2025, 7:00 AM");
   });
 });
 
@@ -176,13 +176,13 @@ describe("linkSummary", () => {
   it("names a reminder and when it fires next, in the owner's own wall time", () => {
     expect(linkSummary({ kind: "reminder", deleted: false, reminder }, 2026)).toEqual({
       title: "call dentist",
-      detail: "Tue 17 Nov, 07:00",
+      detail: "Tue 17 Nov, 7:00 AM",
     });
   });
 
   it("says how a recurring reminder repeats once nothing is left to send", () => {
     const daily = { ...reminder, schedule: { kind: "daily" as const, time: "07:00" }, next_fire_at: null };
-    expect(linkSummary({ kind: "reminder", deleted: false, reminder: daily }, 2026).detail).toBe("Daily at 07:00");
+    expect(linkSummary({ kind: "reminder", deleted: false, reminder: daily }, 2026).detail).toBe("Daily at 7:00 AM");
   });
 
   it("names a card with its board, column, and status", () => {

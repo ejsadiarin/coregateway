@@ -6,12 +6,12 @@ import type { KanbanReminder, KanbanSchedule } from "@/types/kanban";
 // time is read straight from the string, whatever zone this device is in.
 describe("formatWall", () => {
   it("shows the owner's wall time with its weekday", () => {
-    expect(formatWall("2026-11-10T07:00:00+08:00", 2026)).toBe("Tue 10 Nov, 07:00");
-    expect(formatWall("2026-11-10T23:30:00-05:00", 2026)).toBe("Tue 10 Nov, 23:30");
+    expect(formatWall("2026-11-10T07:00:00+08:00", 2026)).toBe("Tue 10 Nov, 7:00 AM");
+    expect(formatWall("2026-11-10T23:30:00-05:00", 2026)).toBe("Tue 10 Nov, 11:30 PM");
   });
 
   it("adds the year when it is not the current one", () => {
-    expect(formatWall("2027-01-01T00:05:00Z", 2026)).toBe("Fri 1 Jan 2027, 00:05");
+    expect(formatWall("2027-01-01T00:05:00Z", 2026)).toBe("Fri 1 Jan 2027, 12:05 AM");
   });
 });
 
@@ -40,42 +40,42 @@ describe("reminderStatus", () => {
   const at = "2026-11-10T07:00:00+08:00";
 
   it("says when a pending reminder fires next", () => {
-    expect(reminderStatus(reminder({ next_fire_at: at }), 2026)).toEqual({ tone: "pending", text: "Next: Tue 10 Nov, 07:00" });
+    expect(reminderStatus(reminder({ next_fire_at: at }), 2026)).toEqual({ tone: "pending", text: "Next: Tue 10 Nov, 7:00 AM" });
   });
 
   it("says a pending reminder is held without a notification target", () => {
     expect(reminderStatus(reminder({ next_fire_at: at, paused: "no_notification_target" }), 2026)).toEqual({
       tone: "warning",
-      text: "Set for Tue 10 Nov, 07:00 · not sent until you set a notification target",
+      text: "Set for Tue 10 Nov, 7:00 AM · not sent until you set a notification target",
     });
   });
 
   it("says a reminder is quiet while its card is completed or archived", () => {
     expect(reminderStatus(reminder({ next_fire_at: at, paused: "card_completed" }), 2026)).toEqual({
       tone: "pending",
-      text: "Set for Tue 10 Nov, 07:00 · quiet while its card is Done",
+      text: "Set for Tue 10 Nov, 7:00 AM · quiet while its card is Done",
     });
     expect(reminderStatus(reminder({ next_fire_at: at, paused: "card_archived" }), 2026)).toEqual({
       tone: "pending",
-      text: "Set for Tue 10 Nov, 07:00 · quiet while its card is archived",
+      text: "Set for Tue 10 Nov, 7:00 AM · quiet while its card is archived",
     });
   });
 
   it("reports the last delivery once nothing is left to send", () => {
     expect(reminderStatus(reminder({ last_delivery: { at, late: false, error: null } }), 2026)).toEqual({
       tone: "done",
-      text: "Sent Tue 10 Nov, 07:00",
+      text: "Sent Tue 10 Nov, 7:00 AM",
     });
     expect(reminderStatus(reminder({ last_delivery: { at, late: true, error: null } }), 2026)).toEqual({
       tone: "done",
-      text: "Sent late, Tue 10 Nov, 07:00",
+      text: "Sent late, Tue 10 Nov, 7:00 AM",
     });
   });
 
   it("reports a failed send with ntfy's reason", () => {
     expect(
       reminderStatus(reminder({ last_delivery: { at, late: false, error: "ntfy answered 403 Forbidden" } }), 2026),
-    ).toEqual({ tone: "error", text: "Couldn't send Tue 10 Nov, 07:00: ntfy answered 403 Forbidden" });
+    ).toEqual({ tone: "error", text: "Couldn't send Tue 10 Nov, 7:00 AM: ntfy answered 403 Forbidden" });
   });
 });
 
@@ -92,7 +92,7 @@ describe("formatDue", () => {
   });
 
   it("shows a moment due with its time in the owner's zone", () => {
-    expect(formatDue({ at: "2026-11-14T17:00:00+08:00" }, 2026)).toBe("Sat 14 Nov, 17:00");
+    expect(formatDue({ at: "2026-11-14T17:00:00+08:00" }, 2026)).toBe("Sat 14 Nov, 5:00 PM");
   });
 });
 
@@ -116,14 +116,14 @@ describe("isOverdue", () => {
 describe("describeSchedule", () => {
   it("names each preset with its time of day", () => {
     expect(describeSchedule({ kind: "once", at: "2026-11-10T07:00:00+08:00" })).toBe("Once");
-    expect(describeSchedule({ kind: "daily", time: "07:00" })).toBe("Daily at 07:00");
+    expect(describeSchedule({ kind: "daily", time: "07:00" })).toBe("Daily at 7:00 AM");
     expect(describeSchedule({ kind: "weekly", time: "19:30", weekdays: ["MO", "WE", "FR"] })).toBe(
-      "Mon, Wed, Fri at 19:30",
+      "Mon, Wed, Fri at 7:30 PM",
     );
     expect(describeSchedule({ kind: "every", time: "08:00", days: 3, from: "2026-11-10" })).toBe(
-      "Every 3 days at 08:00",
+      "Every 3 days at 8:00 AM",
     );
-    expect(describeSchedule({ kind: "every", time: "08:00", days: 1, from: "2026-11-10" })).toBe("Every day at 08:00");
+    expect(describeSchedule({ kind: "every", time: "08:00", days: 1, from: "2026-11-10" })).toBe("Every day at 8:00 AM");
   });
 });
 

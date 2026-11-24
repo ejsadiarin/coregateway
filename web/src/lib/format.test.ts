@@ -5,6 +5,7 @@ import {
   netCurrencyTotals,
   phpAmount,
   totalsByCurrency,
+  clockLabel,
 } from "./format";
 
 describe("phpAmount", () => {
@@ -98,5 +99,18 @@ describe("currency totals", () => {
       { currency: "PHP", amount: 1000 },
       { currency: "USD", amount: 0 },
     ]);
+  });
+});
+
+describe("clockLabel", () => {
+  it("shows a 24-hour HH:mm as a 12-hour time", () => {
+    expect(clockLabel("21:30")).toBe("9:30 PM");
+    expect(clockLabel("09:05")).toBe("9:05 AM");
+    expect(clockLabel("00:05")).toBe("12:05 AM");
+    expect(clockLabel("12:00")).toBe("12:00 PM");
+  });
+
+  it("passes anything that isn't HH:mm through", () => {
+    expect(clockLabel("")).toBe("");
   });
 });

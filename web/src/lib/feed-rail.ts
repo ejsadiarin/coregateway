@@ -3,7 +3,7 @@
 // summary.
 
 import { addDays, format, getDay, getDaysInMonth, parseISO } from "date-fns";
-import { phpAmount } from "@/lib/format";
+import { CLOCK, phpAmount } from "@/lib/format";
 import { cadenceLabel, ruleLabel, type Cadence, type Entry, type LedgerKind } from "@/lib/ledger";
 
 type Status = Entry["status"];
@@ -85,7 +85,7 @@ export function monthDays(
 export interface ComingItem {
   key: string;
   date: string; // yyyy-MM-dd, local
-  time?: string; // HH:mm, reminders only
+  time?: string; // "9:00 AM", reminders only
   kind: "reminder" | "rule";
   title: string;
   amount?: number;
@@ -115,8 +115,14 @@ export function comingUp(
     const at = new Date(r.next_fire_at);
     const date = format(at, "yyyy-MM-dd");
     if (!inRange(date)) continue;
-    const time = format(at, "HH:mm");
-    items.push({ key: `reminder:${r.id}`, date, time, kind: "reminder", title: r.message, sort: `${date} ${time}` });
+    items.push({
+      key: `reminder:${r.id}`,
+      date,
+      time: format(at, CLOCK),
+      kind: "reminder",
+      title: r.message,
+      sort: `${date} ${format(at, "HH:mm")}`,
+    });
   }
   for (const r of rules) {
     const dates = r.dates.filter(inRange).sort();

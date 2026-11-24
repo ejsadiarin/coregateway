@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { clockLabel } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, ListFilter, Plus, Repeat, X } from "lucide-react";
@@ -490,6 +491,7 @@ function CategoryOption({ category, on, count, onPick }: { category: Category; o
 function EntryRow({ entry, category, tags, rule, onOpen }: { entry: Entry; category?: Category; tags: Tag[]; rule?: Rule; onOpen: () => void }) {
   const skipped = entry.status === "skipped";
   const clock = clockOf(entry.occurredAt);
+  // Sent as HH:mm, shown as 12-hour.
   return (
     <button type="button" onClick={onOpen} className={cn("flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-foreground/[0.03]", skipped && "opacity-55")}>
       <CategoryBadge category={category} />
@@ -498,7 +500,7 @@ function EntryRow({ entry, category, tags, rule, onOpen }: { entry: Entry; categ
           <span className="truncate text-[15px] font-medium text-foreground">{entry.description || "(no description)"}</span>
           {clock && (
             <time dateTime={entry.occurredAt} className="shrink-0 font-mono text-[12px] tabular-nums text-muted-foreground">
-              {clock}
+              {clockLabel(clock)}
             </time>
           )}
           {entry.notes && <span className="hidden min-w-0 truncate text-[13px] text-muted-foreground md:inline">{entry.notes}</span>}

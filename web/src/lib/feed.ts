@@ -5,7 +5,7 @@ import type { Expense, Income } from "@/types/api";
 import { budgetRecordOf, isBudgetLink } from "@/lib/feed-records";
 import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
 import { columnOption } from "@/lib/kanban-columns";
-import { formatPeso, phpAmount } from "@/lib/format";
+import { CLOCK, formatPeso, phpAmount } from "@/lib/format";
 import { apiBaseUrl } from "@/lib/api";
 import type { RecordRef } from "@/lib/feed-search";
 
@@ -183,13 +183,13 @@ export const removeNote = (data: FeedData | undefined, id: string) =>
 // the time today, with the day before that, and the year once it differs.
 export function noteTime(iso: string, now: Date = new Date()): string {
   const at = new Date(iso);
-  if (isSameDay(at, now)) return format(at, "HH:mm");
-  return format(at, isSameYear(at, now) ? "EEE d MMM, HH:mm" : "EEE d MMM yyyy, HH:mm");
+  if (isSameDay(at, now)) return format(at, CLOCK);
+  return format(at, isSameYear(at, now) ? `EEE d MMM, ${CLOCK}` : `EEE d MMM yyyy, ${CLOCK}`);
 }
 
 // noteClock is the time of day a note was posted; the day it belongs to
 // heads its group in the Feed (feedDays).
-export const noteClock = (iso: string) => format(new Date(iso), "HH:mm");
+export const noteClock = (iso: string) => format(new Date(iso), CLOCK);
 
 // FeedDay is one day of the Feed: its notes in order, under a heading.
 export interface FeedDay {

@@ -208,3 +208,16 @@ export function getRecurringLabel(
       return "One-time";
   }
 }
+
+// clockLabel shows a 24-hour "HH:mm" as the 12-hour time people read:
+// "21:30" → "9:30 PM". Times are stored and sent as HH:mm (or a full
+// moment); only what's shown changes. Anything else passes through.
+export function clockLabel(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return hhmm;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h < 12 ? "AM" : "PM"}`;
+}
+
+// CLOCK is the date-fns pattern for the same 12-hour time.
+export const CLOCK = "h:mm a";

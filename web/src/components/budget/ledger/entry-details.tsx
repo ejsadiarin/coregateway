@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { clockLabel } from "@/lib/format";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, Repeat } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
@@ -59,7 +60,7 @@ export function EntryDetails({
           <h2 className="truncate text-xl font-semibold">{entry.description}</h2>
           <p className="text-sm text-muted-foreground">
             {format(parseISO(entry.date), "EEEE, MMM d, yyyy")}
-            {clockOf(entry.occurredAt) && ` · ${clockOf(entry.occurredAt)}`}
+            {clockOf(entry.occurredAt) && ` · ${clockLabel(clockOf(entry.occurredAt) ?? "")}`}
           </p>
         </div>
         <span className="font-mono text-xl">{signed(entry.kind, entry.amount, entry.currency)}</span>

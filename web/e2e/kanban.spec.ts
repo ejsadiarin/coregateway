@@ -40,7 +40,7 @@ test("editing a card saves its title, description, and due", async ({ page }) =>
   await page.reload();
   const todo = column(page, "Todo", "Todo");
   await expect(todo.getByText("Renew TLS cert for gateway", { exact: true })).toBeVisible();
-  await expect(todo).toContainText(/Due Tue 1 Dec, \d\d:30/i);
+  await expect(todo).toContainText(/Due Tue 1 Dec, \d{1,2}:30 (AM|PM)/i);
 
   // Clearing the due drops it from the card.
   await page.getByRole("main").getByText("Renew TLS cert for gateway", { exact: true }).click();

@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDueToday } from '@/hooks/use-home';
+import { CLOCK } from '@/lib/format';
 
 function reminderTime(at: string | null): string {
-  return at ? format(parseISO(at), 'HH:mm') : '—';
+  return at ? format(parseISO(at), CLOCK) : '—';
 }
 
 export function DueTodayCard({ className }: { className?: string }) {
@@ -60,7 +61,7 @@ export function DueTodayCard({ className }: { className?: string }) {
                   </p>
                 </div>
                 <span className="shrink-0 font-mono text-xs tabular-nums">
-                  {card.due && 'date' in card.due ? 'All day' : card.due && 'at' in card.due ? format(parseISO(card.due.at), 'HH:mm') : ''}
+                  {card.due && 'date' in card.due ? 'All day' : card.due && 'at' in card.due ? format(parseISO(card.due.at), CLOCK) : ''}
                 </span>
               </Link>
             ))}

@@ -112,7 +112,7 @@ test("+ Reminder captures a reminder from the chat box, shown live in the Feed",
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("textbox", { name: "New note" })).toHaveValue("");
-  await expect(noteItem(page, message)).toContainText("Tue 5 Mar 2030, 07:00");
+  await expect(noteItem(page, message)).toContainText("Tue 5 Mar 2030, 7:00 AM");
 
   // Editing it from the note changes it on the Reminders page.
   await noteItem(page, message).getByRole("button", { name: new RegExp(message) }).click();

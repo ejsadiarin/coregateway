@@ -20,6 +20,7 @@ import {
   type TagPick,
 } from "@/hooks/use-ledger";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
+import { clockLabel } from "@/lib/format";
 import {
   cadencePhrase,
   clockOf,
@@ -534,7 +535,7 @@ function TimePill({ value, onChange }: { value: string; onChange: (t: string) =>
       )}
     >
       <Clock className="h-3.5 w-3.5" aria-hidden />
-      <span className="font-mono tabular-nums">{value || "Set a time"}</span>
+      <span className="tabular-nums">{value ? clockLabel(value) : "Set a time"}</span>
       <input
         type="time"
         aria-label="Time of day"

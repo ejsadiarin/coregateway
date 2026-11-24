@@ -1,3 +1,4 @@
+import { clockLabel } from "@/lib/format";
 import type {
   KanbanDue,
   KanbanReminder,
@@ -18,12 +19,12 @@ export const zoneLabel = (tz: string) => tz.replace(/_/g, " ");
 export const toInputValue = (iso: string) => iso.slice(0, 16);
 
 // formatWall shows an RFC 3339 time as the owner's wall clock, e.g.
-// "Tue 10 Nov, 07:00", with the year added when it isn't currentYear. It
+// "Tue 10 Nov, 7:00 AM", with the year added when it isn't currentYear. It
 // reads the string's own date and time rather than converting it, since the
 // owner's timezone need not be this device's.
 export function formatWall(iso: string, currentYear: number): string {
   const [date, time] = toInputValue(iso).split("T");
-  return `${formatDay(date, currentYear)}, ${time}`;
+  return `${formatDay(date, currentYear)}, ${clockLabel(time)}`;
 }
 
 // formatDay shows a YYYY-MM-DD date as "Sat 14 Nov", with the year added
@@ -68,11 +69,11 @@ export function describeSchedule(s: KanbanSchedule): string {
     case "once":
       return "Once";
     case "daily":
-      return `Daily at ${s.time}`;
+      return `Daily at ${clockLabel(s.time)}`;
     case "weekly":
-      return `${s.weekdays.map((d) => weekdayNames[d]).join(", ")} at ${s.time}`;
+      return `${s.weekdays.map((d) => weekdayNames[d]).join(", ")} at ${clockLabel(s.time)}`;
     case "every":
-      return `${s.days === 1 ? "Every day" : `Every ${s.days} days`} at ${s.time}`;
+      return `${s.days === 1 ? "Every day" : `Every ${s.days} days`} at ${clockLabel(s.time)}`;
   }
 }
 
