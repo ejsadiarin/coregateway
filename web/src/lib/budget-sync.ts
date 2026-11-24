@@ -28,29 +28,29 @@ export interface SyncResult {
   moved: number;
 }
 
-// budgetPostedAt is where a record's note sits in the Feed: when it
-// happened, if it has a time on its own date here; else when it was
-// entered, if that was on its own date; otherwise local noon of its date.
-// coreban refuses a posted_at off the record's date, so a time that reads
-// as another day here (the owner travelling) falls back too.
-export function budgetPostedAt(date: string, createdAt: string, occurredAt?: string | null): string {
+// notePlace is where a record's note sits in the Feed: when it happened,
+// if it has a time on its own date here (timed: coreban then keeps the note
+// exactly there); else when it was entered, if that was on its own date;
+// otherwise local noon of its date. coreban refuses a posted_at off the
+// record's date, so a time that reads as another day here (the owner
+// travelling) falls back too.
+function notePlace(date: string, createdAt: string, occurredAt?: string | null): { at: Date; timed: boolean } {
   const day = new Date(`${date}T12:00:00`);
-  const at = [occurredAt, createdAt]
-    .map((t) => (t ? new Date(t) : undefined))
-    .find((t) => t && isSameDay(t, day)) ?? day;
-  return format(at, "yyyy-MM-dd'T'HH:mm:ssXXX");
+  const onDay = (t?: string | null) => (t && isSameDay(new Date(t), day) ? new Date(t) : undefined);
+  const own = onDay(occurredAt);
+  return { at: own ?? onDay(createdAt) ?? day, timed: !!own };
 }
 
-// ownTime tells whether a record's note goes at its own time: it has one,
-// on its date here.
-const ownTime = (date: string, occurredAt?: string | null) =>
-  !!occurredAt && isSameDay(new Date(occurredAt), new Date(`${date}T12:00:00`));
+const rfc3339 = (at: Date) => format(at, "yyyy-MM-dd'T'HH:mm:ssXXX");
+
+export function budgetPostedAt(date: string, createdAt: string, occurredAt?: string | null): string {
+  return rfc3339(notePlace(date, createdAt, occurredAt).at);
+}
 
 export function syncRecordOf(kind: BudgetKind, r: Expense | Income): SyncRecord {
   const date = ("expense_date" in r ? r.expense_date : r.date).slice(0, 10);
-  const record: SyncRecord = { kind, id: r.id, date, posted_at: budgetPostedAt(date, r.created_at, r.occurred_at) };
-  if (ownTime(date, r.occurred_at)) record.timed = true;
-  return record;
+  const { at, timed } = notePlace(date, r.created_at, r.occurred_at);
+  return { kind, id: r.id, date, posted_at: rfc3339(at), ...(timed && { timed: true as const }) };
 }
 
 // notYet tells a record dated after today: its note waits for its date,
