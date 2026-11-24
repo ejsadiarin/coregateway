@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createExpense, createIncome, createTag, fetchExpenseCategories, fetchExpenses, fetchIncomeCategories, fetchIncomes, isUnknownCategoryError } from "@/lib/api";
 import { readAll, syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { feedKey } from "@/lib/feed";
-import { entryOf, ruleOf, skipStatus, today, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
+import { clockOf, entryOf, ruleOf, skipStatus, today, withHues, type Cadence, type Entry, type LedgerKind, type Priority, type Rule } from "@/lib/ledger";
 import { ruleReviewKey } from "@/hooks/use-rule-review";
 import { editToPickCategory } from "@/lib/category-error";
 import { addTag, createRule, fetchRules, fetchTagLinks, removeTag, updateRule, type RuleInput } from "@/lib/ledger-api";
@@ -21,6 +21,7 @@ import {
   useUpdateIncome,
 } from "@/hooks/use-budget";
 import { useAuth } from "@/contexts/auth-context";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import { useToast } from "@/components/ui/toast";
 import type { Category, Expense, Income, Tag } from "@/types/api";
 
@@ -241,12 +242,15 @@ export function ruleInput(r: Rule, change: Partial<RuleInput> = {}): RuleInput {
 
 // entryInput is the whole of an entry to save back with some fields
 // changed, such as its status to skip it.
-export function entryInput(e: Entry, change: Partial<EntryInput> = {}): EntryInput {
+// An update without a time clears it, so the entry's own time goes along,
+// read in timeZone (the owner's saved zone, where corefinance reads it).
+export function entryInput(e: Entry, change: Partial<EntryInput> = {}, timeZone?: string): EntryInput {
   return {
     description: e.description,
     amount: e.amount,
     currency: e.currency,
     date: e.date,
+    time: clockOf(e.occurredAt, timeZone),
     categoryId: e.categoryId,
     priority: e.priority,
     notes: e.notes,
@@ -265,10 +269,11 @@ export function useToggleSkip() {
   const { showToast } = useToast();
   const saveExpense = useSaveEntry("expense");
   const saveIncome = useSaveEntry("income");
+  const zone = useUserTimezone().data?.timezone;
   const toggle = async (e: Entry): Promise<boolean> => {
     const save = e.kind === "expense" ? saveExpense : saveIncome;
     try {
-      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipStatus(e.status) }) });
+      await save.mutateAsync({ id: e.id, input: entryInput(e, { status: skipStatus(e.status) }, zone) });
       // The note shows the record's new status even if its sync is slow.
       qc.invalidateQueries({ queryKey: feedKey });
       return true;

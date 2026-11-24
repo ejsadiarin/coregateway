@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { entryRequest, type EntryInput } from "./use-ledger";
+import { entryInput, entryRequest, type EntryInput } from "./use-ledger";
+import type { Entry } from "@/lib/ledger";
 
 const input: EntryInput = {
   description: "dinner",
@@ -20,5 +21,31 @@ describe("entryRequest", () => {
   it("sends no time for an entry without one", () => {
     expect(entryRequest("expense", input)).not.toHaveProperty("time");
     expect(entryRequest("expense", { ...input, time: "" })).not.toHaveProperty("time");
+  });
+});
+
+// Skipping or unskipping saves the whole entry again; it must keep the time.
+describe("entryInput", () => {
+  const timed: Entry = {
+    id: "e1",
+    kind: "expense",
+    description: "gym",
+    amount: 500,
+    currency: "PHP",
+    date: "2026-11-24",
+    occurredAt: "2026-11-24T10:00:00Z",
+    notes: "",
+    priority: "need",
+    status: "posted",
+    ruleId: "r1",
+    createdAt: "2026-11-24T10:01:00Z",
+  };
+
+  it("keeps an entry's time, read in the owner's zone", () => {
+    expect(entryInput(timed, { status: "skipped" }, "Asia/Manila")).toMatchObject({ status: "skipped", time: "18:00" });
+  });
+
+  it("leaves an untimed entry untimed", () => {
+    expect(entryInput({ ...timed, occurredAt: undefined }, {}, "Asia/Manila").time).toBeUndefined();
   });
 });

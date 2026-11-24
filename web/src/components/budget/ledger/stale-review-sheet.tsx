@@ -4,6 +4,7 @@ import { BottomSheet } from "./bottom-sheet";
 import { useToast } from "@/components/ui/toast";
 import { saveFailureMessage } from "@/hooks/use-budget";
 import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
+import { useUserTimezone } from "@/hooks/use-user-timezone";
 import { editToPickCategory } from "@/lib/category-error";
 import { signed, type Entry, type Rule } from "@/lib/ledger";
 import type { StaleReport } from "@/lib/rule-review";
@@ -27,6 +28,7 @@ export function StaleReviewSheet({
   onClose: () => void;
 }) {
   const save = useSaveEntry(rule.kind);
+  const zone = useUserTimezone().data?.timezone;
   const { showToast } = useToast();
   const [open, setOpen] = useState(report.review.map((e) => e.id));
   const noun = rule.kind === "expense" ? "expense" : "income";
@@ -41,7 +43,7 @@ export function StaleReviewSheet({
       return settle(id);
     }
     try {
-      await save.mutateAsync({ id, input: entryInput(e, { status: "skipped" }) });
+      await save.mutateAsync({ id, input: entryInput(e, { status: "skipped" }, zone) });
       settle(id);
     } catch (err) {
       showToast(saveFailureMessage(err, "Couldn't skip it: ", editToPickCategory("entry")), "error");
