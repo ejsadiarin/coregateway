@@ -103,7 +103,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, rememberM
 	_, err = s.queries.CreateSession(ctx, db.CreateSessionParams{
 		UserID:    userID,
 		TokenHash: tokenHash,
-		ExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
@@ -144,13 +144,6 @@ func sessionRenewal(expiresAt, now time.Time) (time.Time, time.Duration, bool) {
 	return now.Add(window), window, true
 }
 
-// wallClock reads t's local wall clock as UTC. sessions.expires_at is a
-// timestamp without time zone, written from the local wall clock (pgx drops
-// the zone) and read back labelled UTC, so comparisons use the same reading.
-func wallClock(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
-}
-
 // GetSessionUser returns the session's user and, when the session was just
 // extended, the cookie lifetime to send back (zero otherwise).
 func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.User, time.Duration, error) {
@@ -173,10 +166,10 @@ func (s *Service) GetSessionUser(ctx context.Context, token string) (*usertypes.
 	}
 
 	var renewed time.Duration
-	if expiresAt, window, due := sessionRenewal(session.ExpiresAt.Time, wallClock(time.Now())); due {
+	if expiresAt, window, due := sessionRenewal(session.ExpiresAt.Time, time.Now()); due {
 		err := s.queries.ExtendSession(ctx, db.ExtendSessionParams{
 			ID:        session.ID,
-			ExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 		})
 		if err != nil {
 			// The session is still good until its old expiry.

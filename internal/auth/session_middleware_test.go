@@ -20,7 +20,7 @@ type sessionStub struct {
 	db.Querier
 	sessionErr error
 	userID     uuid.UUID
-	expiresAt  time.Time // wall clock, as the sessions table stores it
+	expiresAt  time.Time
 	extendErr  error
 	extended   *db.ExtendSessionParams
 }
@@ -31,7 +31,7 @@ func (s *sessionStub) GetSessionByTokenHash(_ context.Context, _ string) (db.Get
 	}
 	return db.GetSessionByTokenHashRow{
 		UserID:    s.userID,
-		ExpiresAt: pgtype.Timestamp{Time: s.expiresAt, Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: s.expiresAt, Valid: true},
 	}, nil
 }
 
@@ -81,8 +81,8 @@ func sessionCookie(rec *httptest.ResponseRecorder) *http.Cookie {
 	return nil
 }
 
-// expiresIn is a session expiry d from now, on the stored wall clock.
-func expiresIn(d time.Duration) time.Time { return wallClock(time.Now()).Add(d) }
+// expiresIn is a session expiry d from now.
+func expiresIn(d time.Duration) time.Time { return time.Now().Add(d) }
 
 func TestAuthMiddlewareValidSession(t *testing.T) {
 	rec, _ := runSessionMiddleware(t, &sessionStub{userID: uuid.New(), expiresAt: expiresIn(23*time.Hour + 30*time.Minute)})
@@ -133,7 +133,7 @@ func TestAuthMiddlewareExtendsSessionInUse(t *testing.T) {
 			if stub.extended == nil {
 				t.Fatal("session not extended")
 			}
-			if got := stub.extended.ExpiresAt.Time.Sub(wallClock(time.Now())); got < tc.window-time.Minute || got > tc.window {
+			if got := time.Until(stub.extended.ExpiresAt.Time); got < tc.window-time.Minute || got > tc.window {
 				t.Fatalf("extended to %v from now, want %v", got, tc.window)
 			}
 			c := sessionCookie(rec)

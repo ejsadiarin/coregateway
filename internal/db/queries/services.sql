@@ -68,14 +68,15 @@ WITH bounds AS (
         ('1 ' || (SELECT unit FROM bounds))::interval
     ) AS bucket_start
 ), checks AS (
-    SELECT date_trunc(b.unit, h.checked_at) AS bucket_start,
+    -- Buckets are UTC hours and days, whatever the session's TimeZone.
+    SELECT date_trunc(b.unit, h.checked_at AT TIME ZONE 'UTC') AS bucket_start,
            COUNT(*)::bigint AS check_count,
            COUNT(*) FILTER (WHERE h.status = 'online')::bigint AS successes,
            COALESCE(AVG(h.response_time) FILTER (WHERE h.response_time IS NOT NULL), 0)::float8 AS avg_latency
     FROM coregateway.service_health_history h, bounds b
     WHERE h.service_id = b.service_id
-      AND h.checked_at >= b.start_at
-      AND h.checked_at <= b.end_at
+      AND h.checked_at >= b.start_at AT TIME ZONE 'UTC'
+      AND h.checked_at <= b.end_at AT TIME ZONE 'UTC'
     GROUP BY 1
 )
 SELECT buckets.bucket_start::timestamp AS bucket_start,

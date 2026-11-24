@@ -21,7 +21,7 @@ type fakeHealthQueries struct {
 
 	services []sqlc.ListActiveServicesForHealthCheckRow
 	created  []sqlc.CreateHealthHistoryParams
-	cutoff   pgtype.Timestamp
+	cutoff   pgtype.Timestamptz
 	prunes   int
 }
 
@@ -34,7 +34,7 @@ func (f *fakeHealthQueries) CreateHealthHistory(_ context.Context, arg sqlc.Crea
 	return sqlc.CoregatewayServiceHealthHistory{}, nil
 }
 
-func (f *fakeHealthQueries) DeleteOldHealthHistory(_ context.Context, cutoff pgtype.Timestamp) (int64, error) {
+func (f *fakeHealthQueries) DeleteOldHealthHistory(_ context.Context, cutoff pgtype.Timestamptz) (int64, error) {
 	f.prunes++
 	f.cutoff = cutoff
 	return 1, nil

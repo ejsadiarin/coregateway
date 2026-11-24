@@ -45,9 +45,9 @@ RETURNING id, user_id, token_hash, expires_at, created_at
 `
 
 type CreateSessionParams struct {
-	UserID    uuid.UUID        `json:"user_id"`
-	TokenHash string           `json:"token_hash"`
-	ExpiresAt pgtype.Timestamp `json:"expires_at"`
+	UserID    uuid.UUID          `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 // Sessions
@@ -153,8 +153,8 @@ WHERE id = $1 AND expires_at > NOW()
 `
 
 type ExtendSessionParams struct {
-	ID        uuid.UUID        `json:"id"`
-	ExpiresAt pgtype.Timestamp `json:"expires_at"`
+	ID        uuid.UUID          `json:"id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
 func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) error {
@@ -171,13 +171,13 @@ LIMIT 1
 `
 
 type GetSessionByTokenHashRow struct {
-	ID        uuid.UUID        `json:"id"`
-	UserID    uuid.UUID        `json:"user_id"`
-	TokenHash string           `json:"token_hash"`
-	ExpiresAt pgtype.Timestamp `json:"expires_at"`
-	CreatedAt pgtype.Timestamp `json:"created_at"`
-	Email     string           `json:"email"`
-	Role      string           `json:"role"`
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Email     string             `json:"email"`
+	Role      string             `json:"role"`
 }
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error) {

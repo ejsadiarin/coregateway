@@ -109,7 +109,7 @@ DELETE FROM coregateway.service_health_history
 WHERE checked_at < $1
 `
 
-func (q *Queries) DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamp) (int64, error) {
+func (q *Queries) DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteOldHealthHistory, checkedBefore)
 	if err != nil {
 		return 0, err
@@ -299,14 +299,15 @@ WITH bounds AS (
         ('1 ' || (SELECT unit FROM bounds))::interval
     ) AS bucket_start
 ), checks AS (
-    SELECT date_trunc(b.unit, h.checked_at) AS bucket_start,
+    -- Buckets are UTC hours and days, whatever the session's TimeZone.
+    SELECT date_trunc(b.unit, h.checked_at AT TIME ZONE 'UTC') AS bucket_start,
            COUNT(*)::bigint AS check_count,
            COUNT(*) FILTER (WHERE h.status = 'online')::bigint AS successes,
            COALESCE(AVG(h.response_time) FILTER (WHERE h.response_time IS NOT NULL), 0)::float8 AS avg_latency
     FROM coregateway.service_health_history h, bounds b
     WHERE h.service_id = b.service_id
-      AND h.checked_at >= b.start_at
-      AND h.checked_at <= b.end_at
+      AND h.checked_at >= b.start_at AT TIME ZONE 'UTC'
+      AND h.checked_at <= b.end_at AT TIME ZONE 'UTC'
     GROUP BY 1
 )
 SELECT buckets.bucket_start::timestamp AS bucket_start,
@@ -426,24 +427,24 @@ ORDER BY s.name
 `
 
 type ListServicesRow struct {
-	ID                  uuid.UUID        `json:"id"`
-	Name                string           `json:"name"`
-	Url                 string           `json:"url"`
-	Icon                pgtype.Text      `json:"icon"`
-	Description         pgtype.Text      `json:"description"`
-	ServiceType         pgtype.Text      `json:"service_type"`
-	HealthCheckInterval pgtype.Int4      `json:"health_check_interval"`
-	HealthCheckMethod   pgtype.Text      `json:"health_check_method"`
-	ExpectedStatusCodes []int32          `json:"expected_status_codes"`
-	Timeout             pgtype.Int4      `json:"timeout"`
-	CreatedAt           pgtype.Timestamp `json:"created_at"`
-	UpdatedAt           pgtype.Timestamp `json:"updated_at"`
-	IsActive            pgtype.Bool      `json:"is_active"`
-	IsBuiltin           bool             `json:"is_builtin"`
-	BuiltinKey          pgtype.Text      `json:"builtin_key"`
-	CurrentStatus       string           `json:"current_status"`
-	LastCheck           pgtype.Timestamp `json:"last_check"`
-	ResponseTime        pgtype.Int4      `json:"response_time"`
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	Url                 string             `json:"url"`
+	Icon                pgtype.Text        `json:"icon"`
+	Description         pgtype.Text        `json:"description"`
+	ServiceType         pgtype.Text        `json:"service_type"`
+	HealthCheckInterval pgtype.Int4        `json:"health_check_interval"`
+	HealthCheckMethod   pgtype.Text        `json:"health_check_method"`
+	ExpectedStatusCodes []int32            `json:"expected_status_codes"`
+	Timeout             pgtype.Int4        `json:"timeout"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	IsActive            pgtype.Bool        `json:"is_active"`
+	IsBuiltin           bool               `json:"is_builtin"`
+	BuiltinKey          pgtype.Text        `json:"builtin_key"`
+	CurrentStatus       string             `json:"current_status"`
+	LastCheck           pgtype.Timestamptz `json:"last_check"`
+	ResponseTime        pgtype.Int4        `json:"response_time"`
 }
 
 func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {

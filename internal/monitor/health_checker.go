@@ -229,7 +229,7 @@ func (ch *HealthChecker) prune(ctx context.Context, now time.Time) {
 	if !ch.lastPrune.IsZero() && now.Sub(ch.lastPrune) < pruneEvery {
 		return
 	}
-	cutoff := pgtype.Timestamp{Time: now.Add(-healthRetention), Valid: true}
+	cutoff := pgtype.Timestamptz{Time: now.Add(-healthRetention), Valid: true}
 	deleted, err := ch.queries.DeleteOldHealthHistory(ctx, cutoff)
 	if err != nil {
 		slog.Error("failed to prune health history", "error", err)

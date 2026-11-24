@@ -23,7 +23,7 @@ type Querier interface {
 	// Users
 	CreateUser(ctx context.Context, arg CreateUserParams) (CoregatewayUser, error)
 	DeleteExpiredSessions(ctx context.Context) error
-	DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamp) (int64, error)
+	DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamptz) (int64, error)
 	DeleteService(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error

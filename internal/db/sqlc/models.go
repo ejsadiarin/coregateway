@@ -24,47 +24,47 @@ type CoregatewayApiKey struct {
 }
 
 type CoregatewayService struct {
-	ID                  uuid.UUID        `json:"id"`
-	Name                string           `json:"name"`
-	Url                 string           `json:"url"`
-	Icon                pgtype.Text      `json:"icon"`
-	Description         pgtype.Text      `json:"description"`
-	ServiceType         pgtype.Text      `json:"service_type"`
-	HealthCheckInterval pgtype.Int4      `json:"health_check_interval"`
-	HealthCheckMethod   pgtype.Text      `json:"health_check_method"`
-	ExpectedStatusCodes []int32          `json:"expected_status_codes"`
-	Timeout             pgtype.Int4      `json:"timeout"`
-	CreatedAt           pgtype.Timestamp `json:"created_at"`
-	UpdatedAt           pgtype.Timestamp `json:"updated_at"`
-	IsActive            pgtype.Bool      `json:"is_active"`
-	IsBuiltin           bool             `json:"is_builtin"`
-	BuiltinKey          pgtype.Text      `json:"builtin_key"`
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	Url                 string             `json:"url"`
+	Icon                pgtype.Text        `json:"icon"`
+	Description         pgtype.Text        `json:"description"`
+	ServiceType         pgtype.Text        `json:"service_type"`
+	HealthCheckInterval pgtype.Int4        `json:"health_check_interval"`
+	HealthCheckMethod   pgtype.Text        `json:"health_check_method"`
+	ExpectedStatusCodes []int32            `json:"expected_status_codes"`
+	Timeout             pgtype.Int4        `json:"timeout"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	IsActive            pgtype.Bool        `json:"is_active"`
+	IsBuiltin           bool               `json:"is_builtin"`
+	BuiltinKey          pgtype.Text        `json:"builtin_key"`
 }
 
 type CoregatewayServiceHealthHistory struct {
-	ID           uuid.UUID        `json:"id"`
-	ServiceID    pgtype.UUID      `json:"service_id"`
-	Status       string           `json:"status"`
-	ResponseTime pgtype.Int4      `json:"response_time"`
-	StatusCode   pgtype.Int4      `json:"status_code"`
-	ErrorMessage pgtype.Text      `json:"error_message"`
-	CheckedAt    pgtype.Timestamp `json:"checked_at"`
+	ID           uuid.UUID          `json:"id"`
+	ServiceID    pgtype.UUID        `json:"service_id"`
+	Status       string             `json:"status"`
+	ResponseTime pgtype.Int4        `json:"response_time"`
+	StatusCode   pgtype.Int4        `json:"status_code"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	CheckedAt    pgtype.Timestamptz `json:"checked_at"`
 }
 
 type CoregatewaySession struct {
-	ID        uuid.UUID        `json:"id"`
-	UserID    uuid.UUID        `json:"user_id"`
-	TokenHash string           `json:"token_hash"`
-	ExpiresAt pgtype.Timestamp `json:"expires_at"`
-	CreatedAt pgtype.Timestamp `json:"created_at"`
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type CoregatewayUser struct {
-	ID           uuid.UUID        `json:"id"`
-	Email        string           `json:"email"`
-	PasswordHash pgtype.Text      `json:"password_hash"`
-	Role         string           `json:"role"`
-	CreatedAt    pgtype.Timestamp `json:"created_at"`
-	UpdatedAt    pgtype.Timestamp `json:"updated_at"`
-	Timezone     pgtype.Text      `json:"timezone"`
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash pgtype.Text        `json:"password_hash"`
+	Role         string             `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Timezone     pgtype.Text        `json:"timezone"`
 }
