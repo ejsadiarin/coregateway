@@ -14,6 +14,7 @@ import {
 import type { KanbanReminder } from "@/types/kanban";
 import type { Expense, Income } from "@/types/api";
 import { postBudgetNote } from "@/lib/feed";
+import { syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { entryOf } from "@/lib/ledger";
 import { EntrySheet, type SheetTarget } from "@/components/budget/ledger/entry-sheet";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
@@ -256,6 +257,10 @@ export function BudgetDialog({
           if (!created) return onSaved();
           try {
             await postBudgetNote(kind, record.id);
+            // The note is posted at now; a record with its own time has
+            // the sync move the note there (coreban#30). If that fails,
+            // the Feed's next sync does it.
+            await syncBudgetNotes([syncRecordOf(kind, record)]).catch(() => {});
             onSaved();
           } catch (err) {
             onSaved(`The ${kind} was saved, but its note wasn't added to the Feed: ${err instanceof Error ? err.message : err}`);

@@ -60,3 +60,30 @@ test("an expense keeps the time it was given until it is cleared", async ({ page
     if (id) await page.request.delete(`${api}/api/budget/expenses/${id}`);
   }
 });
+
+// A record captured from the Feed with its own time gets its note at that
+// time, not at when it was saved (coreban#30).
+test("an expense captured in the Feed sits at the time it was given", async ({ page }) => {
+  const description = `Feed timed ${Date.now().toString(36)}`;
+  let id: string | undefined;
+  try {
+    await page.goto("/dashboard/feed");
+    await page.getByRole("textbox", { name: "New note" }).fill(description);
+    await page
+      .locator("form", { has: page.getByRole("textbox", { name: "New note" }) })
+      .getByRole("button", { name: "Budget", exact: true })
+      .click();
+    const sheet = page.getByRole("dialog", { name: "New expense" });
+    await sheet.getByLabel("Amount").fill("42");
+    await sheet.getByLabel("Time of day").fill("00:01");
+    const created = page.waitForResponse((r) => r.url().endsWith("/api/budget/expenses") && r.request().method() === "POST");
+    await sheet.getByRole("button", { name: /^Add expense/ }).click();
+    id = (await (await created).json()).id;
+    await expect(sheet).toBeHidden();
+
+    const note = page.getByRole("log", { name: "Feed" }).getByRole("listitem").filter({ hasText: description });
+    await expect(note).toContainText("12:01 AM");
+  } finally {
+    if (id) await page.request.delete(`${api}/api/budget/expenses/${id}`);
+  }
+});

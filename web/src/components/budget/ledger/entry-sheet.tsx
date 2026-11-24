@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Expense, Income } from "@/types/api";
 import { format, parseISO, subDays } from "date-fns";
 import { CalendarDays, Clock, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
@@ -53,7 +54,7 @@ const longDate = (d: string) => format(parseISO(d), "EEE, MMM d");
 // entry its note links to.
 export interface FeedOptions {
   prefill?: string;
-  onSaved: (record: { id: string }, kind: LedgerKind, created: boolean) => void | Promise<void>;
+  onSaved: (record: Expense | Income, kind: LedgerKind, created: boolean) => void | Promise<void>;
 }
 
 export function EntrySheet({

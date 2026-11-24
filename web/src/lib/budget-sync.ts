@@ -18,6 +18,9 @@ export interface SyncRecord {
   id: string;
   date: string; // YYYY-MM-DD
   posted_at: string; // RFC 3339
+  // timed: posted_at is the record's own time, so coreban puts the note
+  // exactly there, not just on the right date (coreban#30).
+  timed?: true;
 }
 
 export interface SyncResult {
@@ -38,9 +41,16 @@ export function budgetPostedAt(date: string, createdAt: string, occurredAt?: str
   return format(at, "yyyy-MM-dd'T'HH:mm:ssXXX");
 }
 
+// ownTime tells whether a record's note goes at its own time: it has one,
+// on its date here.
+const ownTime = (date: string, occurredAt?: string | null) =>
+  !!occurredAt && isSameDay(new Date(occurredAt), new Date(`${date}T12:00:00`));
+
 export function syncRecordOf(kind: BudgetKind, r: Expense | Income): SyncRecord {
   const date = ("expense_date" in r ? r.expense_date : r.date).slice(0, 10);
-  return { kind, id: r.id, date, posted_at: budgetPostedAt(date, r.created_at, r.occurred_at) };
+  const record: SyncRecord = { kind, id: r.id, date, posted_at: budgetPostedAt(date, r.created_at, r.occurred_at) };
+  if (ownTime(date, r.occurred_at)) record.timed = true;
+  return record;
 }
 
 // notYet tells a record dated after today: its note waits for its date,

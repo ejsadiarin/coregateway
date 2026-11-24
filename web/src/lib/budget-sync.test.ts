@@ -35,6 +35,7 @@ describe("syncRecordOf", () => {
       created_at: "2026-11-14T08:49:20Z",
     } as Expense;
     expect(new Date(syncRecordOf("expense", e).posted_at).getTime()).toBe(at.getTime());
+    expect(syncRecordOf("expense", e).timed).toBe(true);
   });
 
   it("falls back when the time lands on another day here (read in another timezone)", () => {
@@ -46,6 +47,13 @@ describe("syncRecordOf", () => {
     } as Expense;
     const posted = new Date(syncRecordOf("expense", e).posted_at);
     expect([posted.getDate(), posted.getHours()]).toEqual([5, 12]);
+    // Not the record's own time, so coreban moves it only when re-dated.
+    expect(syncRecordOf("expense", e).timed).toBeUndefined();
+  });
+
+  it("leaves an untimed record unmarked", () => {
+    const i = { id: "i1", date: "2026-06-02", created_at: "2026-11-14T08:49:20Z" } as Income;
+    expect(syncRecordOf("income", i).timed).toBeUndefined();
   });
 
   it("reads an expense's date and an income's date", () => {
