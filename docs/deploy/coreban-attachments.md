@@ -19,6 +19,7 @@ Cloudflare account with R2 enabled. The dashboard's public origin is
 - [8. Verify](#8-verify)
 - [9. Troubleshooting](#9-troubleshooting)
 - [10. Operations](#10-operations)
+- [11. The temporary compose stack](#11-the-temporary-compose-stack)
 
 ---
 
@@ -172,13 +173,14 @@ connections to R2 being dropped.
 ## 7. Migrate and deploy
 
 Attachments need coreban at `8e48c7b` or later, and the web and gateway
-from `rewrite-v2` at `4dc5f0c` or later. Migrate before the new pods start,
-as in main guide 15.6:
+from `main` at `4dc5f0c` or later. Migrate before the new pods start,
+as in main guide 15.6. Production is already past both of these
+migrations, so this should find nothing to apply for them:
 
 ```sh
 cd ~/personal/coregateway/services/coreban     # MIGRATION_URL (owner role, direct host) in .env
-make migrate-status                            # 00013_attachments and 00014_attachment_deletions pending
-make migrate-up
+make migrate-status                            # 00013_attachments and 00014_attachment_deletions applied
+make migrate-up                                # only if either is pending
 ```
 
 Then commit the Secret and the image tag bumps to `core-infra`, push, and:
@@ -274,3 +276,34 @@ uploads are refused with the "not set up" message. Notes still load with
 their text, but their attachments come without links, so they stop
 showing. The cleaner stops too, so nothing in
 the bucket is deleted.
+
+## 11. The temporary compose stack
+
+Until the cluster serves coreban, the compose stack behind the homelab
+Traefik (`https://core.local.ejsadiarin.com`) can use the same bucket and
+token. Sections 5 to 7 don't apply to it.
+
+1. Add its origin to the CORS policy (section 3):
+
+   ```json
+   "AllowedOrigins": ["https://core.ejsadiarin.com", "https://core.local.ejsadiarin.com"],
+   ```
+
+2. Put the `S3_*` values from section 5 in `services/coreban/.env`, as plain
+   `KEY=value` lines. `S3_PUBLIC_ENDPOINT` stays empty.
+
+3. Recreate coreban (`restart` would keep the old environment) and look for
+   the warning:
+
+   ```sh
+   cd ~/personal/coregateway
+   docker compose up -d --no-deps --force-recreate coreban-api
+   docker compose logs coreban-api | grep -c 'S3_ENDPOINT is not set'   # 0
+   ```
+
+Then run section 8's `curl` checks and phone steps with `core.local` in
+place of `core`. The PUTs still go from the phone straight to R2, so the
+phone needs the internet as well as the tailnet.
+
+When this stack is retired, remove its origin from the CORS policy. Notes
+and files carry over: both stacks share the database and the bucket.
