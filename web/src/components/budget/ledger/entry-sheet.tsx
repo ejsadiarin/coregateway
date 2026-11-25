@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
-import { CalendarDays, Check, Clock, Plus, Repeat, Tags, X } from "lucide-react";
+import { CalendarDays, Check, Clock, Plus, Repeat, Tags } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { useSheetClose } from "./use-sheet-close";
 import { categoryIcon, hueClasses } from "./chips";
@@ -681,6 +681,9 @@ function DatePill({
   );
 }
 
+// TagField shows the owner's tags as chips to tap, like the categories: a
+// tap picks one, another drops it. "New tag" opens a field that filters the
+// chips as it is typed and makes a tag that doesn't exist yet.
 function TagField({ tags, allTags, onChange }: { tags: TagPick[]; allTags: { id: string; name: string }[]; onChange: (t: TagPick[]) => void }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
@@ -690,24 +693,41 @@ function TagField({ tags, allTags, onChange }: { tags: TagPick[]; allTags: { id:
   }, [adding]);
 
   const name = text.trim().replace(/^#/, "");
-  const has = (n: string) => tags.some((t) => t.name.toLowerCase() === n.toLowerCase());
-  const matches = allTags.filter((t) => !has(t.name) && t.name.toLowerCase().includes(name.toLowerCase())).slice(0, 6);
-  const add = (t: TagPick) => {
-    if (!has(t.name)) onChange([...tags, t]);
+  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const picked = (n: string) => tags.some((t) => same(t.name, n));
+  // Every saved tag, then any picked one made in this sheet and not saved yet.
+  const chips: TagPick[] = [...allTags, ...tags.filter((t) => !allTags.some((a) => same(a.name, t.name)))];
+  const shown = name ? chips.filter((t) => t.name.toLowerCase().includes(name.toLowerCase())) : chips;
+  const toggle = (t: TagPick) => onChange(picked(t.name) ? tags.filter((x) => !same(x.name, t.name)) : [...tags, t]);
+  const create = () => {
+    if (!name) return;
+    const existing = chips.find((t) => same(t.name, name));
+    if (!existing || !picked(existing.name)) onChange([...tags, existing ?? { name }]);
     setText("");
+    setAdding(false);
   };
 
   return (
     <Field label="Tags">
       <div className="flex flex-wrap items-center gap-1.5">
-        {tags.map((t) => (
-          <span key={t.name} className="inline-flex h-[30px] items-center gap-1 rounded-full border border-pink-300/40 pl-2.5 pr-1 text-[13px] font-medium text-pink-200">
-            #{t.name}
-            <button type="button" aria-label={`Remove #${t.name}`} onClick={() => onChange(tags.filter((x) => x !== t))} className="grid h-6 w-6 place-items-center rounded-full opacity-70 hover:opacity-100">
-              <X className="h-3 w-3" />
+        {shown.map((t) => {
+          const on = picked(t.name);
+          return (
+            <button
+              key={t.name}
+              type="button"
+              aria-pressed={on}
+              onMouseDown={(e) => adding && e.preventDefault()}
+              onClick={() => toggle(t)}
+              className={cn(
+                "inline-flex h-[30px] items-center gap-1 rounded-full border px-2.5 text-[13px] font-medium transition-[color,background-color,border-color,transform] duration-150 active:scale-95",
+                on ? "border-pink-300/60 bg-pink-300/15 text-pink-200" : "border-foreground/15 text-foreground/70 hover:text-foreground",
+              )}
+            >
+              {on && <Check className="h-3 w-3" aria-hidden />}#{t.name}
             </button>
-          </span>
-        ))}
+          );
+        })}
         {adding ? (
           <input
             ref={inputRef}
@@ -718,8 +738,9 @@ function TagField({ tags, allTags, onChange }: { tags: TagPick[]; allTags: { id:
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (name) add(allTags.find((t) => t.name.toLowerCase() === name.toLowerCase()) ?? { name });
+                create();
               } else if (e.key === "Escape") {
+                setText("");
                 setAdding(false);
               }
             }}
@@ -727,25 +748,26 @@ function TagField({ tags, allTags, onChange }: { tags: TagPick[]; allTags: { id:
             className="h-[30px] w-32 rounded-full border border-foreground/20 bg-background px-3 text-[13px] outline-none focus:border-pink-300/60"
           />
         ) : (
-          <button type="button" onClick={() => setAdding(true)} className="inline-flex h-[30px] items-center gap-1 rounded-full border border-dashed border-foreground/25 px-2.5 text-[13px] font-medium text-muted-foreground">
-            <Plus className="h-3 w-3" /> Tag
+          <button
+            type="button"
+            aria-label="New tag"
+            onClick={() => setAdding(true)}
+            className="inline-flex h-[30px] items-center gap-1 rounded-full border border-dashed border-foreground/25 px-2.5 text-[13px] font-medium text-muted-foreground transition-transform duration-150 active:scale-95"
+          >
+            <Plus className="h-3 w-3" /> New
+          </button>
+        )}
+        {adding && name && !chips.some((t) => same(t.name, name)) && (
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={create}
+            className="h-[30px] rounded-full border border-dashed border-pink-300/40 px-2.5 text-[13px] text-pink-200"
+          >
+            Create #{name}
           </button>
         )}
       </div>
-      {adding && (matches.length > 0 || (name && !has(name))) && (
-        <div className="flex flex-wrap gap-1.5">
-          {matches.map((t) => (
-            <button key={t.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => add(t)} className="h-7 rounded-full bg-muted px-2.5 text-[13px] text-pink-200">
-              #{t.name}
-            </button>
-          ))}
-          {name && !allTags.some((t) => t.name.toLowerCase() === name.toLowerCase()) && !has(name) && (
-            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => add({ name })} className="h-7 rounded-full border border-dashed border-pink-300/40 px-2.5 text-[13px] text-pink-200">
-              Create #{name}
-            </button>
-          )}
-        </div>
-      )}
     </Field>
   );
 }
