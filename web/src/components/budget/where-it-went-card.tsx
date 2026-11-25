@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { FillBar } from '@/components/ui/fill-bar';
 import { useCategoryBreakdown, useFiftyThirtyTwenty } from '@/hooks/use-budget';
 import { budgetPeriodBounds, previousBudgetPeriod } from '@/lib/budget-period';
 import { formatPeso, formatRate } from '@/lib/format';
@@ -60,13 +61,11 @@ export function WhereItWentCard({ period, date, className }: WhereItWentCardProp
                         {formatRate(row.share * 100, 0)}
                       </span>
                     </div>
-                    <div className="mt-1.5 h-1 rounded-full bg-muted">
-                      <div
-                        className="h-1 rounded-full"
-                        style={{
-                          width: `${row.share * 100}%`,
-                          background: row.category_color || 'var(--chart-1)',
-                        }}
+                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                      <FillBar
+                        share={row.share}
+                        className="rounded-full"
+                        style={{ background: row.category_color || 'var(--chart-1)' }}
                       />
                     </div>
                   </div>

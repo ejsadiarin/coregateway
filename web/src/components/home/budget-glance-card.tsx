@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Wallet } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
 import { useCurrentTotalMoney, usePeriodBudget } from '@/hooks/use-budget';
 import { todayISODate } from '@/lib/budget-period';
 import { formatPeso } from '@/lib/format';
@@ -46,7 +47,7 @@ export function BudgetGlanceCard({ className }: { className?: string }) {
               <div>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Money on hand</p>
                 <p className={`text-2xl font-bold font-mono tabular-nums ${Number(money.data.total_money) < 0 ? 'text-destructive' : ''}`}>
-                  {formatPeso(money.data.total_money)}
+                  <CountUp value={Number(money.data.total_money)} format={formatPeso} />
                 </p>
               </div>
               <div>
@@ -54,7 +55,7 @@ export function BudgetGlanceCard({ className }: { className?: string }) {
                   Safe to spend today
                 </p>
                 <p className={`text-2xl font-bold font-mono tabular-nums ${overBudget ? 'text-destructive' : ''}`}>
-                  {safe === null ? '—' : formatPeso(safe)}
+                  {safe === null ? '—' : <CountUp value={Number(safe)} format={formatPeso} />}
                 </p>
                 {overBudget && <p className="text-xs font-medium text-destructive">Over budget</p>}
               </div>

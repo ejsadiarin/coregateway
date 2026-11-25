@@ -318,17 +318,38 @@ function EntryForm({
               </AnimatePresence>
               {money(0, currency).replace("0", "")}
             </span>
-            <input
-              id="entry-amount"
-              inputMode="decimal"
-              autoComplete="off"
-              autoFocus={isNew}
-              placeholder="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
-              className="min-w-0 bg-transparent text-left font-mono text-[44px] font-medium tracking-tight text-foreground caret-primary outline-none placeholder:text-foreground/25"
-              style={{ width: `${Math.max(1, amount.length) + 0.4}ch` }}
-            />
+            {/* The typed digits are drawn over the field, each rolling up
+                into place like an odometer; the field's own text is
+                transparent so only its caret and placeholder show. */}
+            <span className="relative">
+              <input
+                id="entry-amount"
+                inputMode="decimal"
+                autoComplete="off"
+                autoFocus={isNew}
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value.replace(/[^\d.,]/g, ""))}
+                className="min-w-0 bg-transparent text-left font-mono text-[44px] leading-[1.15] font-medium tracking-tight text-transparent caret-primary outline-none placeholder:text-foreground/25"
+                style={{ width: `${Math.max(1, amount.length) + 0.4}ch` }}
+              />
+              <span aria-hidden className="pointer-events-none absolute inset-0 flex items-center overflow-hidden font-mono text-[44px] leading-[1.15] font-medium tracking-tight text-foreground">
+                <AnimatePresence initial={false} mode="popLayout">
+                  {[...amount].map((ch, i) => (
+                    <motion.span
+                      key={`${i}${ch}`}
+                      initial={{ y: "70%", opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: "-70%", opacity: 0 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      className="inline-block whitespace-pre"
+                    >
+                      {ch}
+                    </motion.span>
+                  ))}
+                </AnimatePresence>
+              </span>
+            </span>
           </div>
           <label className="sr-only" htmlFor="entry-currency">
             Currency

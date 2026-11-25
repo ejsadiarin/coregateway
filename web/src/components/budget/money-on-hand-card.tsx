@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CountUp } from '@/components/ui/count-up';
 import { useCurrentTotalMoney } from '@/hooks/use-budget';
 import { formatPeso } from '@/lib/format';
 
@@ -35,13 +36,15 @@ export function MoneyOnHandCard({ className }: MoneyOnHandCardProps) {
                   Number(data.total_money) < 0 ? 'text-destructive' : ''
                 }`}
               >
-                {formatPeso(data.total_money)}
+                <CountUp value={Number(data.total_money)} format={formatPeso} />
               </p>
               <p className="mt-1 text-xs text-muted-foreground">Income less expenses dated today or earlier</p>
             </div>
             <div className="md:pl-5">
               <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Committed</p>
-              <p className="mt-1 text-xl font-semibold font-mono tabular-nums">{formatPeso(data.committed)}</p>
+              <p className="mt-1 text-xl font-semibold font-mono tabular-nums">
+                <CountUp value={Number(data.committed)} format={formatPeso} />
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">Future-dated expenses already planned</p>
             </div>
             <div className="md:pl-5">

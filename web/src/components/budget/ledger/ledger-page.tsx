@@ -11,6 +11,7 @@ import { NewFromRules } from "./new-from-rules";
 import { RuleSheet } from "./rule-sheet";
 import { StaleReviewSheet } from "./stale-review-sheet";
 import type { StaleReport } from "@/lib/rule-review";
+import { FillBar } from "@/components/ui/fill-bar";
 import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { useTags } from "@/hooks/use-budget";
@@ -632,7 +633,7 @@ function MonthBreakdown({
                   <span className="w-9 text-right text-xs text-muted-foreground">{Math.round((amount / total) * 100)}%</span>
                 </span>
                 <span className="h-1.5 overflow-hidden rounded-full bg-foreground/[0.06]">
-                  <span className={cn("block h-full rounded-full", hue.bar)} style={{ width: `${Math.max(3, (amount / max) * 100)}%` }} />
+                  <FillBar share={Math.max(0.03, amount / max)} className={cn("rounded-full", hue.bar)} />
                 </span>
               </button>
             </li>
