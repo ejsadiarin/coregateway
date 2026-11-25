@@ -31,7 +31,7 @@ test("editing a card saves its title, description, and due", async ({ page }) =>
   await editor.getByRole("textbox", { name: "Description" }).fill("check expiry: `openssl x509 -enddate -noout`");
   await editor.getByRole("combobox", { name: "Due" }).click();
   await page.getByRole("option", { name: "Date and time" }).click();
-  await editor.getByLabel("Day and time, in your Kanban timezone").fill("2026-12-01T09:30");
+  await editor.getByLabel("Day and time, in your timezone").fill("2026-12-01T09:30");
   await editor.getByRole("tab", { name: "Preview" }).click();
   await expect(editor.getByRole("tabpanel").locator("code")).toHaveText("openssl x509 -enddate -noout");
   await editor.getByRole("button", { name: "Save" }).click();
