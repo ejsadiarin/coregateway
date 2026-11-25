@@ -376,28 +376,29 @@
   background: color-mix(in srgb, var(--foreground) 25%, transparent);
 }
 
-/* From sm up the sheet is a centred card: it rises in with a little
-   overshoot and drops out, instead of vaul's slide from the screen edge,
-   and loses vaul's fill below the drawer. */
-@keyframes sheet-rise {
-  from { opacity: 0; transform: translate3d(0, 28px, 0) scale(0.96); }
-  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+/* From sm up the sheet is a centred card: it fades in and out where it
+   stands, instead of vaul's slide from the screen edge, and loses vaul's
+   fill below the drawer. The class is tripled because vaul's slide rules
+   carry four attributes and are injected after this file, so they win a
+   tie. Opacity only: the transform stays free for a drag of the handle. */
+@keyframes sheet-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-@keyframes sheet-drop {
-  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-  to { opacity: 0; transform: translate3d(0, 40px, 0) scale(0.98); }
+@keyframes sheet-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 @media (min-width: 640px) {
-  .bottom-sheet.bottom-sheet[data-vaul-drawer][data-state=open] {
-    /* backwards, not both: a held end frame would override the inline
-       transform vaul sets while the handle is dragged. */
-    animation: sheet-rise 380ms cubic-bezier(0.34, 1.3, 0.64, 1) backwards;
+  .bottom-sheet.bottom-sheet.bottom-sheet[data-vaul-drawer][data-state=open] {
+    animation: sheet-fade-in 180ms ease-out backwards;
   }
-  .bottom-sheet.bottom-sheet[data-vaul-drawer][data-state=closed] {
-    animation: sheet-drop 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  .bottom-sheet.bottom-sheet.bottom-sheet[data-vaul-drawer][data-state=closed] {
+    animation: sheet-fade-out 150ms ease-in forwards;
   }
   .bottom-sheet.bottom-sheet[data-vaul-drawer]::after { display: none; }
-  .bottom-sheet-overlay.bottom-sheet-overlay[data-vaul-overlay][data-state=closed] { animation-duration: 200ms; }
+  .bottom-sheet-overlay.bottom-sheet-overlay[data-vaul-overlay][data-state=open] { animation-duration: 180ms; }
+  .bottom-sheet-overlay.bottom-sheet-overlay[data-vaul-overlay][data-state=closed] { animation: fadeOut 150ms ease-in forwards; }
   .bottom-sheet-handle.bottom-sheet-handle[data-vaul-handle] { cursor: grab; }
   .bottom-sheet-handle.bottom-sheet-handle[data-vaul-handle]:active { cursor: grabbing; }
 }

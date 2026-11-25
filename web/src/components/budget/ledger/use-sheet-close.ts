@@ -18,9 +18,9 @@ export const useSheetIsPhone = () =>
 export const CLOSE_THRESHOLD = 0.25;
 
 // How long the sheet takes to leave: vaul's slide on a phone, the card's
-// drop (app.css, sheet-drop) from sm up.
+// fade (app.css, sheet-fade-out) from sm up.
 const exitMs = (phone: boolean) =>
-  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : phone ? 500 : 220;
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : phone ? 500 : 170;
 
 // useSheetClose gives a sheet's own buttons (Cancel, Done, a finished save)
 // a close that plays the sheet's exit before onClose unmounts it. Callers

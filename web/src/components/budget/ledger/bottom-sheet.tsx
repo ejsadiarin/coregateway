@@ -6,14 +6,14 @@ import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { CLOSE_THRESHOLD, useSheetClose, useSheetIsPhone } from "./use-sheet-close";
 
-// BottomSheet slides up from the bottom on a phone and sits centred on a
-// wider screen. Its parts: a header that stays, a body that scrolls, a
+// BottomSheet slides up from the bottom on a phone and fades in centred on
+// a wider screen. Its parts: a header that stays, a body that scrolls, a
 // footer that stays.
 //
 // Vaul supplies dismissal by drag. On a phone the whole card follows the
 // finger (a scrolled body scrolls instead, until it is back at the top);
 // on a wider screen only the handle drags, so text stays selectable, and
-// the card rises in and drops out (.bottom-sheet in app.css).
+// the card fades in and out in place (.bottom-sheet in app.css).
 export function BottomSheet({
   open,
   onOpenChange,

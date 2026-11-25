@@ -2,7 +2,7 @@ import { expect, login, test, type Page } from "./fixtures";
 
 // The record sheet (coregateway#57): on a phone the whole card follows a
 // drag down and a long enough drag dismisses it; on a wider screen only the
-// handle drags, and every close plays the card's exit before it goes.
+// handle drags, and the card fades in and out where it stands.
 
 test.beforeEach(async ({ page }) => {
   await login(page);
@@ -29,8 +29,38 @@ const drag = async (page: Page, x: number, y: number, by: number, release = true
   if (release) await page.mouse.up();
 };
 
+// watchEntrance records, frame by frame from the first one, how far the sheet
+// sits from its resting place and its opacity.
+const watchEntrance = async (page: Page) => {
+  await page.goto("/dashboard/budget/expenses");
+  const open = page.getByRole("button", { name: "Expense", exact: true });
+  await expect(open).toBeVisible();
+  await page.evaluate(() => {
+    const frames: { y: number; opacity: number }[] = [];
+    Object.assign(window, { sheetFrames: frames });
+    const tick = () => {
+      const el = document.querySelector(".bottom-sheet");
+      if (el) {
+        const style = getComputedStyle(el);
+        frames.push({ y: new DOMMatrix(style.transform).m42, opacity: Number(style.opacity) });
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await open.click();
+  await page.waitForTimeout(900);
+  return page.evaluate(() => (window as unknown as { sheetFrames: { y: number; opacity: number }[] }).sheetFrames);
+};
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 412, height: 900 } });
+
+  test("the sheet slides up from the bottom", async ({ page }) => {
+    const frames = await watchEntrance(page);
+    expect(Math.max(...frames.map((f) => f.y))).toBeGreaterThan(300);
+    expect(frames.at(-1)!.y).toBe(0);
+  });
 
   test("dragging the card down far enough dismisses it; a short drag springs back", async ({ page }) => {
     const sheet = await openSheet(page);
@@ -57,7 +87,14 @@ test.describe("on a phone", () => {
 });
 
 test.describe("on a wider screen", () => {
-  test("only the handle drags, and Cancel lets the card drop out before it goes", async ({ page }) => {
+  test("the card fades in already in the middle", async ({ page }) => {
+    const frames = await watchEntrance(page);
+    expect(frames.every((f) => f.y === 0)).toBe(true);
+    expect(Math.min(...frames.map((f) => f.opacity))).toBeLessThan(0.5);
+    expect(frames.at(-1)!.opacity).toBe(1);
+  });
+
+  test("only the handle drags, and Cancel lets the card fade out before it goes", async ({ page }) => {
     const sheet = await openSheet(page);
     const box = (await sheet.boundingBox())!;
 
