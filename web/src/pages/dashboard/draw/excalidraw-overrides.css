@@ -19,7 +19,7 @@
   display: none !important;
 }
 
-/* The mobile island is a white bar when only our hidden controls remain.
+/* The mobile island is an empty box when only our hidden controls remain.
    Keep it for selection actions (Edit/Duplicate/Delete) and finalize. */
 .coredraw-canvas
   .App-bottom-bar
@@ -31,6 +31,44 @@
     )
   ) {
   display: none !important;
+}
+
+/* The bar usually holds one button, so it is only as wide as its buttons: a
+   small corner control like our own floating ones. It takes the full width
+   back while its style panel is open. The island is unpositioned so "Scroll
+   back to content" still centres on the canvas, not on the button. */
+.coredraw-canvas .App-bottom-bar > .Island {
+  position: static;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.coredraw-canvas .App-bottom-bar > .Island:not(:has(.App-mobile-menu)) {
+  width: auto;
+  min-width: 0;
+}
+
+.coredraw-canvas .App-bottom-bar .App-toolbar-content {
+  justify-content: flex-start;
+  padding: 0;
+}
+
+.coredraw-canvas .App-bottom-bar .App-toolbar-content .ToolIcon__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+/* Excalidraw lifts the bar by --sab. On phones our toolbar sits under the
+   canvas and already clears the safe area, so there is nothing to lift over;
+   a narrow tablet canvas has our history and zoom cluster in that corner. */
+.coredraw-canvas .App-bottom-bar {
+  --sab: 0px;
+}
+
+@media (min-width: 768px) {
+  .coredraw-canvas .App-bottom-bar {
+    --sab: 3.5rem;
+  }
 }
 
 /* Excalidraw fills its parent only when that parent has a definite height.

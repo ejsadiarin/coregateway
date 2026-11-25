@@ -66,6 +66,22 @@ test.describe("draw phone shell", () => {
         "true",
       );
     }
+
+    // Excalidraw's own bar is one corner button, not a strip over the canvas,
+    // and only widens while its style panel is open.
+    await page.getByRole("button", { name: "Draw", exact: true }).click();
+    const bar = page.locator(".App-bottom-bar > .Island");
+    const barWidth = async () => (await bar.boundingBox())?.width ?? 0;
+    const edit = page.getByRole("button", { name: "Edit", exact: true });
+    expect((await edit.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(await barWidth()).toBeLessThanOrEqual(60);
+    await edit.click();
+    await expect.poll(barWidth).toBeGreaterThan(300);
+    await edit.click();
+    await expect.poll(barWidth).toBeLessThanOrEqual(60);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(bar).toBeHidden();
+
     await page.getByRole("button", { name: "Insert", exact: true }).click();
     await expect(page.getByPlaceholder("Search icons…")).toBeVisible();
     await page.getByRole("button", { name: "Close panel" }).click();
