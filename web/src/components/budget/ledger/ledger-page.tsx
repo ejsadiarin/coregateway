@@ -1,5 +1,6 @@
 import { useId, useMemo, useState } from "react";
 import { clockLabel } from "@/lib/format";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronDown, ListFilter, Plus, Repeat, X } from "lucide-react";
@@ -405,17 +406,22 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
       </aside>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setSheet({ mode: "new" })}
-        className={cn(
-          "fixed right-4 bottom-20 z-30 lg:hidden flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
-          kind === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950",
-        )}
-      >
-        <Plus className="h-[18px] w-[18px]" aria-hidden />
-        {noun}
-      </button>
+      {/* Portaled to <body>: the page wrapper animates with a transform, which makes
+          `fixed` pin to the wrapper and drift with scroll instead of staying on screen. */}
+      {createPortal(
+        <button
+          type="button"
+          onClick={() => setSheet({ mode: "new" })}
+          className={cn(
+            "fixed right-4 bottom-20 z-30 lg:hidden flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
+            kind === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950",
+          )}
+        >
+          <Plus className="h-[18px] w-[18px]" aria-hidden />
+          {noun}
+        </button>,
+        document.body,
+      )}
 
       <EntrySheet kind={kind} target={sheet} onClose={() => setSheet(null)} onStale={(rule, report) => setStale({ rule, report })} />
 
