@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, useMatch } from "react-router-dom";
 import { SidebarProvider } from "./sidebar-context";
 import { Sidebar } from "./sidebar";
@@ -5,6 +6,10 @@ import { MobileBottomNav } from "./mobile-bottom-nav";
 import { ContentHeader } from "./content-header";
 import { PageTitleProvider } from "./page-title";
 import { cn } from "@/lib/utils";
+import { tabEnterFrom } from "@/lib/motion";
+import { bottomTabOf, primaryItems } from "./bottom-nav-items";
+
+const tabs = primaryItems.map((i) => i.path);
 
 function ShellInner({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
@@ -12,6 +17,14 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   // replaces the dashboard header and bottom nav. Tablets and desktops keep
   // the normal shell.
   const isDrawEditor = useMatch("/dashboard/draw/:boardId") !== null;
+
+  // Which side the new page comes in from: a move between bottom-nav tabs
+  // slides in from the side of the tab picked (phones only, in app.css);
+  // anything else fades in with a slight rise.
+  const [route, setRoute] = useState<{ path: string; from: "left" | "right" | null }>({ path: pathname, from: null });
+  if (route.path !== pathname) {
+    setRoute({ path: pathname, from: tabEnterFrom(tabs, bottomTabOf(route.path), bottomTabOf(pathname)) });
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
@@ -24,7 +37,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           <ContentHeader />
         </div>
 
-        {/* Keyed so each route starts at the top. The fade is a CSS opacity
+        {/* Keyed so each route starts at the top. The entrance is a CSS
             animation the compositor runs on its own: the new page's mount
             blocks the main thread for a few frames, which a JS-driven
             slide stuttered through. */}
@@ -32,6 +45,9 @@ function ShellInner({ children }: { children: React.ReactNode }) {
           key={pathname}
           className={cn(
             "route-enter flex-1 overflow-y-auto",
+            // The Draw editor reads its canvas's offset as it mounts, which
+            // a moving page would skew: it only fades.
+            isDrawEditor ? "route-fade" : route.from && `route-from-${route.from}`,
             isDrawEditor ? "min-h-0 max-md:overflow-hidden max-md:pb-0" : "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
           )}
         >

@@ -1,56 +1,12 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import {
-LayoutDashboard,
-MessageSquareText,
-PenTool,
-SquareKanban,
-Wallet,
-Receipt,
-Server,
-MoreHorizontal,
-TrendingUp,
-SlidersHorizontal,
-Users,
-ArrowLeftRight,
-BarChart3,
-FileText,
-LogOut,
-X,
-type LucideIcon,
-} from "lucide-react";
+import { LogOut, MoreHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
 import { matchNavPath } from "./sidebar-nav-items";
+import { overflowItems, primaryItems, type BottomNavItem } from "./bottom-nav-items";
 import { useQueryClient } from "@tanstack/react-query";
-
-interface BottomNavItem {
-  label: string;
-  icon: LucideIcon;
-  path: string;
-  disabled?: boolean;
-  adminOnly?: boolean;
-}
-
-const primaryItems: BottomNavItem[] = [
-  { label: "Feed", icon: MessageSquareText, path: "/dashboard/feed" },
-  { label: "Home", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Budget", icon: Wallet, path: "/dashboard/budget" },
-  { label: "Expenses", icon: Receipt, path: "/dashboard/budget/expenses" },
-  { label: "Services", icon: Server, path: "/dashboard/services" },
-];
-
-const overflowItems: BottomNavItem[] = [
-{ label: "Draw", icon: PenTool, path: "/dashboard/draw" },
-{ label: "Kanban", icon: SquareKanban, path: "/dashboard/kanban" },
-{ label: "Incomes", icon: TrendingUp, path: "/dashboard/budget/incomes" },
-{ label: "Settings", icon: SlidersHorizontal, path: "/dashboard/settings" },
-{ label: "Exchange", icon: ArrowLeftRight, path: "/dashboard/exchange" },
-{ label: "Analytics", icon: BarChart3, path: "/analytics", disabled: true },
-{ label: "Logs", icon: FileText, path: "/logs", disabled: true },
-{ label: "Users", icon: Users, path: "/dashboard/admin/users", adminOnly: true },
-];
 
 // The active tab's tick, which glides to the next tab (one bottom nav is
 // ever mounted, so a fixed layoutId is enough).

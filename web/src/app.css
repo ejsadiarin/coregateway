@@ -292,15 +292,34 @@
 }
 
 /* Custom Animations */
-/* Route change fade (dashboard-shell). Opacity only, so it runs on the
-   compositor and stays smooth while the new page mounts. */
+/* Route change (dashboard-shell): the page fades in with a slight rise.
+   Opacity and transform only, so it runs on the compositor and stays
+   smooth while the new page mounts. On a phone, a move between bottom-nav
+   tabs slides in from the side of the tab picked instead. */
 @keyframes route-enter {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes route-from-right {
+  from { opacity: 0; transform: translate3d(28px, 0, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes route-from-left {
+  from { opacity: 0; transform: translate3d(-28px, 0, 0); }
+  to { opacity: 1; transform: none; }
 }
 
 .route-enter {
-  animation: route-enter 180ms ease-out both;
+  animation: route-enter 240ms ease-out both;
+}
+@keyframes route-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.route-enter.route-fade { animation-name: route-fade; }
+@media (max-width: 767px) {
+  .route-enter.route-from-right { animation-name: route-from-right; }
+  .route-enter.route-from-left { animation-name: route-from-left; }
 }
 
 @media (prefers-reduced-motion: reduce) {
