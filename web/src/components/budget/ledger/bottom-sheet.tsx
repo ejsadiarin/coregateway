@@ -59,6 +59,11 @@ export function BottomSheet({
       onRelease={() => (past.current = false)}
       shouldScaleBackground={false}
       noBodyStyles
+      // vaul's keyboard handling shrinks the drawer to fit above an open
+      // keyboard and, on mobile Firefox, never gives the height back when
+      // it closes, leaving a half-height card. The sheet's own height and
+      // scrolling body handle the keyboard instead.
+      repositionInputs={false}
     >
       <Drawer.Portal>
         <Drawer.Overlay className="bottom-sheet-overlay fixed inset-0 z-50 bg-black/80" />
@@ -70,7 +75,10 @@ export function BottomSheet({
             "bottom-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl border-t border-border bg-popover p-0 shadow-lg outline-none",
             // From a tablet up it is a card in the middle of the screen.
             "sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[88dvh] sm:w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border",
-            wide && "md:w-[min(720px,calc(100vw-3rem))] lg:w-[min(960px,calc(100vw-4rem))]",
+            // A wide sheet is a full form: on a phone it keeps nearly the
+            // whole screen, keyboard or not, so its chips are a tap away
+            // rather than a scroll.
+            wide && "max-sm:h-[92dvh] md:w-[min(720px,calc(100vw-3rem))] lg:w-[min(960px,calc(100vw-4rem))]",
             className,
           )}
         >
