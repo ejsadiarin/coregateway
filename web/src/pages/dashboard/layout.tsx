@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { useAuth } from "@/contexts/auth-context";
 import { Navigate } from "react-router-dom";
+import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
 
 // DashboardSkeleton paints the shell's content area while the session check
@@ -29,8 +30,19 @@ function ProtectedLayout() {
   // device's, saved at the gateway, so every service dates their "today"
   // and reads their schedules there rather than in UTC (ADR-0005).
   useUserTimezone();
+  // Read on every page, so any visit keeps the offline rates current.
+  useExchangeRates();
 
   if (isLoading) {
+    // Exchange shows public rates and reads nothing protected, so it opens
+    // without waiting for the gateway: offline, the check never finishes.
+    if (location.pathname === "/dashboard/exchange") {
+      return (
+        <DashboardShell>
+          <Outlet />
+        </DashboardShell>
+      );
+    }
     // The shell paints immediately; the page inside it only mounts once the
     // session is confirmed, so no protected read fires first.
     return (
