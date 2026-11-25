@@ -241,7 +241,8 @@ export function BudgetDialog({
 }: {
   state: BudgetDialogState | null;
   onClose: () => void;
-  onSaved: (warning?: string) => void;
+  // noteId is the Feed note a new record got, for the Feed to show it landing.
+  onSaved: (warning?: string, noteId?: string) => void;
 }) {
   const target: SheetTarget | null =
     state === null ? null : state.mode === "new" ? { mode: "new" } : { mode: "edit", entry: entryOf(state.kind, state.record) };
@@ -256,12 +257,12 @@ export function BudgetDialog({
         onSaved: async (record, kind, created) => {
           if (!created) return onSaved();
           try {
-            await postBudgetNote(kind, record.id);
+            const note = await postBudgetNote(kind, record.id);
             // The note is posted at now; a record with its own time has
             // the sync move the note there (coreban#30). If that fails,
             // the Feed's next sync does it.
             await syncBudgetNotes([syncRecordOf(kind, record)]).catch(() => {});
-            onSaved();
+            onSaved(undefined, note.id);
           } catch (err) {
             onSaved(`The ${kind} was saved, but its note wasn't added to the Feed: ${err instanceof Error ? err.message : err}`);
           }

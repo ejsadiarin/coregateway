@@ -1,4 +1,5 @@
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { EnterItem } from "@/components/ui/enter-item";
 import { SectionReveal } from "@/components/budget/section-reveal";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -401,8 +402,12 @@ export default function BudgetDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-border/60">
-                {displayExpenses.map((expense) => (
-                  <div
+                <AnimatePresence>
+                {displayExpenses.map((expense, i) => (
+                  <EnterItem
+                    as="div"
+                    index={i}
+                    layout
                     key={expense.id}
                     className="flex items-center justify-between py-2.5 transition-colors cursor-pointer hover:bg-accent/50"
                     onClick={() => setViewingExpense(expense)}
@@ -425,8 +430,9 @@ export default function BudgetDashboard() {
                         {formatSigned(expense.amount, "expense", expense.currency)}
                       </p>
                     </div>
-                  </div>
+                  </EnterItem>
                 ))}
+                </AnimatePresence>
               </div>
             )}
           </CardContent>

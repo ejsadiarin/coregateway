@@ -68,6 +68,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnterItem } from "@/components/ui/enter-item";
 import {
   Dialog,
   DialogContent,
@@ -535,14 +536,14 @@ function ColumnView({
       </header>
 
       <ol ref={listRef} className="flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
-        {cards.map((card) => {
+        {cards.map((card, index) => {
           const dragged = card.id === draggingId;
           const before = !dragged && dropIndexHere === slot ? indicator : null;
           if (!dragged) slot++;
           return (
             <Fragment key={card.id}>
               {before}
-              <CardItem card={card} due={dueLabel(card)} dragged={dragged} onOpen={onOpenCard} onKey={onCardKey} />
+              <CardItem card={card} index={index} due={dueLabel(card)} dragged={dragged} onOpen={onOpenCard} onKey={onCardKey} />
             </Fragment>
           );
         })}
@@ -554,12 +555,15 @@ function ColumnView({
 
 function CardItem({
   card,
+  index,
   due,
   dragged,
   onOpen,
   onKey,
 }: {
   card: KanbanCard;
+  // index places the card in its column's entrance cascade.
+  index: number;
   due: DueLabel | null;
   dragged: boolean;
   onOpen: (id: string) => void;
@@ -567,7 +571,7 @@ function CardItem({
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({ id: card.id });
   return (
-    <li data-card-id={card.id}>
+    <EnterItem index={index} data-card-id={card.id}>
       <button
         ref={setNodeRef}
         type="button"
@@ -606,7 +610,7 @@ function CardItem({
           </span>
         )}
       </button>
-    </li>
+    </EnterItem>
   );
 }
 

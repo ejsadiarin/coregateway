@@ -11,6 +11,8 @@ import { NewFromRules } from "./new-from-rules";
 import { RuleSheet } from "./rule-sheet";
 import { StaleReviewSheet } from "./stale-review-sheet";
 import type { StaleReport } from "@/lib/rule-review";
+import { AnimatePresence } from "motion/react";
+import { EnterItem } from "@/components/ui/enter-item";
 import { FillBar } from "@/components/ui/fill-bar";
 import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
@@ -344,11 +346,13 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
                     <span className="font-mono text-[13px] text-muted-foreground">{signed(kind, d.total)}</span>
                   </div>
                   <ul className="mx-3 overflow-hidden rounded-2xl border border-foreground/[0.07] bg-popover lg:mx-0">
-                    {d.entries.map((e) => (
-                      <li key={e.id} className="border-b border-foreground/[0.06] last:border-b-0">
+                    <AnimatePresence initial={false}>
+                    {d.entries.map((e, i) => (
+                      <EnterItem key={e.id} index={i} layout className="border-b border-foreground/[0.06] last:border-b-0">
                         <EntryRow {...rowProps(e)} />
-                      </li>
+                      </EnterItem>
                     ))}
+                    </AnimatePresence>
                   </ul>
                 </div>
               ))}

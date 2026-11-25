@@ -383,6 +383,27 @@
   .bottom-sheet-handle.bottom-sheet-handle[data-vaul-handle]:active { cursor: grabbing; }
 }
 
+/* A record just saved from the sheet, where its Feed note landed: a
+   brief wash of the signal colour (opacity only) behind the note. */
+.feed-landed {
+  position: relative;
+}
+.feed-landed::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: calc(var(--radius) + 4px);
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  animation: feed-landed 1.5s ease-out;
+}
+@keyframes feed-landed {
+  0%, 100% { opacity: 0; }
+  15%, 45% { opacity: 1; }
+}
+
 /* DESIGN §6: collapse CSS-driven motion for users who ask for it, including
    Radix and vaul panels. Motion/react is handled by MotionConfig
    reducedMotion="user" at the app root. */

@@ -44,6 +44,20 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "Feed" })).toBeVisible();
 });
 
+// coregateway#60: the note of a record just saved from the sheet flashes
+// where it landed, then settles.
+test("a record saved from + Budget flashes where its note lands", async ({ page }) => {
+  const taxi = unique("Taxi");
+  const id = await captureExpense(page, taxi, "180");
+  try {
+    await expect(noteItem(page, taxi)).toHaveClass(/feed-landed/);
+    await expect(noteItem(page, taxi)).toBeInViewport();
+    await expect(noteItem(page, taxi)).not.toHaveClass(/feed-landed/, { timeout: 4000 });
+  } finally {
+    await page.request.delete(`${api}/api/budget/expenses/${id}`);
+  }
+});
+
 test("+ Budget captures an expense shown live; editing or deleting it elsewhere shows in its note", async ({ page }) => {
   const lunch = unique("Lunch");
   const id = await captureExpense(page, lunch, "250");

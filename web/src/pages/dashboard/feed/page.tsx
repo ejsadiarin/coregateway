@@ -73,6 +73,8 @@ import { useUploads } from "./use-uploads";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
+import { AnimatePresence } from "motion/react";
+import { EnterItem } from "@/components/ui/enter-item";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -576,6 +578,12 @@ export default function FeedPage() {
   );
   // A note archived just now leaves the view at once.
   const days = feedDays(showArchived ? notes : notes.filter((n) => !n.archived_at));
+  // Each note's place counted from the newest, so the bottom of the Feed,
+  // where it opens, arrives first.
+  const fromNewest = useMemo(() => {
+    const ids = days.flatMap((d) => d.notes.map((n) => n.id));
+    return new Map(ids.map((id, i) => [id, ids.length - 1 - i]));
+  }, [days]);
 
   // Every budget record has a note on its own date (coreban ADR-0005):
   // opening the Feed sends coreban what corefinance holds, and re-reads
@@ -810,6 +818,18 @@ export default function FeedPage() {
 
   // A record was saved from the Feed: re-read the Feed (its note is new,
   // converted, or shows the edit) and the record's own pages.
+  // landed is the note of a record just saved from the sheet: once it shows
+  // it is brought into view and flashes where it landed (.feed-landed).
+  const [landed, setLanded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!landed) return;
+    const li = scroller.current?.querySelector(`[data-note-id="${CSS.escape(landed)}"]`);
+    if (!li) return;
+    li.scrollIntoView({ block: "nearest" });
+    const t = window.setTimeout(() => setLanded(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [landed, notes]);
+
   const recordSaved = (captured: boolean) => {
     setReminderDialog(null);
     setCardDialog(null);
@@ -1053,8 +1073,15 @@ export default function FeedPage() {
                     <span className="h-px flex-1 bg-border" />
                   </div>
                   <ol className="grid grid-cols-1 gap-3">
+                    <AnimatePresence>
                     {day.notes.map((note) => (
-                      <li key={note.id} data-note-id={note.id}>
+                      <EnterItem
+                        key={note.id}
+                        index={fromNewest.get(note.id) ?? 0}
+                        layout
+                        data-note-id={note.id}
+                        className={cn(note.id === landed && "feed-landed")}
+                      >
                         {note.archived_at ? (
                           <ArchivedNote
                             note={note}
@@ -1071,8 +1098,9 @@ export default function FeedPage() {
                             categoryName={categoryName}
                           />
                         )}
-                      </li>
+                      </EnterItem>
                     ))}
+                    </AnimatePresence>
                   </ol>
                 </section>
               );
@@ -1200,9 +1228,10 @@ export default function FeedPage() {
       <BudgetDialog
         state={budgetDialog}
         onClose={() => setBudgetDialog(null)}
-        onSaved={(warning) => {
+        onSaved={(warning, noteId) => {
           recordSaved(budgetDialog?.mode === "new");
           if (warning) setActionError(warning);
+          if (noteId) setLanded(noteId);
         }}
       />
 
