@@ -89,6 +89,13 @@ export function TagChip({ tag }: { tag: Tag }) {
   return <span className={cn(CHIP, "border border-pink-300/35 px-2 text-pink-200")}>#{tag.name}</span>;
 }
 
+// PriorityChip names any priority: Need, Want or Savings.
+export function PriorityChip({ priority }: { priority: "need" | "want" | "savings" }) {
+  const tone =
+    priority === "need" ? "bg-emerald-400/15 text-emerald-300" : priority === "savings" ? "bg-blue-400/15 text-blue-300" : "bg-muted text-muted-foreground";
+  return <span className={cn(CHIP, "capitalize", tone)}>{priority}</span>;
+}
+
 export function NeedChip() {
   return <span className={cn(CHIP, "bg-emerald-400/15 text-emerald-300")}>Need</span>;
 }

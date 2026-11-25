@@ -31,7 +31,7 @@ export function todayISODate(now = new Date()): string {
 }
 
 export function budgetPeriodFrom(value: string | null): BudgetPeriod {
-  return value === "week" || value === "month" ? value : "day";
+  return value === "day" || value === "month" ? value : "week";
 }
 
 export function budgetDateFrom(value: string | null): string {

@@ -10,9 +10,9 @@ import {
 } from "./budget-period";
 
 describe("budget period URL state", () => {
-  it("falls back to day and today for missing or bad values", () => {
-    expect(budgetPeriodFrom(null)).toBe("day");
-    expect(budgetPeriodFrom("year")).toBe("day");
+  it("falls back to week and today for missing or bad values", () => {
+    expect(budgetPeriodFrom(null)).toBe("week");
+    expect(budgetPeriodFrom("year")).toBe("week");
     expect(budgetPeriodFrom("month")).toBe("month");
     expect(budgetDateFrom("2026-13-01")).toBe(todayISODate());
     expect(budgetDateFrom("2026-11-18")).toBe("2026-11-18");

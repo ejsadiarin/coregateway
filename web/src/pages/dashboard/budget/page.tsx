@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { SectionReveal } from "@/components/budget/section-reveal";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { IncomeForm } from "@/components/budget/income-form";
 import { EntrySheet } from "@/components/budget/ledger/entry-sheet";
@@ -21,7 +21,10 @@ import {
   useDeleteIncome,
   useUpdateExpense,
   useDeleteExpense,
+  useTags,
 } from "@/hooks/use-budget";
+import { tagsOf, useEntryTags, useKindCategories } from "@/hooks/use-ledger";
+import { CategoryChip, PriorityChip, TagChip } from "@/components/budget/ledger/chips";
 import {
   budgetDateFrom,
   budgetPeriodBounds,
@@ -99,6 +102,11 @@ export default function BudgetDashboard() {
   const deleteIncome = useDeleteIncome();
 
   const displayExpenses = expensesData?.data || [];
+  // The same category and tag chips the Expenses page shows.
+  const { data: expenseCategories = [] } = useKindCategories("expense");
+  const expenseCategoryById = useMemo(() => new Map(expenseCategories.map((c) => [c.id, c])), [expenseCategories]);
+  const { data: tags = [] } = useTags();
+  const expenseTagIds = useEntryTags("expense");
   const displayIncomes = incomesData?.data || [];
 
   const handleActionClick = () => {
@@ -247,7 +255,7 @@ export default function BudgetDashboard() {
 
       {/* Recent Transactions */}
       <motion.div
-        className="grid gap-6 lg:grid-cols-3"
+        className="grid grid-cols-1 gap-6 lg:grid-cols-3"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.25 }}
@@ -400,13 +408,15 @@ export default function BudgetDashboard() {
                     onClick={() => setViewingExpense(expense)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium truncate">{expense.description}</p>
-                        <span className="text-xs px-2 py-0.5 rounded-full capitalize">
-                          {expense.priority}
-                        </span>
+                      <p className="font-medium truncate">{expense.description}</p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <CategoryChip category={expense.category_id ? expenseCategoryById.get(expense.category_id) : undefined} />
+                        {tagsOf(expenseTagIds.get(expense.id), tags).map((t) => (
+                          <TagChip key={t.id} tag={t} />
+                        ))}
+                        <PriorityChip priority={expense.priority} />
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {safeFormat(expense.expense_date, (d) => formatDistanceToNow(d, { addSuffix: true }))}
                       </p>
                     </div>
