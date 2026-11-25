@@ -4,7 +4,8 @@ import { CalendarDays, Check, Clock, Plus, Repeat, Tags, X } from "lucide-react"
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { useSheetClose } from "./use-sheet-close";
 import { categoryIcon, hueClasses } from "./chips";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { digitKeys } from "@/lib/motion";
 import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -46,6 +47,8 @@ export type SheetTarget = { mode: "new"; repeat?: boolean } | { mode: "edit"; en
 const CADENCES = ["daily", "weekly", "monthly", "yearly"] as const;
 const PRIORITIES = ["need", "want", "savings"] as const;
 const CURRENCIES = ["PHP", "USD", "JPY", "EUR"];
+// The Expense/Income switch's fill, as values motion can blend between.
+const KIND_FILL = { expense: "var(--primary)", income: "var(--color-emerald-400)" } as const;
 
 const yesterday = () => format(subDays(new Date(), 1), "yyyy-MM-dd");
 const longDate = (d: string) => format(parseISO(d), "EEE, MMM d");
@@ -102,6 +105,13 @@ function EntryForm({
 
   const [kind, setKind] = useState<LedgerKind>(from?.kind ?? pageKind);
   const [amount, setAmount] = useState(from ? String(from.amount) : "");
+  // Each typed character's key, kept while it stays, for the odometer.
+  const [odometer, setOdometer] = useState(() => ({ text: amount, ...digitKeys("", [], amount, 0) }));
+  if (odometer.text !== amount) setOdometer({ text: amount, ...digitKeys(odometer.text, odometer.keys, amount, odometer.next) });
+  const reduceMotion = useReducedMotion();
+  // The Expense/Income fill blends from the other kind's colour once the
+  // kind has been switched (not when the sheet opens).
+  const [kindSwitched, setKindSwitched] = useState(false);
   const [currency, setCurrency] = useState(from?.currency ?? "PHP");
   const [description, setDescription] = useState(from?.description ?? feed?.prefill ?? "");
   const [categoryId, setCategoryId] = useState<string | undefined>(from?.categoryId);
@@ -253,14 +263,25 @@ function EntryForm({
                   type="button"
                   role="radio"
                   aria-checked={kind === k}
-                  onClick={() => switchKind(k)}
+                  onClick={() => {
+                    setKindSwitched(true);
+                    switchKind(k);
+                  }}
                   className={cn(
                     "relative isolate min-h-8 rounded-full px-4 text-[13px] font-semibold transition-colors duration-300",
                     kind === k ? (k === "expense" ? "text-primary-foreground" : "text-emerald-950") : "text-muted-foreground",
                   )}
                 >
                   {/* One fill glides between the two and blends its colour. */}
-                  {kind === k && <SelectionPill group={kindGroup} className={cn("rounded-full transition-colors duration-300", k === "expense" ? "bg-primary" : "bg-emerald-400")} />}
+                  {kind === k && (
+                    <SelectionPill
+                      group={kindGroup}
+                      className="rounded-full"
+                      style={{ backgroundColor: KIND_FILL[k] }}
+                      initial={kindSwitched && !reduceMotion ? { backgroundColor: KIND_FILL[k === "expense" ? "income" : "expense"] } : false}
+                      animate={{ backgroundColor: KIND_FILL[k] }}
+                    />
+                  )}
                   {k === "expense" ? "Expense" : "Income"}
                 </button>
               ))}
@@ -293,7 +314,7 @@ function EntryForm({
               {done ? (
                 <motion.span
                   key="done"
-                  initial={{ scale: 0.4, opacity: 0 }}
+                  initial={reduceMotion ? false : { scale: 0.4, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", bounce: 0.5, duration: 0.4 }}
                   className="flex items-center gap-2"
@@ -362,10 +383,10 @@ function EntryForm({
                 <AnimatePresence initial={false} mode="popLayout">
                   {[...amount].map((ch, i) => (
                     <motion.span
-                      key={`${i}${ch}`}
-                      initial={{ y: "70%", opacity: 0 }}
+                      key={odometer.keys[i]}
+                      initial={reduceMotion ? false : { y: "70%", opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: "-70%", opacity: 0 }}
+                      exit={reduceMotion ? undefined : { y: "-70%", opacity: 0 }}
                       transition={{ duration: 0.22, ease: "easeOut" }}
                       className="inline-block whitespace-pre"
                     >

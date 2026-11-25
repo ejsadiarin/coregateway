@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { staggerDelay, tabEnterFrom } from "./motion";
+import { digitKeys, staggerDelay, tabEnterFrom } from "./motion";
 
 // DESIGN §6: a list cascades 0.06s apart for its first five items, then
 // the rest come in together with the fifth.
@@ -23,5 +23,23 @@ describe("tabEnterFrom", () => {
     expect(tabEnterFrom(tabs, "/dashboard/feed", null)).toBeNull();
     expect(tabEnterFrom(tabs, null, "/dashboard/feed")).toBeNull();
     expect(tabEnterFrom(tabs, "/dashboard/budget", "/dashboard/budget")).toBeNull();
+  });
+});
+
+// The typed amount's digits roll in and out; a digit keeps its key while
+// it stays, so only the ones typed or deleted move.
+describe("digitKeys", () => {
+  it("keeps the keys of the digits before and after an edit and gives new digits new keys", () => {
+    const typed = digitKeys("", [], "125", 0);
+    expect(typed.keys).toEqual(["0", "1", "2"]);
+    // A digit typed in the middle: 1 and 2·5 keep theirs.
+    const inserted = digitKeys("125", typed.keys, "1725", typed.next);
+    expect(inserted.keys).toEqual(["0", "3", "1", "2"]);
+    // Deleting it gives the rest their keys back.
+    expect(digitKeys("1725", inserted.keys, "125", inserted.next).keys).toEqual(["0", "1", "2"]);
+  });
+
+  it("keeps every key when nothing changed", () => {
+    expect(digitKeys("42", ["7", "9"], "42", 10)).toEqual({ keys: ["7", "9"], next: 10 });
   });
 });

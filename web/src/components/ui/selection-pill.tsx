@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { motion, type HTMLMotionProps } from "motion/react";
 import { cn } from "@/lib/utils";
 
 // The glide between options of a segmented control, tab list or nav: one
@@ -8,13 +8,15 @@ import { cn } from "@/lib/utils";
 // share one highlight) and render the pill only inside the chosen option;
 // the option needs `relative isolate` so the pill sits behind its label.
 // MotionConfig reducedMotion="user" at the app root snaps it.
-export function SelectionPill({ group, className }: { group: string; className?: string }) {
+// Other motion props (a colour to blend from, say) pass through.
+export function SelectionPill({ group, className, ...rest }: { group: string; className?: string } & HTMLMotionProps<"span">) {
   return (
     <motion.span
       layoutId={group}
       aria-hidden
       className={cn("absolute inset-0 -z-10", className)}
-      transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
+      transition={{ type: "spring", bounce: 0.18, duration: 0.4, backgroundColor: { duration: 0.3, ease: "easeOut" } }}
+      {...rest}
     />
   );
 }

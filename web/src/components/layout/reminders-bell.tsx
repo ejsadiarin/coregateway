@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -43,12 +43,14 @@ export function RemindersBell() {
   });
   const bell = bellOf(query.data ?? [], new Date());
 
-  // The bell wiggles once each time more reminders come due, and stays
-  // still while they stay due.
-  const [seen, setSeen] = useState(0);
+  // The bell wiggles once, and its badge pops, each time more reminders
+  // come due while the app is open; what is already due when it opens, or
+  // a count going down, leaves them still.
+  const reduce = useReducedMotion();
+  const [seen, setSeen] = useState<number | null>(null);
   const [rings, setRings] = useState(0);
-  if (bell.dueSoon !== seen) {
-    if (bell.dueSoon > seen) setRings((n) => n + 1);
+  if (query.isSuccess && bell.dueSoon !== seen) {
+    if (seen !== null && bell.dueSoon > seen) setRings((n) => n + 1);
     setSeen(bell.dueSoon);
   }
 
@@ -64,15 +66,15 @@ export function RemindersBell() {
           <motion.span
             key={`ring-${rings}`}
             className="flex origin-top"
-            animate={rings > 0 ? { rotate: [0, -16, 13, -9, 5, 0] } : undefined}
+            animate={rings > 0 && !reduce ? { rotate: [0, -16, 13, -9, 5, 0] } : undefined}
             transition={{ duration: 0.7, ease: "easeInOut" }}
           >
             <Bell className="h-4 w-4" />
           </motion.span>
           {bell.dueSoon > 0 && (
             <motion.span
-              key={`due-${bell.dueSoon}`}
-              initial={{ scale: 0.3, opacity: 0 }}
+              key={`due-${rings}`}
+              initial={rings > 0 && !reduce ? { scale: 0.3, opacity: 0 } : false}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: "spring", bounce: 0.5, duration: 0.45 }}
               className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-destructive px-0.5 text-[9px] text-destructive-foreground"

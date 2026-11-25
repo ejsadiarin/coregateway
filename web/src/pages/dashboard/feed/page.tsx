@@ -816,8 +816,6 @@ export default function FeedPage() {
     },
   });
 
-  // A record was saved from the Feed: re-read the Feed (its note is new,
-  // converted, or shows the edit) and the record's own pages.
   // landed is the note of a record just saved from the sheet: once it shows
   // it is brought into view and flashes where it landed (.feed-landed).
   const [landed, setLanded] = useState<string | null>(null);
@@ -834,6 +832,8 @@ export default function FeedPage() {
   // landed flashes after that, not under the sheet.
   const pendingLanded = useRef<string | null>(null);
 
+  // A record was saved from the Feed: re-read the Feed (its note is new,
+  // converted, or shows the edit) and the record's own pages.
   const recordSaved = (captured: boolean) => {
     setReminderDialog(null);
     setCardDialog(null);
