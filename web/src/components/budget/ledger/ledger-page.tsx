@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { clockLabel } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
@@ -11,6 +11,7 @@ import { NewFromRules } from "./new-from-rules";
 import { RuleSheet } from "./rule-sheet";
 import { StaleReviewSheet } from "./stale-review-sheet";
 import type { StaleReport } from "@/lib/rule-review";
+import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { useTags } from "@/hooks/use-budget";
 import { tagsOf, useEntries, useEntryTags, useKindCategories, useRules } from "@/hooks/use-ledger";
@@ -52,6 +53,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
   const tagIds = useEntryTags(kind);
 
   const [filter, setFilter] = useState<Filter>({ source: "all" });
+  const sourceGroup = useId();
   const [sheet, setSheet] = useState<SheetTarget | null>(null);
   const [openEntry, setOpenEntry] = useState<string | null>(null);
   const [openRule, setOpenRule] = useState<string | null>(null);
@@ -266,11 +268,12 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
               aria-checked={filter.source === s}
               onClick={() => setFilter((f) => ({ ...f, source: s }))}
               className={cn(
-                "min-h-8 whitespace-nowrap rounded-full px-3 text-[13px] transition-colors",
+                "relative isolate min-h-8 whitespace-nowrap rounded-full px-3 text-[13px] transition-colors",
                 s === "all" ? "shrink-0" : "flex-1",
-                filter.source === s ? "bg-foreground font-semibold text-background" : "font-medium text-foreground/80",
+                filter.source === s ? "font-semibold text-background" : "font-medium text-foreground/80",
               )}
             >
+              {filter.source === s && <SelectionPill group={sourceGroup} className="rounded-full bg-foreground" />}
               {label}
             </button>
           ))}

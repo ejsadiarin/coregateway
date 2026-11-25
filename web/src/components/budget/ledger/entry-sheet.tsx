@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
 import { CalendarDays, Clock, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { useSheetClose } from "./use-sheet-close";
 import { categoryIcon, hueClasses } from "./chips";
+import { AnimatePresence, motion } from "motion/react";
+import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { isRateUnavailableError, isUnknownCategoryError, isUnsupportedCurrencyError } from "@/lib/api";
@@ -93,6 +95,7 @@ function EntryForm({
   onStale?: (rule: Rule, report: StaleReport) => void;
 }) {
   const sheet = useSheetClose(onClose);
+  const kindGroup = useId();
   const entry = target.mode === "edit" ? target.entry : undefined;
   const rule = target.mode === "rule" ? target.rule : undefined;
   const from = entry ?? rule;
@@ -249,10 +252,12 @@ function EntryForm({
                   aria-checked={kind === k}
                   onClick={() => switchKind(k)}
                   className={cn(
-                    "min-h-8 rounded-full px-4 text-[13px] font-semibold transition-colors",
-                    kind === k ? (k === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950") : "text-muted-foreground",
+                    "relative isolate min-h-8 rounded-full px-4 text-[13px] font-semibold transition-colors duration-300",
+                    kind === k ? (k === "expense" ? "text-primary-foreground" : "text-emerald-950") : "text-muted-foreground",
                   )}
                 >
+                  {/* One fill glides between the two and blends its colour. */}
+                  {kind === k && <SelectionPill group={kindGroup} className={cn("rounded-full transition-colors duration-300", k === "expense" ? "bg-primary" : "bg-emerald-400")} />}
                   {k === "expense" ? "Expense" : "Income"}
                 </button>
               ))}
@@ -297,7 +302,22 @@ function EntryForm({
             Amount
           </label>
           <div className="flex items-baseline justify-center gap-1">
-            <span className="font-mono text-2xl text-muted-foreground">{expense ? "−" : "+"}{money(0, currency).replace("0", "")}</span>
+            <span className="font-mono text-2xl text-muted-foreground">
+              {/* The sign turns over with the kind and takes its colour. */}
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.span
+                  key={expense ? "expense" : "income"}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className={cn("inline-block", expense ? "text-primary" : "text-emerald-400")}
+                >
+                  {expense ? "−" : "+"}
+                </motion.span>
+              </AnimatePresence>
+              {money(0, currency).replace("0", "")}
+            </span>
             <input
               id="entry-amount"
               inputMode="decimal"

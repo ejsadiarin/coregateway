@@ -1,7 +1,8 @@
 import type { ButtonHTMLAttributes } from "react";
 import type { ReactNode } from "react";
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import { Drawer } from "vaul";
+import { SelectionPill } from "@/components/ui/selection-pill";
 import { cn } from "@/lib/utils";
 import { CLOSE_THRESHOLD, useSheetClose, useSheetIsPhone } from "./use-sheet-close";
 
@@ -105,6 +106,10 @@ export function Segmented<T extends string>({
   labels?: Partial<Record<T, string>>;
   className?: string;
 }) {
+  const group = useId();
+  // The fill glides with the choice; the text colour stays on the option.
+  const fill = activeClass.split(" ").filter((c) => c.startsWith("bg-")).join(" ");
+  const ink = activeClass.split(" ").filter((c) => !c.startsWith("bg-")).join(" ");
   return (
     <div role="radiogroup" aria-label={label} className={cn("flex rounded-xl bg-muted p-[3px]", className)}>
       {options.map((o) => (
@@ -115,10 +120,11 @@ export function Segmented<T extends string>({
           aria-checked={o === value}
           onClick={() => onChange(o)}
           className={cn(
-            "min-h-9 flex-1 whitespace-nowrap rounded-[10px] px-2 text-sm transition-colors",
-            o === value ? cn("font-semibold", activeClass) : "font-medium text-foreground/80 hover:text-foreground",
+            "relative isolate min-h-9 flex-1 whitespace-nowrap rounded-[10px] px-2 text-sm transition-colors",
+            o === value ? cn("font-semibold", ink) : "font-medium text-foreground/80 hover:text-foreground",
           )}
         >
+          {o === value && <SelectionPill group={group} className={cn("rounded-[10px]", fill)} />}
           {labels?.[o] ?? o[0].toUpperCase() + o.slice(1)}
         </button>
       ))}

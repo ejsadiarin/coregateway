@@ -1,9 +1,36 @@
 
 import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { SelectionPill } from '@/components/ui/selection-pill';
 import { cn } from '@/lib/utils';
 
-const Tabs = TabsPrimitive.Root;
+// Tabs tracks which tab is chosen, so each trigger knows whether it holds
+// the highlight that glides between them.
+const TabsContext = React.createContext<{ value?: string; group: string } | null>(null);
+
+const Tabs = React.forwardRef<
+  React.ComponentRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ value, defaultValue, onValueChange, ...props }, ref) => {
+  const [inner, setInner] = React.useState(defaultValue);
+  const group = React.useId();
+  const current = value ?? inner;
+  return (
+    <TabsContext.Provider value={{ value: current, group }}>
+      <TabsPrimitive.Root
+        ref={ref}
+        value={value}
+        defaultValue={defaultValue}
+        onValueChange={(v) => {
+          setInner(v);
+          onValueChange?.(v);
+        }}
+        {...props}
+      />
+    </TabsContext.Provider>
+  );
+});
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.List>,
@@ -23,16 +50,22 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 const TabsTrigger = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow',
-      className
-    )}
-    {...props}
-  />
-));
+>(({ className, children, ...props }, ref) => {
+  const tabs = React.useContext(TabsContext);
+  return (
+    <TabsPrimitive.Trigger
+      ref={ref}
+      className={cn(
+        'relative isolate inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:text-foreground',
+        className
+      )}
+      {...props}
+    >
+      {tabs && tabs.value === props.value && <SelectionPill group={tabs.group} className="rounded-md bg-background shadow" />}
+      {children}
+    </TabsPrimitive.Trigger>
+  );
+});
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 
 const TabsContent = React.forwardRef<

@@ -52,6 +52,16 @@ const overflowItems: BottomNavItem[] = [
 { label: "Users", icon: Users, path: "/dashboard/admin/users", adminOnly: true },
 ];
 
+// The active tab's tick, which glides to the next tab (one bottom nav is
+// ever mounted, so a fixed layoutId is enough).
+function NavTick() {
+  return (
+    <div className="absolute inset-x-0 top-0 flex justify-center">
+      <motion.div layoutId="bottom-nav-tick" className="h-[2px] w-6 rounded-full bg-primary" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+    </div>
+  );
+}
+
 function NavButton({
   item,
   isActive,
@@ -72,9 +82,7 @@ function NavButton({
           : "text-muted-foreground/60 active:text-muted-foreground",
       )}
     >
-      {isActive && (
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary" />
-      )}
+      {isActive && <NavTick />}
       <item.icon className={cn(
         "h-5 w-5 shrink-0",
         isActive && "drop-shadow-[0_0_6px_rgba(0,229,204,0.4)]",
@@ -276,9 +284,7 @@ export function MobileBottomNav() {
                 : "text-muted-foreground/60 active:text-muted-foreground",
             )}
           >
-            {isOverflowActive && !isOverflowOpen && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary" />
-            )}
+            {isOverflowActive && !isOverflowOpen && <NavTick />}
             <MoreHorizontal className={cn(
               "h-5 w-5 shrink-0",
               (isOverflowOpen || isOverflowActive) && "drop-shadow-[0_0_6px_rgba(0,229,204,0.4)]",

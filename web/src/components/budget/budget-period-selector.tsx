@@ -1,5 +1,8 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useId } from 'react';
 import { Button } from '@/components/ui/button';
+import { SelectionPill } from '@/components/ui/selection-pill';
+import { cn } from '@/lib/utils';
 import {
   BUDGET_PERIODS,
   BUDGET_PERIOD_LABELS,
@@ -18,6 +21,7 @@ interface BudgetPeriodSelectorProps {
 }
 
 export function BudgetPeriodSelector({ period, date, onChange, className }: BudgetPeriodSelectorProps) {
+  const group = useId();
   const bounds = budgetPeriodBounds(period, date);
   const title = budgetPeriodTitle(period, bounds.start_date, bounds.end_date);
 
@@ -29,11 +33,16 @@ export function BudgetPeriodSelector({ period, date, onChange, className }: Budg
             key={value}
             type="button"
             size="sm"
-            variant={value === period ? 'default' : 'outline'}
+            variant={value === period ? 'ghost' : 'outline'}
             aria-pressed={value === period}
-            className="max-md:h-11 max-md:px-3"
+            className={cn(
+              'relative isolate max-md:h-11 max-md:px-3',
+              // The chosen period's fill glides to the next choice.
+              value === period && 'border border-transparent text-primary-foreground hover:bg-transparent hover:text-primary-foreground',
+            )}
             onClick={() => onChange(value, date)}
           >
+            {value === period && <SelectionPill group={group} className="rounded-md bg-primary shadow" />}
             {BUDGET_PERIOD_LABELS[value]}
           </Button>
         ))}
