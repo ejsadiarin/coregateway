@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { THEMES, useTheme } from "@/lib/theme";
+import { revealTheme } from "@/lib/theme-reveal";
 import { ReminderSettings } from "@/pages/dashboard/kanban/settings";
 import { BudgetSettings } from "@/pages/dashboard/budget/settings";
 
@@ -70,7 +71,7 @@ function Section({ id, title, blurb, children }: { id: string; title: string; bl
 }
 
 function ThemePicker() {
-  const [theme, setTheme] = useTheme();
+  const [theme] = useTheme();
   return (
     <div role="radiogroup" aria-label="Color scheme" className="grid gap-2 sm:grid-cols-2">
       {THEMES.map((t) => (
@@ -79,7 +80,8 @@ function ThemePicker() {
           type="button"
           role="radio"
           aria-checked={theme === t.id}
-          onClick={() => setTheme(t.id)}
+          // The new theme spreads out from the option picked.
+          onClick={(e) => revealTheme(t.id, e.currentTarget)}
           className={cn(
             "flex min-h-14 items-center gap-3 rounded-xl border px-3.5 text-left transition-colors hover:bg-foreground/5",
             theme === t.id ? "border-foreground" : "border-border",

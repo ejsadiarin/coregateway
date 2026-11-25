@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { navItems } from "./sidebar-nav-items";
 import { THEMES, useTheme } from "@/lib/theme";
+import { revealTheme } from "@/lib/theme-reveal";
 import { useCurrentPageTitle } from "./page-title";
 import { RemindersBell } from "./reminders-bell";
 
@@ -71,7 +73,8 @@ export function ContentHeader() {
   const queryClient = useQueryClient();
   const { user, logout, isGuest, isAdmin } = useAuth();
   const breadcrumbs = useBreadcrumbs();
-  const [theme, setTheme] = useTheme();
+  const [theme] = useTheme();
+  const palette = useRef<HTMLButtonElement>(null);
 
   const handleLogout = async () => {
     await logout();
@@ -125,6 +128,7 @@ export function ContentHeader() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
+              ref={palette}
               variant="ghost"
               size="icon"
               className="relative text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 w-8"
@@ -143,7 +147,8 @@ export function ContentHeader() {
             {THEMES.map((t) => (
               <DropdownMenuItem
                 key={t.id}
-                onClick={() => setTheme(t.id)}
+                // The new theme spreads out from the palette button.
+                onClick={() => revealTheme(t.id, palette.current)}
                 className="flex items-center gap-3"
               >
                 <span
