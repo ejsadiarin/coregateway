@@ -521,6 +521,9 @@ export default function FeedPage() {
   // it, so it stays on the same note; null scrolls to the newest note.
   const keepFromBottom = useRef<number | null>(null);
   const toBottom = useRef(true);
+  // Held at the bottom after opening there, while budget records and images
+  // still load in and grow the Feed, until the reader scrolls or jumps.
+  const pinned = useRef(false);
 
   // All notes, only the owner's own (plain, reminder, card), or only the
   // budget's; each keeps its own pages.
@@ -612,6 +615,7 @@ export default function FeedPage() {
       return;
     }
     const target = days.find((d) => d.key >= jumpTo) ?? days[days.length - 1];
+    pinned.current = false;
     if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start" });
     setJumpTo(null);
   }, [jumpTo, feedPending, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -661,8 +665,42 @@ export default function FeedPage() {
     } else if (toBottom.current && notes.length > 0) {
       el.scrollTop = el.scrollHeight;
       toBottom.current = false;
+      pinned.current = true;
+    } else if (pinned.current) {
+      el.scrollTop = el.scrollHeight;
     }
   });
+
+  // Content that grows without a render (an image loading) keeps a pinned
+  // Feed at the bottom too. The reader's own scroll lets go of it.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const release = () => {
+      pinned.current = false;
+    };
+    const follow = () => {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+    };
+    const resized = new ResizeObserver(follow);
+    const watch = () => {
+      resized.disconnect();
+      for (const child of Array.from(el.children)) resized.observe(child);
+    };
+    watch();
+    const added = new MutationObserver(watch);
+    added.observe(el, { childList: true });
+    el.addEventListener("wheel", release, { passive: true });
+    el.addEventListener("touchmove", release, { passive: true });
+    el.addEventListener("keydown", release);
+    return () => {
+      resized.disconnect();
+      added.disconnect();
+      el.removeEventListener("wheel", release);
+      el.removeEventListener("touchmove", release);
+      el.removeEventListener("keydown", release);
+    };
+  }, []);
 
   // A note just shared from another app (the share route passes its id):
   // once it shows, it is scrolled into view, even if a cached Feed opened
@@ -709,6 +747,7 @@ export default function FeedPage() {
   }, [sharedFiles, sharedCaption, navigate, location.pathname, isGuest]);
   useEffect(() => {
     if (!shared || !notes.some((n) => n.id === shared)) return;
+    pinned.current = false;
     scroller.current?.querySelector(`[data-note-id="${CSS.escape(shared)}"]`)?.scrollIntoView({ block: "end" });
     navigate(location.pathname, { replace: true, state: null });
   }, [shared, notes, navigate, location.pathname]);
