@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
-import { CalendarDays, Clock, Plus, Repeat, Tags, X } from "lucide-react";
+import { CalendarDays, Check, Clock, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
 import { useSheetClose } from "./use-sheet-close";
 import { categoryIcon, hueClasses } from "./chips";
@@ -137,6 +137,7 @@ function EntryForm({
   const saveRule = useSaveRule(kind);
   const { showToast } = useToast();
   const busy = saveEntry.isPending || saveRule.isPending;
+  const [done, setDone] = useState(false);
 
   const isNew = target.mode === "new";
   const value = Number(amount.replace(/,/g, ""));
@@ -200,7 +201,9 @@ function EntryForm({
         await feed?.onSaved(record, kind, !entry);
         showToast(entry ? "Saved" : `${expense ? "Expense" : "Income"} added${kind !== pageKind ? ` to ${expense ? "Expenses" : "Incomes"}` : ""}`, "success");
       }
-      sheet.close();
+      // The button turns into a check for a moment, then the sheet goes.
+      setDone(true);
+      window.setTimeout(sheet.close, 420);
     } catch (e) {
       if (isUnknownCategoryError(e)) {
         await categoriesQuery.refetch();
@@ -278,10 +281,32 @@ function EntryForm({
           <button
             type="button"
             onClick={submit}
-            disabled={!valid || busy}
-            className={cn("min-h-[52px] w-full rounded-2xl text-base font-semibold transition-opacity disabled:opacity-40", accent)}
+            disabled={!valid || busy || done}
+            className={cn(
+              "flex min-h-[52px] w-full items-center justify-center rounded-2xl text-base font-semibold transition-[opacity,transform] duration-300 active:scale-[0.98] disabled:opacity-40",
+              // Done reads at full strength, not as a disabled button.
+              done && "disabled:opacity-100",
+              accent,
+            )}
           >
-            {busy ? "Saving…" : saveLabel}
+            <AnimatePresence mode="wait" initial={false}>
+              {done ? (
+                <motion.span
+                  key="done"
+                  initial={{ scale: 0.4, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", bounce: 0.5, duration: 0.4 }}
+                  className="flex items-center gap-2"
+                >
+                  <Check className="h-5 w-5" strokeWidth={3} aria-hidden />
+                  <span className="sr-only">Saved</span>
+                </motion.span>
+              ) : (
+                <motion.span key="label" exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.12 }}>
+                  {busy ? "Saving…" : saveLabel}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </button>
         </div>
       }
@@ -456,7 +481,7 @@ function EntryForm({
                     type="button"
                     aria-pressed={on}
                     onClick={() => pickCategory(on ? undefined : c.id)}
-                    className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium", hue.chip, on && cn("ring-2", hue.ring))}
+                    className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-transform duration-150 active:scale-95", hue.chip, on && cn("ring-2", hue.ring))}
                   >
                     <Icon className="h-[15px] w-[15px]" aria-hidden />
                     {c.name}

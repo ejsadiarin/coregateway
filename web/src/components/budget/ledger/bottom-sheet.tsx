@@ -164,7 +164,7 @@ export function Pill({
       aria-pressed={on}
       onClick={onClick}
       className={cn(
-        "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm transition-colors",
+        "inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-full px-3.5 text-sm transition-[color,background-color,transform] duration-150 active:scale-95",
         on ? "bg-foreground font-semibold text-background" : "border border-foreground/15 font-medium text-foreground hover:bg-foreground/5",
         className,
       )}

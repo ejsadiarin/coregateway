@@ -830,10 +830,13 @@ export default function FeedPage() {
     return () => window.clearTimeout(t);
   }, [landed, notes]);
 
+  // The budget sheet closes itself once its save shows done; the note it
+  // landed flashes after that, not under the sheet.
+  const pendingLanded = useRef<string | null>(null);
+
   const recordSaved = (captured: boolean) => {
     setReminderDialog(null);
     setCardDialog(null);
-    setBudgetDialog(null);
     if (captured) {
       setDraft("");
       toBottom.current = true;
@@ -1227,11 +1230,15 @@ export default function FeedPage() {
       <ExchangeDialog open={exchangeOpen} onOpenChange={setExchangeOpen} />
       <BudgetDialog
         state={budgetDialog}
-        onClose={() => setBudgetDialog(null)}
+        onClose={() => {
+          setBudgetDialog(null);
+          if (pendingLanded.current) setLanded(pendingLanded.current);
+          pendingLanded.current = null;
+        }}
         onSaved={(warning, noteId) => {
           recordSaved(budgetDialog?.mode === "new");
           if (warning) setActionError(warning);
-          if (noteId) setLanded(noteId);
+          pendingLanded.current = noteId ?? null;
         }}
       />
 
