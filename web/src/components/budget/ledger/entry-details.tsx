@@ -3,6 +3,7 @@ import { clockLabel } from "@/lib/format";
 import { format, parseISO } from "date-fns";
 import { ChevronRight, Repeat } from "lucide-react";
 import { BottomSheet } from "./bottom-sheet";
+import { useSheetClose } from "./use-sheet-close";
 import { CategoryBadge, CategoryChip, NeedChip, StatusChip, TagChip } from "./chips";
 import { useToast } from "@/components/ui/toast";
 import { GuestBlockedError } from "@/hooks/use-budget";
@@ -30,6 +31,7 @@ export function EntryDetails({
   onEdit: () => void;
   onOpenRule: (r: Rule) => void;
 }) {
+  const sheet = useSheetClose(onClose);
   const remove = useDeleteEntry(entry.kind);
   const { showToast } = useToast();
   const [confirm, setConfirm] = useState(false);
@@ -46,14 +48,14 @@ export function EntryDetails({
     try {
       await remove.mutateAsync(entry.id);
       showToast(`Deleted “${entry.description}”`, "success");
-      onClose();
+      sheet.close();
     } catch (e) {
       showToast(e instanceof GuestBlockedError ? e.message : `Couldn't delete: ${(e as Error).message}`, "error");
     }
   };
 
   return (
-    <BottomSheet open onOpenChange={(o) => !o && onClose()} title={entry.description}>
+    <BottomSheet open={sheet.open} onOpenChange={(o) => !o && onClose()} title={entry.description}>
       <div className="flex items-center gap-3">
         <CategoryBadge category={category} className="h-12 w-12 rounded-2xl" />
         <div className="flex min-w-0 flex-1 flex-col">

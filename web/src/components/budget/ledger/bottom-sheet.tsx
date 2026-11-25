@@ -1,11 +1,18 @@
 import type { ButtonHTMLAttributes } from "react";
 import type { ReactNode } from "react";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { useRef } from "react";
+import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
+import { CLOSE_THRESHOLD, useSheetClose, useSheetIsPhone } from "./use-sheet-close";
 
-// BottomSheet slides up from the bottom on a phone and sits centred near
-// the bottom on a wider screen. Its parts: a header that stays, a body
-// that scrolls, a footer that stays.
+// BottomSheet slides up from the bottom on a phone and sits centred on a
+// wider screen. Its parts: a header that stays, a body that scrolls, a
+// footer that stays.
+//
+// Vaul supplies dismissal by drag. On a phone the whole card follows the
+// finger (a scrolled body scrolls instead, until it is back at the top);
+// on a wider screen only the handle drags, so text stays selectable, and
+// the card rises in and drops out (.bottom-sheet in app.css).
 export function BottomSheet({
   open,
   onOpenChange,
@@ -28,33 +35,55 @@ export function BottomSheet({
   // wide lays a desktop sheet out across, so it needs no scrolling.
   wide?: boolean;
 }) {
+  const phone = useSheetIsPhone();
+  // A dismissal from the sheet itself (drag, Escape, a tap outside) plays
+  // the exit, then reports the close.
+  const dismiss = useSheetClose(() => onOpenChange(false));
+  // A light tick when a drag crosses the point where letting go dismisses
+  // (Android; other browsers have no vibrate and skip it).
+  const past = useRef(false);
+  const onDrag = (_: unknown, share: number) => {
+    const now = share >= CLOSE_THRESHOLD;
+    if (now && !past.current) navigator.vibrate?.(8);
+    past.current = now;
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        // No focus ring on the first button when a sheet opens; a field
-        // that should take focus asks for it itself.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        className={cn(
-          "flex max-h-[92dvh] flex-col rounded-t-3xl border-border bg-popover p-0",
-          // From a tablet up it is a card in the middle of the screen.
-          "sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[88dvh] sm:w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border",
-          wide && "md:w-[min(720px,calc(100vw-3rem))] lg:w-[min(960px,calc(100vw-4rem))]",
-          // Each sheet has its own close control.
-          "[&>button:last-child]:hidden",
-          className,
-        )}
-      >
-        <SheetTitle className="sr-only">{title}</SheetTitle>
-        <SheetDescription className="sr-only">{description ?? title}</SheetDescription>
-        <div className={cn("flex flex-col gap-3 px-4 pt-2.5 pb-1.5 sm:pt-4", wide && "lg:px-6")}>
-          <div aria-hidden className="mx-auto h-1 w-10 rounded-full bg-foreground/25 sm:hidden" />
-          {header}
-        </div>
-        <div className={cn("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-4 pt-1.5 pb-4", wide && "lg:px-6")}>{children}</div>
-        {footer && <div className={cn("border-t border-border px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4", wide && "lg:px-6")}>{footer}</div>}
-      </SheetContent>
-    </Sheet>
+    <Drawer.Root
+      open={open && dismiss.open}
+      onOpenChange={(o) => (o ? onOpenChange(true) : dismiss.close())}
+      closeThreshold={CLOSE_THRESHOLD}
+      handleOnly={!phone}
+      onDrag={onDrag}
+      onRelease={() => (past.current = false)}
+      shouldScaleBackground={false}
+      noBodyStyles
+    >
+      <Drawer.Portal>
+        <Drawer.Overlay className="bottom-sheet-overlay fixed inset-0 z-50 bg-black/80" />
+        <Drawer.Content
+          // No focus ring on the first button when a sheet opens; a field
+          // that should take focus asks for it itself.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className={cn(
+            "bottom-sheet fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl border-t border-border bg-popover p-0 shadow-lg outline-none",
+            // From a tablet up it is a card in the middle of the screen.
+            "sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[88dvh] sm:w-[480px] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-3xl sm:border",
+            wide && "md:w-[min(720px,calc(100vw-3rem))] lg:w-[min(960px,calc(100vw-4rem))]",
+            className,
+          )}
+        >
+          <Drawer.Title className="sr-only">{title}</Drawer.Title>
+          <Drawer.Description className="sr-only">{description ?? title}</Drawer.Description>
+          <div className={cn("flex flex-col gap-3 px-4 pt-2.5 pb-1.5 sm:pt-2", wide && "lg:px-6")}>
+            <Drawer.Handle className="bottom-sheet-handle mx-auto" />
+            {header}
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-4 pt-1.5 pb-4", wide && "lg:px-6")}>{children}</div>
+          {footer && <div className={cn("border-t border-border px-4 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-4", wide && "lg:px-6")}>{footer}</div>}
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }
 

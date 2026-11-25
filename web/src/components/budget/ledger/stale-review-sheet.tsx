@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { BottomSheet } from "./bottom-sheet";
+import { useSheetClose } from "./use-sheet-close";
 import { useToast } from "@/components/ui/toast";
 import { saveFailureMessage } from "@/hooks/use-budget";
 import { entryInput, useSaveEntry } from "@/hooks/use-ledger";
@@ -27,6 +28,7 @@ export function StaleReviewSheet({
   entries: Map<string, Entry>;
   onClose: () => void;
 }) {
+  const sheet = useSheetClose(onClose);
   const save = useSaveEntry(rule.kind);
   const zone = useUserTimezone().data?.timezone;
   const { showToast } = useToast();
@@ -54,7 +56,7 @@ export function StaleReviewSheet({
 
   return (
     <BottomSheet
-      open
+      open={sheet.open}
       onOpenChange={(o) => !o && onClose()}
       title={`Rule changed: ${rule.description}`}
       header={
@@ -64,7 +66,7 @@ export function StaleReviewSheet({
         </div>
       }
       footer={
-        <button type="button" onClick={onClose} className="min-h-[52px] w-full rounded-2xl border border-foreground/15 text-base font-semibold">
+        <button type="button" onClick={sheet.close} className="min-h-[52px] w-full rounded-2xl border border-foreground/15 text-base font-semibold">
           Done
         </button>
       }

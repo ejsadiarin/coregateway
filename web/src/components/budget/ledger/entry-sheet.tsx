@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO, subDays } from "date-fns";
 import { CalendarDays, Clock, Plus, Repeat, Tags, X } from "lucide-react";
 import { BottomSheet, Field, Pill, Segmented } from "./bottom-sheet";
+import { useSheetClose } from "./use-sheet-close";
 import { categoryIcon, hueClasses } from "./chips";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -91,6 +92,7 @@ function EntryForm({
   feed?: FeedOptions;
   onStale?: (rule: Rule, report: StaleReport) => void;
 }) {
+  const sheet = useSheetClose(onClose);
   const entry = target.mode === "edit" ? target.entry : undefined;
   const rule = target.mode === "rule" ? target.rule : undefined;
   const from = entry ?? rule;
@@ -195,7 +197,7 @@ function EntryForm({
         await feed?.onSaved(record, kind, !entry);
         showToast(entry ? "Saved" : `${expense ? "Expense" : "Income"} added${kind !== pageKind ? ` to ${expense ? "Expenses" : "Incomes"}` : ""}`, "success");
       }
-      onClose();
+      sheet.close();
     } catch (e) {
       if (isUnknownCategoryError(e)) {
         await categoriesQuery.refetch();
@@ -229,12 +231,12 @@ function EntryForm({
   return (
     <BottomSheet
       wide
-      open
+      open={sheet.open}
       onOpenChange={(o) => !o && onClose()}
       title={title}
       header={
         <div className="flex items-center justify-between">
-          <button type="button" onClick={onClose} className="h-9 w-16 text-left text-[15px] font-medium text-muted-foreground hover:text-foreground">
+          <button type="button" onClick={sheet.close} className="h-9 w-16 text-left text-[15px] font-medium text-muted-foreground hover:text-foreground">
             Cancel
           </button>
           {isNew ? (
