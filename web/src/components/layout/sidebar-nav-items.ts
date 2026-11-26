@@ -13,6 +13,7 @@ import {
   Users,
   DatabaseBackup,
   ArrowLeftRight,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -25,6 +26,9 @@ export interface NavItem {
   section: NavSection;
   adminOnly?: boolean;
   disabled?: boolean;
+  // parent is the path of the item this one nests under in the sidebar.
+  // A child keeps its own section and must come after its parent.
+  parent?: string;
 }
 
 export const sectionLabels: Record<NavSection, string> = {
@@ -74,6 +78,13 @@ export const navItems: NavItem[] = [
     section: "overview",
   },
   {
+    label: "Reminders",
+    icon: Bell,
+    path: "/dashboard/kanban/reminders",
+    section: "overview",
+    parent: "/dashboard/kanban",
+  },
+  {
     label: "Budget",
     icon: Wallet,
     path: "/dashboard/budget",
@@ -84,12 +95,14 @@ export const navItems: NavItem[] = [
     icon: Receipt,
     path: "/dashboard/budget/expenses",
     section: "finance",
+    parent: "/dashboard/budget",
   },
   {
     label: "Incomes",
     icon: TrendingUp,
     path: "/dashboard/budget/incomes",
     section: "finance",
+    parent: "/dashboard/budget",
   },
   {
     label: "Exchange",

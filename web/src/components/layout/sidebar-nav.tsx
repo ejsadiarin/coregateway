@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { ChevronUp } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "./sidebar-context";
@@ -15,21 +17,29 @@ function NavItemButton({
   isActive,
   isCollapsed,
   onNavigate,
+  nested = false,
+  holdsActive = false,
 }: {
   item: NavItem;
   isActive: boolean;
   isCollapsed: boolean;
   onNavigate: (path: string) => void;
+  // nested is a child row: shorter, under its parent.
+  nested?: boolean;
+  // holdsActive is a parent whose child is the current page.
+  holdsActive?: boolean;
 }) {
   const button = (
     <motion.button
       onClick={() => !item.disabled && onNavigate(item.path)}
       className={cn(
         "group relative flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-sm transition-all duration-200",
+        nested && !isCollapsed && "py-1.5 pl-2.5",
         isCollapsed && "justify-center px-2",
         isActive && !item.disabled &&
           "bg-primary/10 text-primary shadow-[inset_0_0_12px_rgba(0,229,204,0.06)]",
-        !isActive && !item.disabled &&
+        !isActive && !item.disabled && holdsActive && "text-primary/80 hover:bg-sidebar-accent",
+        !isActive && !item.disabled && !holdsActive &&
           "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent",
         item.disabled &&
           "cursor-not-allowed text-muted-foreground/40"
@@ -48,6 +58,7 @@ function NavItemButton({
 
       <item.icon className={cn(
         "h-[18px] w-[18px] shrink-0 transition-colors duration-200",
+        nested && !isCollapsed && "h-4 w-4",
         isActive && !item.disabled && "text-primary drop-shadow-[0_0_6px_rgba(0,229,204,0.4)]",
       )} />
 
@@ -78,6 +89,96 @@ function NavItemButton({
   }
 
   return button;
+}
+
+// NavGroup is a top-level item with its children nested under it, joined by
+// a tree line. The arrow folds the children away; they stay open while one
+// of them is the current page.
+function NavGroup({
+  item,
+  childItems,
+  activePath,
+  isCollapsed,
+  onNavigate,
+}: {
+  item: NavItem;
+  childItems: NavItem[];
+  activePath: string | null;
+  isCollapsed: boolean;
+  onNavigate: (path: string) => void;
+}) {
+  const [folded, setFolded] = useState(false);
+  const childActive = childItems.some((c) => c.path === activePath);
+  const open = !folded || childActive;
+
+  const parent = (
+    <NavItemButton
+      item={item}
+      isActive={item.path === activePath}
+      isCollapsed={isCollapsed}
+      onNavigate={onNavigate}
+      holdsActive={childActive}
+    />
+  );
+
+  if (childItems.length === 0) return parent;
+
+  // Collapsed, the rail has no room for a tree: children follow as icons.
+  if (isCollapsed) {
+    return (
+      <>
+        {parent}
+        {childItems.map((child) => (
+          <NavItemButton
+            key={child.path}
+            item={child}
+            isActive={child.path === activePath}
+            isCollapsed
+            onNavigate={onNavigate}
+            nested
+          />
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative">
+        {parent}
+        <button
+          type="button"
+          onClick={() => setFolded((f) => !f)}
+          disabled={childActive}
+          aria-expanded={open}
+          aria-label={open ? `Hide ${item.label} pages` : `Show ${item.label} pages`}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <ChevronUp className={cn("h-3.5 w-3.5 transition-transform duration-200", !open && "rotate-180")} />
+        </button>
+      </div>
+      {open && (
+        <div className="ml-[21px] space-y-0.5 pt-0.5">
+          {childItems.map((child) => (
+            <div key={child.path} className="relative pl-3.5">
+              {/* the tree line: down from the parent, then across to the child */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-0 top-0 h-1/2 w-2.5 rounded-bl-md border-b border-l border-sidebar-border"
+              />
+              <NavItemButton
+                item={child}
+                isActive={child.path === activePath}
+                isCollapsed={false}
+                onNavigate={onNavigate}
+                nested
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SidebarNav() {
@@ -128,15 +229,18 @@ export function SidebarNav() {
           )}
 
           <div className="space-y-0.5">
-            {section.items.map((item) => (
-              <NavItemButton
-                key={item.path}
-                item={item}
-                isActive={item.path === activePath}
-                isCollapsed={isCollapsed}
-                onNavigate={handleNavigate}
-              />
-            ))}
+            {section.items
+              .filter((item) => !item.parent)
+              .map((item) => (
+                <NavGroup
+                  key={item.path}
+                  item={item}
+                  childItems={section.items.filter((c) => c.parent === item.path)}
+                  activePath={activePath}
+                  isCollapsed={isCollapsed}
+                  onNavigate={handleNavigate}
+                />
+              ))}
           </div>
         </div>
       ))}
