@@ -97,3 +97,13 @@ _Avoid_: ping, uptime check, probe
 **Built-in service**:
 A monitored service the gateway creates from its own config for a downstream it proxies to. It follows the configured URL and can be paused or tuned, but not deleted or repointed.
 _Avoid_: internal service, default service
+
+### Backups
+
+**Backup**:
+A point-in-time copy of the shared database — every service's data, not only the gateway's — kept on the homelab, outside the database host. It guards against losing the host or a mistake older than the host's own restore window. Attachment files are not part of it. A backup is either **nightly** (on the schedule) or **manual** (an admin asked for one now); both count toward the same retention, and only one runs at a time.
+_Avoid_: snapshot, dump, export, branch
+
+**Retention**:
+How many of the most recent successful backups are kept: three. The oldest is removed only after a newer backup succeeds, so failed nights never shrink what is kept.
+_Avoid_: backup window, expiry, TTL
