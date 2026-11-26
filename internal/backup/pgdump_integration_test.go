@@ -112,3 +112,49 @@ func TestPGDumpKeepsThePasswordOffTheCommandLine(t *testing.T) {
 		t.Error("PGPASSWORD not set in the subprocess environment")
 	}
 }
+
+func TestPGDumpErrorsNeverCarryTheOwnerCredentials(t *testing.T) {
+	if _, err := exec.LookPath("pg_dump"); err != nil {
+		t.Skip("pg_dump not on PATH")
+	}
+	// Nothing listens on port 1, so pg_dump fails to connect and reports
+	// the connection it tried.
+	const password = "s3cret-pw"
+	ownerURL := "postgresql://owner:" + password + "@127.0.0.1:1/coredb?sslmode=disable&connect_timeout=2"
+	err := PGDump(ownerURL)(context.Background(), filepath.Join(t.TempDir(), "x.partial"))
+	if err == nil {
+		t.Fatal("want a connection error")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, password) {
+		t.Errorf("error carries the password: %s", msg)
+	}
+	if strings.Contains(msg, "postgresql://") {
+		t.Errorf("error carries the connection string: %s", msg)
+	}
+	if !strings.Contains(msg, "127.0.0.1") {
+		t.Errorf("error lost the useful part: %s", msg)
+	}
+	// A URL that is not even parseable must not be echoed either.
+	err = PGDump("postgresql://owner:"+password+"@[bad")(context.Background(), "/nonexistent")
+	if err == nil || strings.Contains(err.Error(), password) {
+		t.Errorf("bad URL error = %v", err)
+	}
+}
+
+func TestScrubRemovesTheOwnerURLAndPassword(t *testing.T) {
+	owner := "postgresql://owner:s3cret-pw@db.example/coredb"
+	msg := `could not connect to "postgresql://owner@db.example/coredb" with s3cret-pw`
+	got := scrub(msg, owner)
+	if strings.Contains(got, "s3cret-pw") || strings.Contains(got, "postgresql://") {
+		t.Errorf("scrub = %q", got)
+	}
+}
+
+func TestScrubLeavesTextAloneWhenAShortPasswordAppearsInsideOtherWords(t *testing.T) {
+	owner := "postgresql://neondb_owner:owner@postgres:5432/coredb"
+	msg := `password authentication failed for user "neondb_owner"`
+	if got := scrub(msg, owner); got != msg {
+		t.Errorf("scrub = %q, want the message unchanged", got)
+	}
+}

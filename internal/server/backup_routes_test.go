@@ -3,8 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,6 +24,21 @@ import (
 // means backups are not configured.
 func backupRoutesSetup(t *testing.T, release chan struct{}) (http.Handler, uuid.UUID, uuid.UUID) {
 	t.Helper()
+	if release == nil {
+		return backupRoutesWithDump(t, nil, nil)
+	}
+	dump := func(ctx context.Context, dst string) error {
+		<-release
+		return os.WriteFile(dst, []byte("dump"), 0o600)
+	}
+	return backupRoutesWithDump(t, dump, release)
+}
+
+// backupRoutesWithDump serves the route table with the given dump; a nil
+// dump means backups are not configured. release, if set, is closed on
+// cleanup so a blocked dump can finish.
+func backupRoutesWithDump(t *testing.T, dump backup.DumpFunc, release chan struct{}) (http.Handler, uuid.UUID, uuid.UUID) {
+	t.Helper()
 	adminID, userID := uuid.New(), uuid.New()
 	q := &keyAuthStubQuerier{
 		users: map[uuid.UUID]db.CoregatewayUser{
@@ -33,19 +51,17 @@ func backupRoutesSetup(t *testing.T, release chan struct{}) (http.Handler, uuid.
 		},
 	}
 	var folder *backup.Folder
-	if release != nil {
-		dump := func(ctx context.Context, dst string) error {
-			<-release
-			return os.WriteFile(dst, []byte("dump"), 0o600)
-		}
+	if dump != nil {
 		major := func(context.Context) (int, error) { return 17, nil }
 		folder = backup.NewFolder(t.TempDir(), dump, major, time.Now)
 		t.Cleanup(func() {
 			// Let a running dump finish before the temp folder is removed.
-			select {
-			case <-release:
-			default:
-				close(release)
+			if release != nil {
+				select {
+				case <-release:
+				default:
+					close(release)
+				}
 			}
 			for folder.Running() {
 				time.Sleep(time.Millisecond)
@@ -63,9 +79,10 @@ func backupRoutesSetup(t *testing.T, release chan struct{}) (http.Handler, uuid.
 }
 
 type backupsBody struct {
-	Configured bool            `json:"configured"`
-	Running    bool            `json:"running"`
-	Backups    []backup.Backup `json:"backups"`
+	Configured  bool            `json:"configured"`
+	Running     bool            `json:"running"`
+	Backups     []backup.Backup `json:"backups"`
+	LastFailure *backup.Failure `json:"last_failure"`
 }
 
 func decodeBackups(t *testing.T, body []byte) backupsBody {
@@ -145,5 +162,60 @@ func TestBackupsReportNotConfiguredWithoutTheOwnerConnection(t *testing.T) {
 	}
 	if rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodPost, "/api/admin/backups", ""); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("trigger status = %d, want 503", rec.Code)
+	}
+}
+
+func TestTheLastFailureIsListedUntilABackupSucceeds(t *testing.T) {
+	var fail atomic.Bool
+	fail.Store(true)
+	dump := func(ctx context.Context, dst string) error {
+		if fail.Load() {
+			return errors.New("connection refused")
+		}
+		return os.WriteFile(dst, []byte("dump"), 0o600)
+	}
+	h, adminID, _ := backupRoutesWithDump(t, dump, nil)
+
+	settled := func() backupsBody {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodGet, "/api/admin/backups", "")
+			if got := decodeBackups(t, rec.Body.Bytes()); !got.Running {
+				return got
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("backup never finished")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	if rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodPost, "/api/admin/backups", ""); rec.Code != http.StatusAccepted {
+		t.Fatalf("trigger status = %d", rec.Code)
+	}
+	got := settled()
+	if got.LastFailure == nil || got.LastFailure.Kind != backup.Manual || !strings.Contains(got.LastFailure.Error, "connection refused") {
+		t.Fatalf("after a failure: last_failure = %+v", got.LastFailure)
+	}
+
+	fail.Store(false)
+	if rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodPost, "/api/admin/backups", ""); rec.Code != http.StatusAccepted {
+		t.Fatalf("trigger status = %d", rec.Code)
+	}
+	// Wait for the backup to land, then the failure must be gone.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got = settled()
+		if len(got.Backups) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("backup never listed")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got.LastFailure != nil {
+		t.Errorf("after a success: last_failure = %+v", got.LastFailure)
 	}
 }

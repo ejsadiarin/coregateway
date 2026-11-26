@@ -175,7 +175,9 @@ func TestFailedDumpLeavesNoFileAndReleasesTheLock(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
-		t.Errorf("left behind: %s", e.Name())
+		if e.Name() != failureName { // the failure record is expected
+			t.Errorf("left behind: %s", e.Name())
+		}
 	}
 	if f.Running() {
 		t.Error("lock still held after a failure")

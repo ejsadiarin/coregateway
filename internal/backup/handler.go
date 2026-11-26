@@ -19,9 +19,10 @@ type Handler struct {
 func NewHandler(folder *Folder) *Handler { return &Handler{folder: folder} }
 
 type listResponse struct {
-	Configured bool     `json:"configured"`
-	Running    bool     `json:"running"`
-	Backups    []Backup `json:"backups"`
+	Configured  bool     `json:"configured"`
+	Running     bool     `json:"running"`
+	Backups     []Backup `json:"backups"`
+	LastFailure *Failure `json:"last_failure"`
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -35,10 +36,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		helper.RespondErrorJSON(w, http.StatusInternalServerError, "could not read the backup folder")
 		return
 	}
+	lastFailure, err := h.folder.LastFailure()
+	if err != nil {
+		// A broken failure record must not hide the backups themselves.
+		slog.Warn("backup.Handler.List: could not read the last failure", "error", err)
+	}
 	helper.RespondJSON(w, http.StatusOK, listResponse{
-		Configured: true,
-		Running:    h.folder.Running(),
-		Backups:    backups,
+		Configured:  true,
+		Running:     h.folder.Running(),
+		Backups:     backups,
+		LastFailure: lastFailure,
 	})
 }
 

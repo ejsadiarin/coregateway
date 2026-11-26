@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -26,13 +27,35 @@ func PGDump(ownerURL string) DumpFunc {
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
-			if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			// The error is shown on the Backups page: pg_dump does not echo
+			// the password today, but scrub it and the URL in case it ever does.
+			if msg := scrub(strings.TrimSpace(stderr.String()), ownerURL); msg != "" {
 				return fmt.Errorf("%w: %s", err, msg)
 			}
 			return err
 		}
 		return nil
 	}
+}
+
+// scrub removes the owner URL (with or without its password) and the
+// password itself from msg. The password is matched only as a whole token,
+// so a short one that also occurs inside another word (a user name, say)
+// does not mangle the message.
+func scrub(msg, ownerURL string) string {
+	msg = strings.ReplaceAll(msg, ownerURL, "[redacted]")
+	u, err := url.Parse(ownerURL)
+	if err != nil {
+		return msg
+	}
+	password, ok := u.User.Password()
+	if !ok || password == "" {
+		return msg
+	}
+	u.User = url.User(u.User.Username())
+	msg = strings.ReplaceAll(msg, u.String(), "[redacted]")
+	wholePassword := regexp.MustCompile(`(^|[^A-Za-z0-9_])` + regexp.QuoteMeta(password) + `($|[^A-Za-z0-9_])`)
+	return wholePassword.ReplaceAllString(msg, "${1}[redacted]${2}")
 }
 
 func pgDumpCmd(ctx context.Context, ownerURL, dst string) (*exec.Cmd, error) {

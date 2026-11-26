@@ -634,10 +634,18 @@ export interface Backup {
     server_major: number;
 }
 
+export interface BackupFailure {
+    failed_at: string;
+    kind: BackupKind;
+    error: string;
+}
+
 export interface BackupsStatus {
     // false when the gateway has no owner connection (MIGRATION_URL)
     configured: boolean;
     running: boolean;
     backups: Backup[];
+    // the last failed backup since the last success, if any
+    last_failure: BackupFailure | null;
 }
 

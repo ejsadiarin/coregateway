@@ -82,8 +82,9 @@ func TestAFailedBackupRemovesNothing(t *testing.T) {
 	if err := <-done; err == nil {
 		t.Fatal("want the dump error")
 	}
-	if got := dirNames(t, dir); !slices.Equal(got, existing) {
-		t.Errorf("folder = %v\nwant     %v", got, existing)
+	want := append(slices.Clone(existing), failureName)
+	if got := dirNames(t, dir); !slices.Equal(got, want) {
+		t.Errorf("folder = %v\nwant     %v", got, want)
 	}
 }
 

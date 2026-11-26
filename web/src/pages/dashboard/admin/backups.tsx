@@ -85,6 +85,23 @@ export default function BackupsPage() {
                 </Alert>
             ) : (
                 <>
+                    {data?.last_failure && (
+                        <Alert variant="destructive" className="mb-6">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                                <span>
+                                    The {data.last_failure.kind} backup on{" "}
+                                    <span className="font-mono tabular-nums">
+                                        {format(new Date(data.last_failure.failed_at), "MMM d, yyyy HH:mm")}
+                                    </span>{" "}
+                                    failed. The next successful backup clears this.
+                                </span>
+                                <code className="mt-1 block break-words font-mono text-xs">
+                                    {data.last_failure.error}
+                                </code>
+                            </AlertDescription>
+                        </Alert>
+                    )}
                     <motion.div
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}

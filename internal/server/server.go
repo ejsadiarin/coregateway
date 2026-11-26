@@ -74,19 +74,28 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 	s.KeysHandler = auth.NewKeysHandler(s.KeysService)
 	s.UserHandler = user.NewHandler(user.NewService(queries))
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
-	s.BackupHandler = backup.NewHandler(backupFolder(cfg, pool))
+	folder := backupFolder(cfg, pool)
+	s.BackupHandler = backup.NewHandler(folder)
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)
 	s.CoredrawClient = coredraw.New(cfg.CoredrawURL)
 	s.CorebanClient = coreban.New(cfg.CorebanURL)
 	s.TokenIssuer = issuer
 
-	return &http.Server{
+	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      s.RegisterRoutes(cfg),
 		IdleTimeout:  time.Minute,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
-	}, nil
+	}
+	if folder != nil {
+		// Nightly backup at 02:00 Manila, stopped when the server shuts down.
+		nightlyCtx, stopNightly := context.WithCancel(context.Background())
+		srv.RegisterOnShutdown(stopNightly)
+		go folder.RunNightly(nightlyCtx)
+		slog.Info("nightly database backup scheduled", "hour", backup.NightlyHour, "zone", backup.NightlyZone)
+	}
+	return srv, nil
 }
 
 // backupFolder is nil, turning backups off, unless the owner connection

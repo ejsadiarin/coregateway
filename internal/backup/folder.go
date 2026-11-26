@@ -93,6 +93,12 @@ var heartbeatEvery = 10 * time.Minute
 // background on ctx; done receives its result exactly once, after the lock
 // is released.
 func (f *Folder) Start(ctx context.Context, kind Kind) (done <-chan error, err error) {
+	return f.start(ctx, kind, nil)
+}
+
+// start takes the lock, then runs check (if any) while holding it, so the
+// check and the backup cannot interleave with another replica's run.
+func (f *Folder) start(ctx context.Context, kind Kind, check func() error) (<-chan error, error) {
 	if err := os.MkdirAll(f.dir, 0o750); err != nil {
 		return nil, fmt.Errorf("backup folder: %w", err)
 	}
@@ -100,12 +106,25 @@ func (f *Folder) Start(ctx context.Context, kind Kind) (done <-chan error, err e
 	if err != nil {
 		return nil, err
 	}
+	if check != nil {
+		if err := check(); err != nil {
+			f.unlock(token)
+			return nil, err
+		}
+	}
 	ch := make(chan error, 1)
 	go func() {
 		stop := make(chan struct{})
 		beat := make(chan struct{})
 		go func() { f.heartbeat(token, stop); close(beat) }()
 		err := f.run(ctx, kind)
+		// A run stopped by shutdown (ctx cancelled) is neither a success nor
+		// a failure: a deploy at 02:00 must not leave a failure on the page.
+		if ctx.Err() == nil {
+			if recordErr := f.recordOutcome(kind, err); recordErr != nil {
+				slog.Warn("backup: could not record the outcome", "error", recordErr)
+			}
+		}
 		close(stop)
 		<-beat
 		f.unlock(token)

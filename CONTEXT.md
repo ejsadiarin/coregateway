@@ -107,3 +107,7 @@ _Avoid_: snapshot, dump, export, branch
 **Retention**:
 How many of the most recent successful backups are kept: three. The oldest is removed only after a newer backup succeeds, so failed nights never shrink what is kept.
 _Avoid_: backup window, expiry, TTL
+
+**Last failure**:
+The most recent backup that failed, nightly or manual, with when and why; shown to admins until a backup next succeeds. A skipped nightly (one already taken that day, or another backup running) is not a failure.
+_Avoid_: error log, alert, incident
