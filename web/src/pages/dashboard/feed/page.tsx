@@ -962,7 +962,9 @@ export default function FeedPage() {
     // A wide screen gives the Feed two thirds and the rail the rest (#22).
     <div className="mx-auto flex h-full w-full max-w-3xl gap-6 lg:max-w-[1400px] lg:pr-6">
     <div className="flex min-w-0 flex-[2] flex-col">
-      <div className="px-4 pt-4 md:px-6 md:pt-6">
+      {/* The list scrolls under a line, like the one above the composer,
+          so a note never looks sliced into the filter chips. */}
+      <div className="border-b border-border px-4 pt-4 pb-3 md:px-6 md:pt-6">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Feed</h1>
           <Button
