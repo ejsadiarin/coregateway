@@ -149,7 +149,7 @@ export function ContentHeader() {
                 key={t.id}
                 // The new theme spreads out from the palette button.
                 onClick={() => revealTheme(t.id, palette.current)}
-                className="flex items-center gap-3"
+                className="group flex items-center gap-3"
               >
                 <span
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border"
@@ -162,9 +162,11 @@ export function ContentHeader() {
                 </span>
                 <span className="flex flex-col">
                   <span className="text-xs">{t.label}</span>
-                  <span className="text-[10px] text-muted-foreground">{t.blurb}</span>
+                  <span className="text-[10px] text-muted-foreground group-focus:text-accent-foreground/75">
+                    {t.blurb}
+                  </span>
                 </span>
-                {theme === t.id && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
+                {theme === t.id && <Check className="ml-auto h-3.5 w-3.5 text-primary group-focus:text-accent-foreground" />}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
