@@ -712,7 +712,7 @@ function NewCardForm({
   const [missingTitle, setMissingTitle] = useState(false);
   const columnId = newCardColumn(columns, chosenColumnId);
   const mutation = useMutation({
-    mutationFn: ({ t }: { t: string; details: boolean }) => createKanbanCard(boardId, columnId, t),
+    mutationFn: ({ title }: { title: string; details: boolean }) => createKanbanCard(boardId, columnId, title),
     onSuccess: (card, { details }) => onCreated(card, details),
   });
 
@@ -720,7 +720,7 @@ function NewCardForm({
     const t = title.trim();
     if (mutation.isPending) return;
     setMissingTitle(!t);
-    if (t) mutation.mutate({ t, details });
+    if (t) mutation.mutate({ title: t, details });
   };
 
   return (
