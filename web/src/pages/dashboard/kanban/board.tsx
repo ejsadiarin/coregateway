@@ -16,7 +16,7 @@ import {
   type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { columnOption, statusLabel } from "@/lib/kanban-columns";
+import { columnOption, newCardColumn, statusLabel } from "@/lib/kanban-columns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { Archive, ArrowLeft, MoreHorizontal, Plus, Tag, Trash2 } from "lucide-react";
@@ -144,6 +144,8 @@ export default function KanbanBoardPage() {
   const [columnDialog, setColumnDialog] = useState<KanbanColumn | "new" | null>(null);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [labelsOpen, setLabelsOpen] = useState(false);
+  // The new-card dialog: open with the column it starts in, if one was picked.
+  const [newCard, setNewCard] = useState<{ columnId?: string } | null>(null);
   // The pointer's clientY during a drag. Tracked directly rather than as
   // start + dnd-kit's delta, which also counts any auto-scroll since the drag
   // began and so drifts from the viewport rects the drop slot is measured in.
@@ -363,11 +365,21 @@ export default function KanbanBoardPage() {
           </div>
         </div>
         <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
-          Drag cards between columns to change their status, or up and down to set priority. On touch, press and hold a
-          card to pick it up.
+          Drag cards to change status or priority; on touch, press and hold first.
           <span className="hidden md:inline"> With a card focused, Alt + arrow keys move it.</span>
         </p>
-        {columns.length > 0 && <NewCardForm boardId={boardId} columns={columns} onCreated={refresh} onError={fail} />}
+        {columns.length > 0 && (
+          <Button
+            className="mt-4 min-h-11"
+            onClick={() => {
+              setActionError("");
+              setNewCard({});
+            }}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            New card
+          </Button>
+        )}
         {actionError && <p className="mt-3 text-sm text-destructive">{actionError}</p>}
       </div>
 
@@ -416,6 +428,10 @@ export default function KanbanBoardPage() {
               onOpenCard={setEditingId}
               onCardKey={handleCardKey}
               dueLabel={dueLabel}
+              onAddCard={() => {
+                setActionError("");
+                setNewCard({ columnId: column.id });
+              }}
               menu={
                 <ColumnMenu
                   column={column}
@@ -479,6 +495,22 @@ export default function KanbanBoardPage() {
         onSaved={refresh}
       />
 
+      <NewCardDialog
+        boardId={boardId}
+        state={newCard}
+        columns={columns}
+        onClose={() => setNewCard(null)}
+        onCreated={async (card, details) => {
+          setNewCard(null);
+          refresh();
+          if (details) {
+            // The editor reads the card from the board, so wait for it to be there.
+            await queryClient.refetchQueries({ queryKey: boardKey });
+            setEditingId(card.id);
+          }
+        }}
+      />
+
       <CardEditor
         key={`card-${editing?.id ?? "none"}`}
         boardId={boardId}
@@ -504,6 +536,7 @@ function ColumnView({
   onOpenCard,
   onCardKey,
   dueLabel,
+  onAddCard,
   menu,
 }: {
   column: KanbanColumn;
@@ -513,6 +546,7 @@ function ColumnView({
   onOpenCard: (id: string) => void;
   onCardKey: (e: React.KeyboardEvent, card: KanbanCard) => void;
   dueLabel: (card: KanbanCard) => DueLabel | null;
+  onAddCard: () => void;
   menu: React.ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: column.id });
@@ -532,6 +566,15 @@ function ColumnView({
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           {statusLabel[column.status]} · <span className="tabular-nums">{cards.length}</span>
         </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="min-h-11 min-w-11"
+          aria-label={`Add a card to ${column.name}`}
+          onClick={onAddCard}
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
         {menu}
       </header>
 
@@ -614,72 +657,120 @@ function CardItem({
   );
 }
 
-// NewCardForm is the board's one create action: a title and the column the
-// card starts in (the first column by default).
+// NewCardDialog is the board's one create action: a title and the column the
+// card starts in (the one whose + opened it, else the first Todo column).
+// "Add more details" creates the card and hands it on to the card editor.
+function NewCardDialog({
+  boardId,
+  state,
+  columns,
+  onClose,
+  onCreated,
+}: {
+  boardId: string;
+  state: { columnId?: string } | null;
+  columns: KanbanColumn[];
+  onClose: () => void;
+  onCreated: (card: KanbanCard, details: boolean) => void;
+}) {
+  return (
+    <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>New card</DialogTitle>
+          <DialogDescription>Add a description, due date, or labels now or later.</DialogDescription>
+        </DialogHeader>
+        {state && (
+          <NewCardForm
+            boardId={boardId}
+            columns={columns}
+            initialColumnId={state.columnId}
+            onCancel={onClose}
+            onCreated={onCreated}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function NewCardForm({
   boardId,
   columns,
+  initialColumnId,
+  onCancel,
   onCreated,
-  onError,
 }: {
   boardId: string;
   columns: KanbanColumn[];
-  onCreated: () => void;
-  onError: (fallback: string) => (err: unknown) => void;
+  initialColumnId?: string;
+  onCancel: () => void;
+  onCreated: (card: KanbanCard, details: boolean) => void;
 }) {
   const [title, setTitle] = useState("");
-  const [chosenColumnId, setColumnId] = useState("");
+  const [chosenColumnId, setColumnId] = useState(initialColumnId ?? "");
   const [missingTitle, setMissingTitle] = useState(false);
-  // The first column until one is chosen, or if the chosen one is gone.
-  const columnId = columns.some((c) => c.id === chosenColumnId) ? chosenColumnId : columns[0].id;
-  const createMutation = useMutation({
-    mutationFn: (t: string) => createKanbanCard(boardId, columnId, t),
-    onSuccess: () => {
-      setTitle("");
-      onCreated();
-    },
-    onError: onError("Couldn't create this card"),
+  const columnId = newCardColumn(columns, chosenColumnId);
+  const mutation = useMutation({
+    mutationFn: ({ t }: { t: string; details: boolean }) => createKanbanCard(boardId, columnId, t),
+    onSuccess: (card, { details }) => onCreated(card, details),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const create = (details: boolean) => {
     const t = title.trim();
-    if (createMutation.isPending) return;
+    if (mutation.isPending) return;
     setMissingTitle(!t);
-    if (t) createMutation.mutate(t);
+    if (t) mutation.mutate({ t, details });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-6 grid max-w-3xl gap-2">
-      <Label htmlFor="kanban-new-card">New card</Label>
-      <div className="flex flex-col gap-2 sm:flex-row">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        create(false);
+      }}
+      className="grid gap-4"
+    >
+      <div className="grid gap-2">
+        <Label htmlFor="kanban-new-card">Title</Label>
         <Input
           id="kanban-new-card"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           aria-invalid={missingTitle || undefined}
-          className="min-h-11 flex-1"
+          className="min-h-11"
+          autoFocus
         />
-        <div className="flex gap-2">
-          <Select value={columnId} onValueChange={setColumnId}>
-            <SelectTrigger aria-label="Column for the new card" className="min-h-11 flex-1 sm:w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {columns.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {columnOption(c)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="submit" disabled={createMutation.isPending} className="min-h-11">
-            <Plus className="h-4 w-4" />
-            Create
-          </Button>
-        </div>
+        {missingTitle && <p className="text-sm text-destructive">Give the card a title first.</p>}
       </div>
-      {missingTitle && <p className="text-sm text-destructive">Give the card a title first.</p>}
+      <div className="grid gap-2">
+        <Label htmlFor="kanban-new-card-column">Column</Label>
+        <Select value={columnId} onValueChange={setColumnId}>
+          <SelectTrigger id="kanban-new-card-column" className="min-h-11">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {columns.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {columnOption(c)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {mutation.error && <p className="text-sm text-destructive">{errorText(mutation.error, "Couldn't create this card")}</p>}
+      <DialogFooter className="gap-2">
+        <Button type="button" variant="ghost" className="min-h-11" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" variant="outline" className="min-h-11" disabled={mutation.isPending} onClick={() => create(true)}>
+          Add more details
+        </Button>
+        <Button type="submit" className="min-h-11" disabled={mutation.isPending}>
+          <Plus className="h-4 w-4" aria-hidden />
+          Create
+        </Button>
+      </DialogFooter>
     </form>
   );
 }

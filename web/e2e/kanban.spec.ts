@@ -53,6 +53,35 @@ test("editing a card saves its title, description, and due", async ({ page }) =>
   await deleteBoard(page, name);
 });
 
+test("the New card dialog creates a card in the column that opened it", async ({ page }) => {
+  const name = await newBoard(page, "New card");
+  const main = page.getByRole("main");
+  const dialog = page.getByRole("dialog", { name: "New card" });
+
+  // An empty title keeps the dialog open.
+  await main.getByRole("button", { name: "New card" }).click();
+  await dialog.getByRole("button", { name: "Create" }).click();
+  await expect(dialog).toContainText("Give the card a title first.");
+  await expect(dialog.getByRole("combobox", { name: "Column" })).toHaveText("Todo");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // A column's + starts the card there.
+  await addCard(page, "Half done", "Doing");
+  await expect(column(page, "Doing", "In progress").getByText("Half done", { exact: true })).toBeVisible();
+
+  // Add more details creates it, then opens its editor.
+  await main.getByRole("button", { name: "New card" }).click();
+  await dialog.getByRole("textbox", { name: "Title" }).fill("Needs notes");
+  await dialog.getByRole("button", { name: "Add more details" }).click();
+  const editor = page.getByRole("dialog", { name: "Edit card" });
+  await expect(editor.getByRole("textbox", { name: "Title" })).toHaveValue("Needs notes");
+  await editor.getByRole("button", { name: "Cancel" }).click();
+  await expect(column(page, "Todo", "Todo").getByText("Needs notes", { exact: true })).toBeVisible();
+
+  await deleteBoard(page, name);
+});
+
 test("dragging moves a card across columns and reorders within one", async ({ page }) => {
   const name = await newBoard(page, "Drag");
   for (const t of ["First", "Second", "Third"]) await addCard(page, t);
@@ -99,9 +128,7 @@ test("column guards keep one column per status and never drop cards", async ({ p
   await expect(column(page, "Doing", "In progress")).toBeVisible();
 
   // A column holding a card can't be deleted.
-  await page.getByRole("combobox", { name: "Column for the new card" }).click();
-  await page.getByRole("option", { name: "Done", exact: true }).click();
-  await addCard(page, "Shipped already");
+  await addCard(page, "Shipped already", "Done");
   await columnAction(page, "Done", "Delete column");
   await expect(main).toContainText("Done still holds cards");
   await expect(column(page, "Done", "Done").getByText("Shipped already")).toBeVisible();

@@ -72,9 +72,15 @@ export async function deleteBoard(page: Page, name: string) {
 export const column = (page: Page, name: string, status: string) =>
   page.getByRole("region", { name: `${name} (${status})` });
 
-export async function addCard(page: Page, title: string) {
-  await page.getByRole("textbox", { name: "New card" }).fill(title);
-  await page.getByRole("main").getByRole("button", { name: "Create" }).click();
+// addCard creates a card from the board's New card dialog: in the board's
+// first Todo column, or in columnName when given (through that column's +).
+export async function addCard(page: Page, title: string, columnName?: string) {
+  if (columnName) await page.getByRole("button", { name: `Add a card to ${columnName}` }).click();
+  else await page.getByRole("main").getByRole("button", { name: "New card" }).click();
+  const dialog = page.getByRole("dialog", { name: "New card" });
+  await dialog.getByRole("textbox", { name: "Title" }).fill(title);
+  await dialog.getByRole("button", { name: "Create" }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("main").getByText(title, { exact: true })).toBeVisible();
 }
 
