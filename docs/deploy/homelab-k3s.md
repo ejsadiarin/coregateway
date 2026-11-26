@@ -1613,12 +1613,19 @@ metadata:
   namespace: coregateway
 stringData:
   DATABASE_URL: postgresql://coregateway_role:…@<pooler-host>/coredb?sslmode=require
+  # Owner role, direct host: used only by pg_dump for in-app backups
+  # (ADR-0006). Leave it out and backups are off; the gateway still runs.
+  MIGRATION_URL: postgresql://neondb_owner:<pw>@<direct-host>/coredb?sslmode=require
   ADMIN_EMAIL: …
   ADMIN_PASSWORD: …
 ```
 
-Only `DATABASE_URL` (the pooled, DML-only role) goes into the cluster.
-`MIGRATION_URL` is the database owner and stays on the laptop; see 15.6.
+`DATABASE_URL` is the pooled, DML-only role the gateway queries with.
+`MIGRATION_URL` is the database owner. It goes into the gateway's Secret
+only so the gateway can run `pg_dump` for backups
+([ADR-0006](../adr/0006-gateway-runs-database-backups.md)): the gateway never
+opens a connection with it, and migrations still run from the laptop (15.6).
+No other workload gets it.
 
 The signing key is a separate Secret, `gateway-jwt-keys`, with the four keys
 `private_pem`, `kid`, `prev_private_pem`, `prev_kid`. Create it from
@@ -1724,9 +1731,12 @@ spec:
             capabilities: {drop: [ALL]}
           volumeMounts:
             - {name: jwt-keys, mountPath: /etc/coregateway/jwt, readOnly: true}
+            - {name: backups, mountPath: /backups}
       volumes:
         - name: jwt-keys
           secret: {secretName: gateway-jwt-keys, defaultMode: 0440}
+        - name: backups
+          persistentVolumeClaim: {claimName: coregateway-backups}
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -1745,6 +1755,36 @@ spec:
 The image runs as a non-root user with fixed IDs, UID and GID 10001
 (`Dockerfile.coregateway-api`); `runAsUser`/`fsGroup` must match them, or the
 key file will be unreadable and the gateway will refuse to start.
+
+**Database backups.** The gateway backs up the whole of `coredb` itself
+([ADR-0006](../adr/0006-gateway-runs-database-backups.md)): a nightly backup
+at 02:00 Asia/Manila, and a manual one from **Back up now** on the admin
+**Backups** page. It keeps the three newest successful backups, and the page
+shows the last failure until a backup succeeds. Both replicas mount one
+shared volume at `/backups` and coordinate through a lock file in it, so
+there is one nightly a day. The volume must be ReadWriteMany; Longhorn serves
+that over NFS, which `nfs-common` from section 3 provides. `fsGroup: 10001`
+above makes it writable by the gateway.
+
+```yaml
+# apps/coregateway/coregateway-backups-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coregateway-backups
+  namespace: coregateway
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: longhorn
+  resources:
+    requests: {storage: 5Gi}
+```
+
+Three compressed backups of `coredb` use a small part of 5 Gi. The volume is in
+Longhorn's nightly backup to B2 (section 18), which makes it the off-site
+copy. Without `MIGRATION_URL` in the Secret, backups are off and the page says
+so. Copying a backup off and restoring it:
+[`coredb-backup-restore.md`](./coredb-backup-restore.md).
 
 Two replicas are safe only if sessions live in Postgres, which they do
 (a stored session record). Rate limits or caches held in process memory would
@@ -1846,6 +1886,10 @@ make migrate-up
 
 Then push the tag bump. Migrations must be backward compatible with the
 running version, because old pods serve traffic until the new ones are ready.
+
+The cluster's copy of `MIGRATION_URL` (15.2) is for backups only; nothing in
+the cluster runs migrations
+([ADR-0006](../adr/0006-gateway-runs-database-backups.md)).
 
 ### 15.7 Network policy
 
@@ -2152,7 +2196,7 @@ watch the cluster from outside it.
 | Immich database | CloudNativePG + Barman Cloud plugin | `…/cnpg/immich` | Continuous WAL, daily base |
 | Immich media | Existing restic job on `core-2` (`,backup-homelab`) | Existing restic bucket | By hand today; nightly once the timer from [`immich-restore-drill.md`](./immich-restore-drill.md) section 12 is installed |
 | coreban attachments | None yet: R2 holds the only copy | R2 `coreban-attachments` | [`coreban-attachments.md`](./coreban-attachments.md) section 10 |
-| `coredb` | Neon's own history; periodic `pg_dump` from the laptop | Neon, local | Manual |
+| `coredb` | Neon's own history; the gateway's own `pg_dump`, last three kept ([`coredb-backup-restore.md`](./coredb-backup-restore.md)) | Neon; PVC `coregateway-backups`, so also in Longhorn's B2 backup | Nightly 02:00 Asia/Manila, and **Back up now** |
 | Keys that unlock everything | Vaultwarden and paper | Off-cluster | On change |
 
 **Kept outside the cluster, or nothing above can be restored:**
@@ -2205,6 +2249,10 @@ change. Total loss of both nodes:
    `apps`, or an empty database is created instead.
 5. Rejoin `core-2`, restore the Immich library with restic if its disk was
    lost (same runbook, section 6.4), check the static volumes bind.
+6. `coredb` lives on Neon, outside the cluster, so a cluster loss leaves it
+   alone. If Neon itself is lost, restore the `coregateway-backups` volume
+   (step 3), copy the newest file off and restore it into a new Neon project
+   ([`coredb-backup-restore.md`](./coredb-backup-restore.md) sections 2–5).
 
 A drill that is only read is not a drill. The cheap version: restore one
 Longhorn volume to a new name and read a file from it, monthly.
