@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation, useMatch } from "react-router-dom";
 import { SidebarProvider } from "./sidebar-context";
 import { Sidebar } from "./sidebar";
-import { MobileBottomNav } from "./mobile-bottom-nav";
+import { NavOrbPrototype, useNavOrbVariant } from "./prototype-nav-orb";
 import { ContentHeader } from "./content-header";
 import { PageTitleProvider } from "./page-title";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,8 @@ function ShellInner({ children }: { children: React.ReactNode }) {
   // replaces the dashboard header and bottom nav. Tablets and desktops keep
   // the normal shell.
   const isDrawEditor = useMatch("/dashboard/draw/:boardId") !== null;
+  // PROTOTYPE: the nav orb has no bar to pad for (variant Z is today's bar).
+  const hasBottomBar = useNavOrbVariant() === "Z";
 
   // Which side the new page comes in from: a move between bottom-nav tabs
   // slides in from the side of the tab picked (phones only, in app.css);
@@ -48,7 +50,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
             // The Draw editor reads its canvas's offset as it mounts, which
             // a moving page would skew: it only fades.
             isDrawEditor ? "route-fade" : route.from && `route-from-${route.from}`,
-            isDrawEditor ? "min-h-0 max-md:overflow-hidden max-md:pb-0" : "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
+            isDrawEditor ? "min-h-0 max-md:overflow-hidden max-md:pb-0" : hasBottomBar ? "pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0" : "pb-24 md:pb-0",
           )}
         >
           {children}
@@ -62,7 +64,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* mobile bottom nav — not under the full-screen editor */}
-      {!isDrawEditor && <MobileBottomNav />}
+      {!isDrawEditor && <NavOrbPrototype />}
     </div>
   );
 }
