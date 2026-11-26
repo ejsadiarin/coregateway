@@ -11,9 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -45,6 +47,12 @@ type MajorFunc func(ctx context.Context) (int, error)
 // Dir is where the gateway keeps backups: a bind mount under compose, a
 // shared ReadWriteMany volume under k3s. Fixed, so there is nothing to set.
 const Dir = "/backups"
+
+// retention is how many of the most recent successful backups are kept.
+const retention = 3
+
+// partialSuffix marks a backup still being written; listing ignores it.
+const partialSuffix = ".partial"
 
 const timeLayout = "20060102T150405Z"
 
@@ -234,12 +242,14 @@ func newToken() (string, error) {
 }
 
 func (f *Folder) run(ctx context.Context, kind Kind) error {
+	// The lock is held, so any partial file is left from a crashed run.
+	f.removePartials()
 	major, err := f.major(ctx)
 	if err != nil {
 		return fmt.Errorf("server version: %w", err)
 	}
 	final := filepath.Join(f.dir, fileName(kind, f.now(), major))
-	partial := final + ".partial"
+	partial := final + partialSuffix
 	// Create the file owner-only before pg_dump opens it (pg_dump keeps an
 	// existing file's mode), and enforce it after in case the dump replaced it.
 	// A backup holds password hashes and every user's data.
@@ -258,7 +268,41 @@ func (f *Folder) run(ctx context.Context, kind Kind) error {
 		_ = os.Remove(partial)
 		return fmt.Errorf("finish backup: %w", err)
 	}
+	// Retention runs only after a success, so failed runs never shrink what
+	// is kept. The backup itself succeeded, so a pruning problem is logged
+	// rather than reported as a failed backup.
+	if err := f.prune(filepath.Base(final)); err != nil {
+		slog.Warn("backup: retention failed", "error", err)
+	}
 	return nil
+}
+
+// prune removes all but the retention newest backups, ordered by the time in
+// their names. The backup just taken (justTaken) always counts among the
+// kept ones, so a replica whose clock runs behind never deletes its own
+// fresh backup as the "oldest".
+func (f *Folder) prune(justTaken string) error {
+	backups, err := f.List() // newest first
+	if err != nil {
+		return err
+	}
+	others := slices.DeleteFunc(backups, func(b Backup) bool { return b.Name == justTaken })
+	var errs []error
+	for _, b := range others[min(retention-1, len(others)):] {
+		if err := os.Remove(filepath.Join(f.dir, b.Name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (f *Folder) removePartials() {
+	partials, _ := filepath.Glob(filepath.Join(f.dir, "coredb-*"+partialSuffix))
+	for _, p := range partials {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("backup: could not remove a leftover partial file", "file", filepath.Base(p), "error", err)
+		}
+	}
 }
 
 // List returns the completed backups, newest first. Partial files and
@@ -294,6 +338,11 @@ func (f *Folder) List() ([]Backup, error) {
 			ServerMajor: major,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].TakenAt.After(out[j].TakenAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].TakenAt.Equal(out[j].TakenAt) {
+			return out[i].TakenAt.After(out[j].TakenAt)
+		}
+		return out[i].Name > out[j].Name // same second: a stable order
+	})
 	return out, nil
 }
