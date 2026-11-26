@@ -262,12 +262,19 @@ export async function deleteUser(id: string): Promise<void> {
 
 // Database Backups (Admin)
 
+// backupError carries the gateway's own explanation: the backup routes are
+// admin-only, so it names the real problem (a missing mount, a wrong owner).
+async function backupError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null);
+  return new Error(typeof body?.error === 'string' ? body.error : `${fallback} (error ${res.status})`);
+}
+
 export async function fetchBackups(): Promise<BackupsStatus> {
   const res = await fetch(url + '/api/admin/backups', {
     credentials: 'include'
   });
   if (!res.ok) {
-    throw new Error(`Error fetching backups: ${res.status}`);
+    throw await backupError(res, 'Could not load backups');
   }
   return res.json();
 }
@@ -280,8 +287,7 @@ export async function startBackup(): Promise<void> {
     credentials: 'include'
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Backup failed to start' }));
-    throw new Error(error.message || 'Backup failed to start');
+    throw await backupError(res, 'Backup failed to start');
   }
 }
 

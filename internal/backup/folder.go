@@ -18,6 +18,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -64,6 +65,11 @@ type Folder struct {
 	dump  DumpFunc
 	major MajorFunc
 	now   func() time.Time
+
+	// failed is this replica's copy of the last failure, kept in memory so a
+	// failure is shown even when the folder itself cannot be written.
+	mu     sync.Mutex
+	failed *Failure
 }
 
 func NewFolder(dir string, dump DumpFunc, major MajorFunc, now func() time.Time) *Folder {
@@ -99,18 +105,13 @@ func (f *Folder) Start(ctx context.Context, kind Kind) (done <-chan error, err e
 // start takes the lock, then runs check (if any) while holding it, so the
 // check and the backup cannot interleave with another replica's run.
 func (f *Folder) start(ctx context.Context, kind Kind, check func() error) (<-chan error, error) {
-	if err := os.MkdirAll(f.dir, 0o750); err != nil {
-		return nil, fmt.Errorf("backup folder: %w", err)
-	}
-	token, err := f.lock()
-	if err != nil {
+	token, err := f.lockAndCheck(check)
+	if isSkip(err) {
 		return nil, err
 	}
-	if check != nil {
-		if err := check(); err != nil {
-			f.unlock(token)
-			return nil, err
-		}
+	if err != nil {
+		f.record(kind, err)
+		return nil, err
 	}
 	ch := make(chan error, 1)
 	go func() {
@@ -121,9 +122,7 @@ func (f *Folder) start(ctx context.Context, kind Kind, check func() error) (<-ch
 		// A run stopped by shutdown (ctx cancelled) is neither a success nor
 		// a failure: a deploy at 02:00 must not leave a failure on the page.
 		if ctx.Err() == nil {
-			if recordErr := f.recordOutcome(kind, err); recordErr != nil {
-				slog.Warn("backup: could not record the outcome", "error", recordErr)
-			}
+			f.record(kind, err)
 		}
 		close(stop)
 		<-beat
@@ -131,6 +130,31 @@ func (f *Folder) start(ctx context.Context, kind Kind, check func() error) (<-ch
 		ch <- err
 	}()
 	return ch, nil
+}
+
+// isSkip reports whether a backup did not start because it was not needed
+// (another is running, or today's nightly exists): a skip, not a failure.
+func isSkip(err error) bool {
+	return errors.Is(err, ErrRunning) || errors.Is(err, ErrNightlyTaken)
+}
+
+// lockAndCheck prepares the folder, takes the lock and runs check while
+// holding it, returning the lock token.
+func (f *Folder) lockAndCheck(check func() error) (string, error) {
+	if err := os.MkdirAll(f.dir, 0o750); err != nil {
+		return "", fmt.Errorf("backup folder: %w", err)
+	}
+	token, err := f.lock()
+	if err != nil {
+		return "", err
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			f.unlock(token)
+			return "", err
+		}
+	}
+	return token, nil
 }
 
 // Running reports whether a backup holds a live lock.

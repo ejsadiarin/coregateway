@@ -69,7 +69,7 @@ func (f *Folder) runNightly(ctx context.Context, after func(time.Duration) <-cha
 func (f *Folder) takeNightly(ctx context.Context) {
 	done, err := f.StartNightly(ctx)
 	switch {
-	case errors.Is(err, ErrNightlyTaken), errors.Is(err, ErrRunning):
+	case isSkip(err):
 		slog.Info("backup: nightly skipped", "reason", err)
 		return
 	case err != nil:

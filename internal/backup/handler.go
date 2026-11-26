@@ -33,7 +33,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	backups, err := h.folder.List()
 	if err != nil {
 		slog.Error("backup.Handler.List: failed", "error", err)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, "could not read the backup folder")
+		// Admin-only: the real problem (a missing mount, wrong owner) is what
+		// the admin needs to fix it.
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "could not read the backup folder: "+err.Error())
 		return
 	}
 	lastFailure, err := h.folder.LastFailure()
@@ -63,7 +65,8 @@ func (h *Handler) Trigger(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Error("backup.Handler.Trigger: failed to start", "error", err)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, "could not start a backup")
+		// Admin-only, and never carries credentials: the real cause helps.
+		helper.RespondErrorJSON(w, http.StatusInternalServerError, "could not start a backup: "+err.Error())
 		return
 	}
 	slog.Info("backup: manual backup started")

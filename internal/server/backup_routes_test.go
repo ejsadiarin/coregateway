@@ -39,6 +39,12 @@ func backupRoutesSetup(t *testing.T, release chan struct{}) (http.Handler, uuid.
 // cleanup so a blocked dump can finish.
 func backupRoutesWithDump(t *testing.T, dump backup.DumpFunc, release chan struct{}) (http.Handler, uuid.UUID, uuid.UUID) {
 	t.Helper()
+	return backupRoutesIn(t, t.TempDir(), dump, release)
+}
+
+// backupRoutesIn is backupRoutesWithDump with backups kept in dir.
+func backupRoutesIn(t *testing.T, dir string, dump backup.DumpFunc, release chan struct{}) (http.Handler, uuid.UUID, uuid.UUID) {
+	t.Helper()
 	adminID, userID := uuid.New(), uuid.New()
 	q := &keyAuthStubQuerier{
 		users: map[uuid.UUID]db.CoregatewayUser{
@@ -53,7 +59,7 @@ func backupRoutesWithDump(t *testing.T, dump backup.DumpFunc, release chan struc
 	var folder *backup.Folder
 	if dump != nil {
 		major := func(context.Context) (int, error) { return 17, nil }
-		folder = backup.NewFolder(t.TempDir(), dump, major, time.Now)
+		folder = backup.NewFolder(dir, dump, major, time.Now)
 		t.Cleanup(func() {
 			// Let a running dump finish before the temp folder is removed.
 			if release != nil {
@@ -217,5 +223,28 @@ func TestTheLastFailureIsListedUntilABackupSucceeds(t *testing.T) {
 	}
 	if got.LastFailure != nil {
 		t.Errorf("after a success: last_failure = %+v", got.LastFailure)
+	}
+}
+
+func TestABackupThatCannotStartShowsTheRealProblemToTheAdmin(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o500); err != nil { // a mount owned by the wrong user
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	dump := func(ctx context.Context, dst string) error { return os.WriteFile(dst, []byte("dump"), 0o600) }
+	h, adminID, _ := backupRoutesIn(t, dir, dump, nil)
+
+	rec := doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodPost, "/api/admin/backups", "")
+	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "permission denied") {
+		t.Errorf("trigger = %d %s, want 500 naming the problem", rec.Code, rec.Body)
+	}
+	rec = doSessionRequest(t, h, adminID, auth.RoleAdmin, http.MethodGet, "/api/admin/backups", "")
+	got := decodeBackups(t, rec.Body.Bytes())
+	if got.LastFailure == nil || !strings.Contains(got.LastFailure.Error, "permission denied") {
+		t.Errorf("last_failure = %+v", got.LastFailure)
 	}
 }
