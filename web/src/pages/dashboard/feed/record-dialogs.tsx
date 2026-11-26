@@ -4,83 +4,22 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import {
   createKanbanCard,
-  createKanbanReminder,
-  editKanbanReminder,
   fetchKanbanBoard,
   fetchKanbanBoards,
   KanbanRequestError,
   type FeedNote,
 } from "@/lib/kanban";
-import type { KanbanReminder } from "@/types/kanban";
 import type { Expense, Income } from "@/types/api";
 import { postBudgetNote } from "@/lib/feed";
 import { syncBudgetNotes, syncRecordOf } from "@/lib/budget-sync";
 import { entryOf } from "@/lib/ledger";
 import { EntrySheet, type SheetTarget } from "@/components/budget/ledger/entry-sheet";
-import { useUserTimezone } from "@/hooks/use-user-timezone";
-import { ReminderForm } from "@/pages/dashboard/kanban/reminders";
-import { reminderEdit } from "@/lib/kanban-schedule";
 import { columnOption } from "@/lib/kanban-columns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-// What the reminder dialog is doing: capturing a new reminder from the
-// Feed (pre-filled with text, linked to note), or editing a linked one.
-export type ReminderDialogState =
-  | { mode: "new"; text: string; note: FeedNote }
-  | { mode: "edit"; reminder: KanbanReminder };
-
-export function ReminderDialog({
-  state,
-  onClose,
-  onSaved,
-}: {
-  state: ReminderDialogState | null;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const timezone = useUserTimezone().data?.timezone;
-  return (
-    <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{state?.mode === "edit" ? "Edit reminder" : "New reminder"}</DialogTitle>
-          <DialogDescription>
-            {state?.mode === "edit"
-              ? "Changes show on the Reminders page too."
-              : "Saved to your reminders, with a note in the Feed that shows it."}
-          </DialogDescription>
-        </DialogHeader>
-        {state?.mode === "new" && (
-          <ReminderForm
-            timezone={timezone}
-            initialMessage={state.text}
-            messageLabel="Message"
-            submitLabel="Save"
-            onCancel={onClose}
-            onSaved={onSaved}
-            save={(message, schedule) => createKanbanReminder({ message, schedule, note: state.note })}
-          />
-        )}
-        {state?.mode === "edit" && (
-          <ReminderForm
-            timezone={timezone}
-            initial={state.reminder}
-            submitLabel="Save"
-            onCancel={onClose}
-            onSaved={onSaved}
-            save={(message, schedule) =>
-              editKanbanReminder(state.reminder.id, reminderEdit(state.reminder.schedule, message, schedule))
-            }
-          />
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 // What the card dialog captures: a new card titled from text, linked to note.
 export type CardDialogState = { text: string; note: FeedNote };

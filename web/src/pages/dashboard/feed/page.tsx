@@ -98,11 +98,10 @@ import {
 import {
   BudgetDialog,
   CardDialog,
-  ReminderDialog,
   type BudgetDialogState,
   type CardDialogState,
-  type ReminderDialogState,
 } from "./record-dialogs";
+import { ReminderDialog, type ReminderDialogState } from "@/pages/dashboard/kanban/reminders";
 
 
 // A note's text with its links tappable. Links open in a new tab and are

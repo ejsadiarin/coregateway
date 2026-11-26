@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { describeSchedule, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderEdit, reminderStatus, toInputValue, zoneLabel } from "@/lib/kanban-schedule";
+import { describeSchedule, groupReminders, reminderNote, fieldsOf, formatDue, scheduleOf, formatWall, isOverdue, reminderEdit, reminderStatus, toInputValue, zoneLabel } from "@/lib/kanban-schedule";
 import type { KanbanReminder, KanbanSchedule } from "@/types/kanban";
 
 // coreban renders reminder times in the owner's timezone, so the wall
@@ -180,5 +180,94 @@ describe("reminderEdit", () => {
       message: "m",
       schedule: { kind: "daily", time: "08:00" },
     });
+  });
+});
+
+describe("groupReminders", () => {
+  const tz = "Asia/Manila";
+  // 26 Nov, 10:00 in Manila.
+  const now = new Date("2026-11-26T02:00:00Z");
+  const next = (id: string, at: string, over: Partial<KanbanReminder> = {}) =>
+    reminder({ id, next_fire_at: at, ...over });
+  const shape = (rs: KanbanReminder[], at = now) =>
+    groupReminders(rs, at, tz).map((g) => [g.key, g.reminders.map((r) => r.id)]);
+
+  it("sorts what is coming into today, tomorrow, this week, and later, soonest first", () => {
+    expect(
+      shape([
+        next("later", "2026-12-03T09:00:00+08:00"),
+        next("today-late", "2026-11-26T22:00:00+08:00"),
+        next("today", "2026-11-26T15:00:00+08:00"),
+        next("tomorrow", "2026-11-27T00:30:00+08:00"),
+        next("week", "2026-12-02T23:00:00+08:00"),
+      ]),
+    ).toEqual([
+      ["today", ["today", "today-late"]],
+      ["tomorrow", ["tomorrow"]],
+      ["week", ["week"]],
+      ["later", ["later"]],
+    ]);
+  });
+
+  it("reads today in the owner's timezone, not UTC", () => {
+    const r = next("r", "2026-11-27T00:30:00+08:00");
+    // 23:59 on the 26th in Manila, but already the 26th 15:59 UTC.
+    expect(shape([r], new Date("2026-11-26T15:59:00Z"))).toEqual([["tomorrow", ["r"]]]);
+    // 00:01 on the 27th in Manila, still the 26th in UTC.
+    expect(shape([r], new Date("2026-11-26T16:01:00Z"))).toEqual([["today", ["r"]]]);
+  });
+
+  it("puts a send that is overdue, or a one-off that couldn't be sent, under late", () => {
+    expect(
+      shape([
+        next("paused", "2026-11-25T09:00:00+08:00", { paused: "no_notification_target" }),
+        reminder({ id: "failed", last_delivery: { at: "2026-11-24T09:00:00+08:00", late: false, error: "ntfy 500" } }),
+      ]),
+    ).toEqual([["late", ["failed", "paused"]]]);
+  });
+
+  it("folds what has nothing left to send under sent, latest first", () => {
+    expect(
+      shape([
+        reminder({ id: "old", last_delivery: { at: "2026-11-20T09:00:00+08:00", late: false, error: null } }),
+        reminder({ id: "never" }),
+        reminder({ id: "new", last_delivery: { at: "2026-11-25T09:00:00+08:00", late: true, error: null } }),
+      ]),
+    ).toEqual([["sent", ["new", "old", "never"]]]);
+  });
+
+  it("leaves out empty groups and keeps a recurring reminder by its next send", () => {
+    const daily = next("daily", "2026-11-26T19:00:00+08:00", { schedule: { kind: "daily", time: "19:00" } });
+    expect(groupReminders([daily], now, tz)).toEqual([{ key: "today", title: "Today", reminders: [daily] }]);
+  });
+});
+
+// A row already leads with the reminder's time, so its note never repeats it.
+describe("reminderNote", () => {
+  const at = "2026-11-10T07:00:00+08:00";
+
+  it("says nothing more about a reminder that will simply be sent", () => {
+    expect(reminderNote(reminder({ next_fire_at: at }))).toBeNull();
+  });
+
+  it("says why a pending reminder won't be sent", () => {
+    expect(reminderNote(reminder({ next_fire_at: at, paused: "no_notification_target" }))).toEqual({
+      tone: "warning",
+      text: "Not sent until you set a notification target",
+    });
+    expect(reminderNote(reminder({ next_fire_at: at, paused: "card_completed" }))?.text).toBe("Quiet while its card is Done");
+    expect(reminderNote(reminder({ next_fire_at: at, paused: "card_archived" }))?.text).toBe(
+      "Quiet while its card is archived",
+    );
+  });
+
+  it("says how the last send went once nothing is left to send", () => {
+    expect(reminderNote(reminder({ last_delivery: { at, late: false, error: null } }))).toEqual({ tone: "done", text: "Sent" });
+    expect(reminderNote(reminder({ last_delivery: { at, late: true, error: null } }))?.text).toBe("Sent late");
+    expect(reminderNote(reminder({ last_delivery: { at, late: false, error: "ntfy 403" } }))).toEqual({
+      tone: "error",
+      text: "Couldn't send: ntfy 403",
+    });
+    expect(reminderNote(reminder({}))).toEqual({ tone: "done", text: "Nothing left to send" });
   });
 });

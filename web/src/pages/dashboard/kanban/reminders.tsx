@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BellOff, BellRing, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, BellOff, BellRing, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   fetchKanbanReminders,
   fetchKanbanSettings,
@@ -10,13 +10,17 @@ import {
   deleteKanbanReminder,
   KanbanRequestError,
   remindersKey,
+  type FeedNote,
 } from "@/lib/kanban";
 import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
 import {
   describeSchedule,
   fieldsOf,
-  reminderStatus,
+  formatWall,
+  groupReminders,
+  reminderNote,
+  reminderWhen,
   reminderEdit,
   scheduleOf,
   weekdayNames,
@@ -29,6 +33,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -52,9 +58,10 @@ const toneClass: Record<ReminderStatus["tone"], string> = {
 
 export default function KanbanRemindersPage() {
   const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<ReminderDialogState | null>(null);
   const [deleting, setDeleting] = useState<KanbanReminder | null>(null);
   const [actionError, setActionError] = useState("");
+  const [sentOpen, setSentOpen] = useState(false);
 
   const remindersQuery = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders() });
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
@@ -76,7 +83,20 @@ export default function KanbanRemindersPage() {
   const timezone = useUserTimezone().data?.timezone;
   const noTarget = settingsQuery.data !== undefined && settingsQuery.data.ntfy_topic === null;
   const reminders = remindersQuery.data;
-  const year = new Date().getFullYear();
+  const groups = reminders
+    ? groupReminders(reminders, new Date(), timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
+    : [];
+  const open = (state: ReminderDialogState) => {
+    setActionError("");
+    setDialog(state);
+  };
+  const rowActions = {
+    onEdit: (r: KanbanReminder) => open({ mode: "edit", reminder: r }),
+    onDelete: (r: KanbanReminder) => {
+      setActionError("");
+      setDeleting(r);
+    },
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
@@ -87,7 +107,13 @@ export default function KanbanRemindersPage() {
         <ArrowLeft className="h-3 w-3" aria-hidden />
         Kanban / Reminders
       </Link>
-      <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Reminders</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold leading-none tracking-tighter md:text-4xl">Reminders</h1>
+        <Button className="min-h-11" onClick={() => open({ mode: "new" })}>
+          <Plus className="h-4 w-4" aria-hidden />
+          New reminder
+        </Button>
+      </div>
       <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
         Pushed to your phone through ntfy at the moment you choose.
       </p>
@@ -104,15 +130,6 @@ export default function KanbanRemindersPage() {
           </span>
         </p>
       )}
-
-      <div className="mt-6">
-        <ReminderForm
-          timezone={timezone}
-          submitLabel="Add"
-          onSaved={refresh}
-          save={(message, schedule) => createKanbanReminder({ message, schedule })}
-        />
-      </div>
 
       {actionError && <p className="mt-3 text-sm text-destructive">{actionError}</p>}
 
@@ -139,77 +156,60 @@ export default function KanbanRemindersPage() {
         <div className="mt-6 flex items-start gap-3 rounded-xl border border-border p-6">
           <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
           <p className="text-sm leading-relaxed text-muted-foreground">
-            No reminders yet. Add one above, like "Renew the cert" for next Monday at 09:00.
+            No reminders yet. Add one with New reminder, like "Renew the cert" for next Monday at 09:00.
           </p>
         </div>
       )}
 
-      {reminders && reminders.length > 0 && (
-        <ul className="mt-6 divide-y divide-border border-y border-border">
-          {reminders.map((r) => {
-            const status = reminderStatus(r, year);
-            return (
-              <li key={r.id} className="py-3">
-                {editingId === r.id ? (
-                  <ReminderForm
-                    timezone={timezone}
-                    initial={r}
-                    submitLabel="Save"
-                    onCancel={() => setEditingId(null)}
-                    onSaved={() => {
-                      setEditingId(null);
-                      refresh();
-                    }}
-                    save={(message, schedule) => editKanbanReminder(r.id, reminderEdit(r.schedule, message, schedule))}
-                  />
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{r.message}</p>
-                      {r.card && (
-                        <Link
-                          to={`/dashboard/kanban/${r.card.board_id}`}
-                          className="mt-1 inline-flex min-h-11 items-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                        >
-                          On card: {r.card.title}
-                        </Link>
-                      )}
-                      <p className="mt-1 font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
-                        {describeSchedule(r.schedule)}
-                      </p>
-                      <p className={`mt-1 font-mono text-xs tabular-nums ${toneClass[status.tone]}`}>{status.text}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="min-h-11 min-w-11"
-                      aria-label={`Edit reminder: ${r.message}`}
-                      onClick={() => {
-                        setActionError("");
-                        setEditingId(r.id);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="min-h-11 min-w-11"
-                      aria-label={`Delete reminder: ${r.message}`}
-                      onClick={() => {
-                        setActionError("");
-                        setDeleting(r);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {groups.map((group) => {
+        const folded = group.key === "sent" && !sentOpen;
+        const headingId = `reminders-${group.key}`;
+        return (
+          <section key={group.key} aria-labelledby={headingId} className="mt-8">
+            <h2
+              id={headingId}
+              className={cn(
+                "font-mono text-[10px] uppercase tracking-[0.18em]",
+                group.key === "late" ? "text-destructive" : "text-muted-foreground",
+              )}
+            >
+              {group.key === "sent" ? (
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center gap-1 uppercase hover:text-foreground"
+                  aria-expanded={!folded}
+                  onClick={() => setSentOpen((o) => !o)}
+                >
+                  <ChevronRight className={cn("h-3 w-3 transition-transform", !folded && "rotate-90")} aria-hidden />
+                  {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
+                </button>
+              ) : (
+                <>
+                  {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
+                </>
+              )}
+            </h2>
+            {!folded && (
+              <ul className="mt-2 divide-y divide-border border-y border-border">
+                {group.reminders.map((r) => (
+                  <li key={r.id}>
+                    <ReminderRow reminder={r} {...rowActions} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        );
+      })}
+
+      <ReminderDialog
+        state={dialog}
+        onClose={() => setDialog(null)}
+        onSaved={() => {
+          setDialog(null);
+          refresh();
+        }}
+      />
 
       <AlertDialog open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
@@ -235,6 +235,120 @@ export default function KanbanRemindersPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+// ReminderRow is one reminder in a list: when it next reaches the owner (or
+// last did) first, then its message, card, schedule, and any status worth
+// saying beyond that time (paused, late, couldn't send).
+export function ReminderRow({
+  reminder: r,
+  onEdit,
+  onDelete,
+}: {
+  reminder: KanbanReminder;
+  onEdit: (r: KanbanReminder) => void;
+  onDelete: (r: KanbanReminder) => void;
+}) {
+  const year = new Date().getFullYear();
+  const when = reminderWhen(r);
+  const note = reminderNote(r);
+  return (
+    <div className="flex items-start gap-3 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="font-mono text-xs tabular-nums text-muted-foreground">{when ? formatWall(when, year) : "Not sent"}</p>
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{r.message}</p>
+        {r.card && (
+          <Link
+            to={`/dashboard/kanban/${r.card.board_id}?card=${r.card.id}`}
+            className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            On card: {r.card.title}
+          </Link>
+        )}
+        <p className="mt-1 font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
+          {describeSchedule(r.schedule)}
+        </p>
+        {note && <p className={`mt-1 font-mono text-xs ${toneClass[note.tone]}`}>{note.text}</p>}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="min-h-11 min-w-11"
+        aria-label={`Edit reminder: ${r.message}`}
+        onClick={() => onEdit(r)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="min-h-11 min-w-11"
+        aria-label={`Delete reminder: ${r.message}`}
+        onClick={() => onDelete(r)}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+// What the reminder dialog is doing: adding a reminder (from the Reminders
+// page, maybe at a chosen moment, or from the Feed, pre-filled with text and
+// linked to note), or editing one.
+export type ReminderDialogState =
+  | { mode: "new"; at?: string; text?: string; note?: FeedNote }
+  | { mode: "edit"; reminder: KanbanReminder };
+
+export function ReminderDialog({
+  state,
+  onClose,
+  onSaved,
+}: {
+  state: ReminderDialogState | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const timezone = useUserTimezone().data?.timezone;
+  const description =
+    state?.mode === "edit"
+      ? "Changes show on the Reminders page too."
+      : state?.note
+        ? "Saved to your reminders, with a note in the Feed that shows it."
+        : "Pushed to your phone through ntfy at the moment you choose.";
+  return (
+    <Dialog open={state !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{state?.mode === "edit" ? "Edit reminder" : "New reminder"}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {state?.mode === "new" && (
+          <ReminderForm
+            timezone={timezone}
+            initialMessage={state.text}
+            initialAt={state.at}
+            messageLabel="Message"
+            submitLabel="Save"
+            onCancel={onClose}
+            onSaved={onSaved}
+            save={(message, schedule) => createKanbanReminder({ message, schedule, note: state.note })}
+          />
+        )}
+        {state?.mode === "edit" && (
+          <ReminderForm
+            timezone={timezone}
+            initial={state.reminder}
+            submitLabel="Save"
+            onCancel={onClose}
+            onSaved={onSaved}
+            save={(message, schedule) =>
+              editKanbanReminder(state.reminder.id, reminderEdit(state.reminder.schedule, message, schedule))
+            }
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -265,6 +379,7 @@ export function ReminderForm({
   secondary = false,
   messageLabel,
   initialMessage,
+  initialAt,
 }: {
   timezone: string | undefined;
   initial?: KanbanReminder;
@@ -276,9 +391,14 @@ export function ReminderForm({
   messageLabel?: string;
   // initialMessage pre-fills a new reminder's message (text typed in the Feed).
   initialMessage?: string;
+  // initialAt pre-fills a new one-off reminder's moment (datetime-local).
+  initialAt?: string;
 }) {
   const [message, setMessage] = useState(initial?.message ?? initialMessage ?? "");
-  const [fields, setFields] = useState(() => fieldsOf(initial?.schedule));
+  const [fields, setFields] = useState(() => {
+    const f = fieldsOf(initial?.schedule);
+    return !initial && initialAt ? { ...f, at: initialAt } : f;
+  });
   const [missing, setMissing] = useState<{ field: ScheduleField; error: string } | null>(null);
   const idPrefix = onCancel ? "kanban-edit-reminder" : "kanban-new-reminder";
   const set = (patch: Partial<ScheduleFields>) => setFields((f) => ({ ...f, ...patch }));
@@ -454,7 +574,7 @@ export function ReminderForm({
       <div className="flex items-center gap-2">
         <Button
           type="submit"
-          variant={onCancel || secondary ? "outline" : "default"}
+          variant={secondary ? "outline" : "default"}
           className="min-h-11"
           disabled={mutation.isPending}
         >

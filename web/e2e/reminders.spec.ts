@@ -71,3 +71,32 @@ test("a reminder shows in the bell and is pushed to ntfy", async ({ page }) => {
     await page.request.delete(`${api}/api/coreban/reminders/${id}`);
   }
 });
+
+test("Reminders are added and edited in a dialog and listed by when they come", async ({ page }) => {
+  const message = `e2e grouped ${Date.now().toString(36)}`;
+  await page.goto("/dashboard/kanban/reminders");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("textbox")).toHaveCount(0);
+
+  await main.getByRole("button", { name: "New reminder" }).click();
+  const dialog = page.getByRole("dialog", { name: "New reminder" });
+  await dialog.getByRole("textbox", { name: "Message" }).fill(message);
+  await dialog.getByLabel("When").fill("2030-03-05T07:00");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+
+  const later = main.getByRole("region", { name: /^Later/ });
+  await expect(later.getByRole("listitem").filter({ hasText: message })).toContainText("Tue 5 Mar 2030, 7:00 AM");
+
+  await main.getByRole("button", { name: `Edit reminder: ${message}` }).click();
+  const editor = page.getByRole("dialog", { name: "Edit reminder" });
+  await expect(editor.getByLabel("When")).toHaveValue("2030-03-05T07:00");
+  await editor.getByRole("textbox", { name: "Message" }).fill(`${message} edited`);
+  await editor.getByRole("button", { name: "Save" }).click();
+  await expect(editor).toBeHidden();
+  await expect(later.getByText(`${message} edited`, { exact: true })).toBeVisible();
+
+  await main.getByRole("button", { name: `Delete reminder: ${message} edited` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  await expect(main.getByText(`${message} edited`, { exact: true })).toHaveCount(0);
+});
