@@ -34,6 +34,7 @@ secrets:
 
 volumes:
   pgdata:
+  backups:
   s3data:
   gocache:
 
@@ -121,6 +122,8 @@ services:
       - "127.0.0.1:${LOCAL_GATEWAY_PORT:-28080}:8080"
     environment:
       DATABASE_URL: postgresql://coregateway_role:gwpw@postgres:5432/coredb?sslmode=disable
+      # Owner connection, used only by pg_dump for backups (ADR-0006).
+      MIGRATION_URL: postgresql://neondb_owner:owner@postgres:5432/coredb?sslmode=disable
       PORT: "8080"
       ENV: development
       # The web's own origin, plus `pnpm dev` (vite) pointed at this gateway.
@@ -138,6 +141,8 @@ services:
       GODEBUG: netdns=go
     secrets:
       - jwt_private_key
+    volumes:
+      - backups:/backups
     depends_on:
       migrate:
         condition: service_completed_successfully

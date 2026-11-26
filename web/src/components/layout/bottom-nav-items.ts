@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BarChart3,
+  DatabaseBackup,
   FileText,
   LayoutDashboard,
   MessageSquareText,
@@ -42,6 +43,7 @@ export const overflowItems: BottomNavItem[] = [
 { label: "Analytics", icon: BarChart3, path: "/analytics", disabled: true },
 { label: "Logs", icon: FileText, path: "/logs", disabled: true },
 { label: "Users", icon: Users, path: "/dashboard/admin/users", adminOnly: true },
+{ label: "Backups", icon: DatabaseBackup, path: "/dashboard/admin/backups", adminOnly: true },
 ];
 
 // bottomTabOf is the bottom-nav tab a page sits under, or null for a page

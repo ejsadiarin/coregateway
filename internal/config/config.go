@@ -36,6 +36,10 @@ type Config struct {
 	JWTAudience   []string
 	JWTTTLSeconds int
 
+	// MigrationURL is the owner connection, passed only to
+	// pg_dump for database backups (ADR-0006). Empty turns backups off.
+	MigrationURL string
+
 	// jwtKeyErr records a key file that was configured but unreadable, so
 	// Validate reports it at boot instead of silently falling back.
 	jwtKeyErr error
@@ -58,6 +62,7 @@ func Load() *Config {
 		JWTIssuer:      getEnv("JWT_ISSUER", "https://gateway.internal"),
 		JWTAudience:    getEnvList("JWT_AUDIENCE", "corefinance,coredraw,coreban"),
 		JWTTTLSeconds:  getEnvInt("JWT_TTL_SECONDS", 300),
+		MigrationURL:   os.Getenv("MIGRATION_URL"),
 	}
 
 	cfg.JWTPrivateKeyPEM, cfg.JWTKeySource, cfg.jwtKeyErr = resolveKeyMaterial(

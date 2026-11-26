@@ -9,13 +9,18 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/coregateway
 
 FROM alpine:latest AS runner
 WORKDIR /app
-RUN apk --no-cache add ca-certificates
+# pg_dump for database backups (ADR-0006). Its major version must be at least
+# the server's: Neon runs 17.
+RUN apk --no-cache add ca-certificates postgresql17-client
 COPY --from=builder /server .
 # Fixed IDs, so the signing key can be shared with this user by group on any
 # host: compose bind-mounts the key with its host owner and mode, so the host
 # file must be group 10001 and mode 0640 (see compose.yml). k3s sets the same
 # IDs as runAsUser/fsGroup.
 RUN addgroup -S -g 10001 appgroup && adduser -S -u 10001 -G appgroup appuser
+# Backup folder. A named volume copies this ownership on first use; a bind
+# mount keeps the host's, so the host directory must be owned by 10001.
+RUN mkdir /backups && chown appuser:appgroup /backups
 USER appuser
 EXPOSE 8080
 

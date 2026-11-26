@@ -14,6 +14,7 @@ import ExpensesPage from "@/pages/dashboard/budget/expenses";
 import IncomesPage from "@/pages/dashboard/budget/incomes";
 import SettingsPage from "@/pages/dashboard/settings";
 import UsersPage from "@/pages/dashboard/admin/users";
+import BackupsPage from "@/pages/dashboard/admin/backups";
 import KanbanBoardsPage from "@/pages/dashboard/kanban/boards";
 import KanbanBoardPage from "@/pages/dashboard/kanban/board";
 import KanbanRemindersPage from "@/pages/dashboard/kanban/reminders";
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="admin/users" element={<UsersPage />} />
+        <Route path="admin/backups" element={<BackupsPage />} />
         <Route path="kanban" element={<KanbanBoardsPage />} />
         <Route path="kanban/settings" element={<Navigate to="/dashboard/settings#reminders" replace />} />
         <Route path="settings" element={<SettingsPage />} />

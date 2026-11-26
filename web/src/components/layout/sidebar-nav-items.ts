@@ -11,6 +11,7 @@ import {
   BarChart3,
   FileText,
   Users,
+  DatabaseBackup,
   ArrowLeftRight,
   type LucideIcon,
 } from "lucide-react";
@@ -126,6 +127,13 @@ export const navItems: NavItem[] = [
     label: "Users",
     icon: Users,
     path: "/dashboard/admin/users",
+    section: "admin",
+    adminOnly: true,
+  },
+  {
+    label: "Backups",
+    icon: DatabaseBackup,
+    path: "/dashboard/admin/backups",
     section: "admin",
     adminOnly: true,
   },

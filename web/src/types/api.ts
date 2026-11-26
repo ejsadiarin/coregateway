@@ -623,3 +623,21 @@ export interface SkipExpenseRequest {
     id: string;
 }
 
+// Database backups (ADR-0006): files in the gateway's backup folder.
+export type BackupKind = "nightly" | "manual";
+
+export interface Backup {
+    name: string;
+    kind: BackupKind;
+    taken_at: string;
+    size_bytes: number;
+    server_major: number;
+}
+
+export interface BackupsStatus {
+    // false when the gateway has no owner connection (MIGRATION_URL)
+    configured: boolean;
+    running: boolean;
+    backups: Backup[];
+}
+

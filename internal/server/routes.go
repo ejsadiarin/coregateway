@@ -93,6 +93,15 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 
+	// backups (ADR-0006) — admin-only; key callers need the admin scope.
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
+		r.Use(auth.RequireAuth(), auth.RequireRole(auth.RoleAdmin))
+		r.Use(auth.RequireKeyScope("admin"))
+		r.Get("/api/admin/backups", s.BackupHandler.List)
+		r.Post("/api/admin/backups", s.BackupHandler.Trigger)
+	})
+
 	// A user's role, timezone and existence, for ?user_id= targeting, for
 	// the restrictions a key carries from its owner, and for the token's tz
 	// claim (user authority stays in the gateway; downstream never looks up

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
+	"github.com/ejsadiarin/coregateway/internal/backup"
 	"github.com/ejsadiarin/coregateway/internal/config"
 	monitor "github.com/ejsadiarin/coregateway/internal/monitor"
 	"github.com/ejsadiarin/coregateway/internal/services/coreban"
@@ -27,6 +28,7 @@ type Server struct {
 	KeysService       *auth.KeysService
 	UserHandler       *user.Handler
 	ServiceHandler    *monitor.Handler
+	BackupHandler     *backup.Handler
 	AuthService       *auth.Service
 	CorefinanceClient *corefinance.Client
 	CoredrawClient    *coredraw.Client
@@ -72,6 +74,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 	s.KeysHandler = auth.NewKeysHandler(s.KeysService)
 	s.UserHandler = user.NewHandler(user.NewService(queries))
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
+	s.BackupHandler = backup.NewHandler(backupFolder(cfg, pool))
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)
 	s.CoredrawClient = coredraw.New(cfg.CoredrawURL)
 	s.CorebanClient = coreban.New(cfg.CorebanURL)
@@ -84,4 +87,16 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}, nil
+}
+
+// backupFolder is nil, turning backups off, unless the owner connection
+// (MIGRATION_URL) is set. Per ADR-0006 the owner URL goes only to pg_dump;
+// the server version is read over the runtime pool.
+func backupFolder(cfg *config.Config, pool *pgxpool.Pool) *backup.Folder {
+	if cfg.MigrationURL == "" {
+		slog.Info("database backups off: MIGRATION_URL is not set")
+		return nil
+	}
+	slog.Info("database backups on", "dir", backup.Dir)
+	return backup.NewFolder(backup.Dir, backup.PGDump(cfg.MigrationURL), backup.ServerMajor(pool), time.Now)
 }

@@ -43,7 +43,8 @@ import type {
   BudgetExportPayload,
   BudgetImportResult,
   SkipIncomeRequest,
-  SkipExpenseRequest
+  SkipExpenseRequest,
+  BackupsStatus
 } from '@/types/api';
 
 // Same-origin ('') in production builds: nginx proxies /api/ to the backends,
@@ -256,6 +257,31 @@ export async function deleteUser(id: string): Promise<void> {
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: 'Delete user failed' }));
     throw new Error(error.message || 'Delete user failed');
+  }
+}
+
+// Database Backups (Admin)
+
+export async function fetchBackups(): Promise<BackupsStatus> {
+  const res = await fetch(url + '/api/admin/backups', {
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    throw new Error(`Error fetching backups: ${res.status}`);
+  }
+  return res.json();
+}
+
+// startBackup asks for a manual backup. The gateway answers once the backup
+// has started (202); a 409 means one is already running.
+export async function startBackup(): Promise<void> {
+  const res = await fetch(url + '/api/admin/backups', {
+    method: 'POST',
+    credentials: 'include'
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Backup failed to start' }));
+    throw new Error(error.message || 'Backup failed to start');
   }
 }
 
