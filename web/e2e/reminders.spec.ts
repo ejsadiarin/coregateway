@@ -100,3 +100,47 @@ test("Reminders are added and edited in a dialog and listed by when they come", 
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(main.getByText(`${message} edited`, { exact: true })).toHaveCount(0);
 });
+
+test("the Calendar marks each day a reminder is sent and adds one on a chosen day", async ({ page }) => {
+  const message = `e2e weekly ${Date.now().toString(36)}`;
+  const created = await page.request.post(`${api}/api/coreban/reminders`, {
+    data: { message, schedule: { kind: "weekly", time: "08:00", weekdays: ["MO"] } },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const { id } = await created.json();
+
+  try {
+    await page.goto("/dashboard/kanban/reminders");
+    const main = page.getByRole("main");
+    await main.getByRole("button", { name: "Calendar" }).click();
+    // The choice is remembered.
+    await page.reload();
+    await expect(main.getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+
+    // Next month: every Monday, and only Mondays, carry it.
+    await main.getByRole("button", { name: "Next month" }).click();
+    const days = main.getByRole("group", { name: /^Days of / });
+    const marked = await days.getByRole("button", { name: /1 reminder$/ }).evaluateAll((els) =>
+      els.map((e) => e.getAttribute("aria-label")?.slice(0, 3)),
+    );
+    expect(marked.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(marked)).toEqual(new Set(["Mon"]));
+
+    await days.getByRole("button", { name: /1 reminder$/ }).first().click();
+    const day = main.getByRole("region", { name: /^Mon / });
+    await expect(day.getByRole("listitem").filter({ hasText: message })).toContainText("8:00 AM");
+
+    // A day with nothing on it offers to add one there.
+    const tuesday = days.getByRole("button", { name: /^Tue / }).nth(1);
+    const label = (await tuesday.getAttribute("aria-label"))!;
+    await tuesday.click();
+    await expect(main.getByRole("region", { name: label })).toContainText("Nothing to send this day.");
+    await main.getByRole("button", { name: `Add a reminder on ${label}` }).click();
+    const dialog = page.getByRole("dialog", { name: "New reminder" });
+    await expect(dialog.getByLabel("When")).toHaveValue(/T09:00$/);
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    await page.request.delete(`${api}/api/coreban/reminders/${id}`);
+    await page.evaluate(() => localStorage.removeItem("core-reminders-view"));
+  }
+});

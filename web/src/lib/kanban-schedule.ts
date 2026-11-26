@@ -29,7 +29,7 @@ export function formatWall(iso: string, currentYear: number): string {
 
 // formatDay shows a YYYY-MM-DD date as "Sat 14 Nov", with the year added
 // when it isn't currentYear.
-function formatDay(date: string, currentYear: number): string {
+export function formatDay(date: string, currentYear: number): string {
   const [y, m, d] = date.split("-").map(Number);
   const weekday = weekdays[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   const year = y === currentYear ? "" : ` ${y}`;
@@ -119,15 +119,22 @@ export function reminderStatus(r: KanbanReminder, currentYear: number): Reminder
 
 // reminderNote is what a row that already leads with the reminder's time
 // (reminderWhen) adds about it: why it won't be sent, or how its last send
-// went. Nothing for a reminder that will simply be sent.
+// went (a failed one even while more are to come). Nothing for a reminder
+// that will simply be sent.
 export function reminderNote(r: KanbanReminder): ReminderStatus | null {
-  if (r.next_fire_at) {
-    if (!r.paused) return null;
-    const { tone, text } = pausedReason[r.paused];
-    return { tone, text: text[0].toUpperCase() + text.slice(1) };
-  }
-  const d = r.last_delivery;
-  if (!d) return { tone: "done", text: "Nothing left to send" };
+  if (r.next_fire_at) return r.last_delivery?.error ? deliveryNote(r.last_delivery) : pausedNote(r);
+  return r.last_delivery ? deliveryNote(r.last_delivery) : { tone: "done", text: "Nothing left to send" };
+}
+
+// pausedNote says why a reminder's next send won't go out, if it won't.
+export function pausedNote(r: KanbanReminder): ReminderStatus | null {
+  if (!r.paused) return null;
+  const { tone, text } = pausedReason[r.paused];
+  return { tone, text: text[0].toUpperCase() + text.slice(1) };
+}
+
+// deliveryNote says how a send went, without its time.
+export function deliveryNote(d: NonNullable<KanbanReminder["last_delivery"]>): ReminderStatus {
   if (d.error) return { tone: "error", text: `Couldn't send: ${d.error}` };
   return { tone: "done", text: d.late ? "Sent late" : "Sent" };
 }
@@ -154,8 +161,8 @@ const groupTitles: Record<ReminderGroupKey, string> = {
 export const reminderWhen = (r: KanbanReminder): string | null => r.next_fire_at ?? r.last_delivery?.at ?? null;
 
 // groupReminders sorts reminders by when they next reach the owner, in the
-// owner's timezone: late (a send now overdue, or a one-off that couldn't be
-// sent), today, tomorrow, this week (the next seven days), later, and sent
+// owner's timezone: late (a send now overdue, or a last send that failed),
+// today, tomorrow, this week (the next seven days), later, and sent
 // (nothing left to send, latest first). A recurring reminder goes by its next
 // send. Empty groups are left out.
 export function groupReminders(reminders: KanbanReminder[], now: Date, timeZone: string): ReminderGroup[] {
@@ -163,7 +170,8 @@ export function groupReminders(reminders: KanbanReminder[], now: Date, timeZone:
   const tomorrow = addDays(today, 1);
   const weekEnd = addDays(today, 6);
   const keyOf = (r: KanbanReminder): ReminderGroupKey => {
-    if (!r.next_fire_at) return r.last_delivery?.error ? "late" : "sent";
+    if (r.last_delivery?.error) return "late";
+    if (!r.next_fire_at) return "sent";
     if (Date.parse(r.next_fire_at) < now.getTime()) return "late";
     const day = r.next_fire_at.slice(0, 10);
     if (day <= today) return "today";

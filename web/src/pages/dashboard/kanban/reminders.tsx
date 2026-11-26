@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, BellOff, BellRing, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, BellOff, BellRing, ChevronRight, Plus } from "lucide-react";
 import {
   fetchKanbanReminders,
   fetchKanbanSettings,
@@ -15,17 +15,13 @@ import {
 import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
 import {
-  describeSchedule,
   fieldsOf,
-  formatWall,
   groupReminders,
-  reminderNote,
-  reminderWhen,
+  todayIn,
   reminderEdit,
   scheduleOf,
   weekdayNames,
   zoneLabel,
-  type ReminderStatus,
   type ScheduleField,
   type ScheduleFields,
 } from "@/lib/kanban-schedule";
@@ -34,6 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { RemindersCalendar } from "@/pages/dashboard/kanban/reminders-calendar";
+import { ReminderRow } from "@/pages/dashboard/kanban/reminder-row";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -49,12 +47,34 @@ import {
 
 const settingsKey = ["kanban", "settings"];
 
-const toneClass: Record<ReminderStatus["tone"], string> = {
-  pending: "text-muted-foreground",
-  warning: "text-[var(--chart-4)]",
-  done: "text-muted-foreground",
-  error: "text-destructive",
-};
+// The view the Reminders page opens on, remembered per device.
+type View = "list" | "calendar";
+const VIEW_KEY = "core-reminders-view";
+
+function savedView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "calendar" ? "calendar" : "list";
+  } catch {
+    return "list";
+  }
+}
+
+function saveView(view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Storage blocked: the choice lasts until the page closes.
+  }
+}
+
+// newReminderAt is where a reminder added on a calendar day starts: the
+// next whole hour today, else 09:00 that day (datetime-local, owner's zone).
+function newReminderAt(date: string, today: string, now: Date, timeZone: string): string {
+  if (date !== today) return `${date}T09:00`;
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" }).format(now));
+  return hour >= 23 ? `${date}T23:59` : `${date}T${String(hour + 1).padStart(2, "0")}:00`;
+}
+
 
 export default function KanbanRemindersPage() {
   const queryClient = useQueryClient();
@@ -62,6 +82,7 @@ export default function KanbanRemindersPage() {
   const [deleting, setDeleting] = useState<KanbanReminder | null>(null);
   const [actionError, setActionError] = useState("");
   const [sentOpen, setSentOpen] = useState(false);
+  const [view, setView] = useState<View>(savedView);
 
   const remindersQuery = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders() });
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
@@ -83,9 +104,10 @@ export default function KanbanRemindersPage() {
   const timezone = useUserTimezone().data?.timezone;
   const noTarget = settingsQuery.data !== undefined && settingsQuery.data.ntfy_topic === null;
   const reminders = remindersQuery.data;
-  const groups = reminders
-    ? groupReminders(reminders, new Date(), timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone)
-    : [];
+  const zone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+  const today = todayIn(now, zone);
+  const groups = reminders && view === "list" ? groupReminders(reminders, now, zone) : [];
   const open = (state: ReminderDialogState) => {
     setActionError("");
     setDialog(state);
@@ -117,6 +139,23 @@ export default function KanbanRemindersPage() {
       <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
         Pushed to your phone through ntfy at the moment you choose.
       </p>
+      <div className="mt-4 inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="View">
+        {(["list", "calendar"] as const).map((v) => (
+          <Button
+            key={v}
+            type="button"
+            variant="ghost"
+            aria-pressed={view === v}
+            className={cn("min-h-11 px-4 capitalize", view === v ? "bg-muted text-foreground" : "text-muted-foreground")}
+            onClick={() => {
+              setView(v);
+              saveView(v);
+            }}
+          >
+            {v}
+          </Button>
+        ))}
+      </div>
 
       {noTarget && (
         <p className="mt-6 flex items-start gap-2 rounded-xl border border-border p-4 text-sm leading-relaxed">
@@ -159,6 +198,16 @@ export default function KanbanRemindersPage() {
             No reminders yet. Add one with New reminder, like "Renew the cert" for next Monday at 09:00.
           </p>
         </div>
+      )}
+
+      {reminders && reminders.length > 0 && view === "calendar" && (
+        <RemindersCalendar
+          reminders={reminders}
+          today={today}
+          newAt={(date) => newReminderAt(date, today, new Date(), zone)}
+          onNew={(at) => open({ mode: "new", at })}
+          {...rowActions}
+        />
       )}
 
       {groups.map((group) => {
@@ -234,61 +283,6 @@ export default function KanbanRemindersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-// ReminderRow is one reminder in a list: when it next reaches the owner (or
-// last did) first, then its message, card, schedule, and any status worth
-// saying beyond that time (paused, late, couldn't send).
-export function ReminderRow({
-  reminder: r,
-  onEdit,
-  onDelete,
-}: {
-  reminder: KanbanReminder;
-  onEdit: (r: KanbanReminder) => void;
-  onDelete: (r: KanbanReminder) => void;
-}) {
-  const year = new Date().getFullYear();
-  const when = reminderWhen(r);
-  const note = reminderNote(r);
-  return (
-    <div className="flex items-start gap-3 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="font-mono text-xs tabular-nums text-muted-foreground">{when ? formatWall(when, year) : "Not sent"}</p>
-        <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{r.message}</p>
-        {r.card && (
-          <Link
-            to={`/dashboard/kanban/${r.card.board_id}?card=${r.card.id}`}
-            className="inline-flex min-h-11 items-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-          >
-            On card: {r.card.title}
-          </Link>
-        )}
-        <p className="mt-1 font-mono text-[10px] uppercase tabular-nums tracking-[0.18em] text-muted-foreground">
-          {describeSchedule(r.schedule)}
-        </p>
-        {note && <p className={`mt-1 font-mono text-xs ${toneClass[note.tone]}`}>{note.text}</p>}
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="min-h-11 min-w-11"
-        aria-label={`Edit reminder: ${r.message}`}
-        onClick={() => onEdit(r)}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="min-h-11 min-w-11"
-        aria-label={`Delete reminder: ${r.message}`}
-        onClick={() => onDelete(r)}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
     </div>
   );
 }
@@ -400,7 +394,7 @@ export function ReminderForm({
     return !initial && initialAt ? { ...f, at: initialAt } : f;
   });
   const [missing, setMissing] = useState<{ field: ScheduleField; error: string } | null>(null);
-  const idPrefix = onCancel ? "kanban-edit-reminder" : "kanban-new-reminder";
+  const idPrefix = initial ? "kanban-edit-reminder" : "kanban-new-reminder";
   const set = (patch: Partial<ScheduleFields>) => setFields((f) => ({ ...f, ...patch }));
 
   const mutation = useMutation({
@@ -444,7 +438,7 @@ export function ReminderForm({
   return (
     <form onSubmit={handleSubmit} className="grid gap-4">
       <div className="grid gap-2">
-        <Label htmlFor={`${idPrefix}-message`}>{messageLabel ?? (onCancel ? "Message" : "New reminder")}</Label>
+        <Label htmlFor={`${idPrefix}-message`}>{messageLabel ?? (initial ? "Message" : "New reminder")}</Label>
         <Textarea
           id={`${idPrefix}-message`}
           value={message}

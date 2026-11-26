@@ -226,6 +226,20 @@ describe("groupReminders", () => {
     ).toEqual([["late", ["failed", "paused"]]]);
   });
 
+  it("puts a recurring reminder whose last send failed under late, until a send goes through", () => {
+    const failed = { at: "2026-11-25T19:00:00+08:00", late: false, error: "ntfy 500" };
+    const daily = { kind: "daily", time: "19:00" } as const;
+    expect(
+      shape([
+        next("broken", "2026-11-26T19:00:00+08:00", { schedule: daily, last_delivery: failed }),
+        next("fine", "2026-11-26T19:00:00+08:00", { schedule: daily, last_delivery: { ...failed, error: null } }),
+      ]),
+    ).toEqual([
+      ["late", ["broken"]],
+      ["today", ["fine"]],
+    ]);
+  });
+
   it("folds what has nothing left to send under sent, latest first", () => {
     expect(
       shape([
@@ -248,6 +262,12 @@ describe("reminderNote", () => {
 
   it("says nothing more about a reminder that will simply be sent", () => {
     expect(reminderNote(reminder({ next_fire_at: at }))).toBeNull();
+  });
+
+  it("says a recurring reminder's last send failed, ahead of any pause", () => {
+    const last_delivery = { at, late: false, error: "ntfy 403" };
+    expect(reminderNote(reminder({ next_fire_at: at, last_delivery }))).toEqual({ tone: "error", text: "Couldn't send: ntfy 403" });
+    expect(reminderNote(reminder({ next_fire_at: at, paused: "card_completed", last_delivery }))?.tone).toBe("error");
   });
 
   it("says why a pending reminder won't be sent", () => {
