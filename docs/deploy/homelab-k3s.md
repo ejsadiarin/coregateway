@@ -1786,6 +1786,25 @@ copy. Without `MIGRATION_URL` in the Secret, backups are off and the page says
 so. Copying a backup off and restoring it:
 [`coredb-backup-restore.md`](./coredb-backup-restore.md).
 
+With two replicas, a manual backup that cannot start (the volume not mounted
+or not writable) shows its error right after **Back up now**, but the page's
+failure notice is kept only by the replica that answered the click. Look for
+it in the gateway's logs instead: `backup.Handler.Trigger: failed to start`.
+A nightly that cannot start fails on both replicas, so the page shows it.
+
+**Moving from Compose.** The new volume starts empty; the first nightly fills
+it. To keep the Compose backups too, copy them in once the gateway pods run:
+
+```sh
+POD=$(kubectl -n coregateway get pod -l app=coregateway-api -o name | head -1)
+sudo cp ~/services/coregateway/backups/coredb-*.dump /tmp/ && sudo chown "$USER" /tmp/coredb-*.dump
+for f in /tmp/coredb-*.dump; do kubectl -n coregateway cp "$f" "${POD#pod/}:/backups/"; done
+kubectl -n coregateway exec "$POD" -- sh -c 'chmod 600 /backups/coredb-*.dump'   # backups are owner-only
+rm /tmp/coredb-*.dump
+```
+
+Retention applies after the next successful backup, so at most three stay.
+
 Two replicas are safe only if sessions live in Postgres, which they do
 (a stored session record). Rate limits or caches held in process memory would
 not be shared.
