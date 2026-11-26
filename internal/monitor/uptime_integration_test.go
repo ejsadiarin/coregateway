@@ -34,7 +34,10 @@ func TestUptimeBuckets_Integration(t *testing.T) {
 	}{
 		{base.Add(-110 * time.Minute), "online", 100},
 		{base.Add(-50 * time.Minute), "offline", 200},
-		{base.Add(5 * time.Minute), "online", 300},
+		// The current hour's start: never in the future, unlike a fixed
+		// offset into the hour (the query counts checks up to now, so
+		// base+5m failed during the first five minutes of every hour).
+		{base, "online", 300},
 	}
 	for _, row := range rows {
 		if _, err := pool.Exec(ctx,
