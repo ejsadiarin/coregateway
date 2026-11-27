@@ -413,7 +413,7 @@ export function LedgerPage({ kind }: { kind: LedgerKind }) {
           type="button"
           onClick={() => setSheet({ mode: "new" })}
           className={cn(
-            "fixed right-4 bottom-20 z-30 lg:hidden flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
+            "fixed right-4 bottom-20 max-md:[html[data-mobile-nav=orb]_&]:bottom-6 z-30 lg:hidden flex min-h-[52px] items-center gap-1.5 rounded-full px-5 text-[15px] font-semibold shadow-[0_8px_24px_rgba(0,0,0,0.45)] md:bottom-8 md:right-8",
             kind === "expense" ? "bg-primary text-primary-foreground" : "bg-emerald-400 text-emerald-950",
           )}
         >
