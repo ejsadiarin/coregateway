@@ -310,3 +310,74 @@ test("an archived original stays quoted, tagged archived; a deleted one reads No
   await expect(quoteIn(page, toKept)).toContainText("Archived");
   await expect(quoteIn(page, toGone)).toContainText("Note deleted");
 });
+
+// coregateway#78: on a phone, swiping a note left starts a reply, like a
+// chat app; with a mouse, hovering a note shows a reply button.
+test.describe("swipe to reply", () => {
+  test.describe("on a phone", () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    // A phone's Enter types a line break; Send posts.
+    async function postOnPhone(page: Page, text: string) {
+      await page.getByRole("textbox", { name: "New note" }).fill(text);
+      await page.getByRole("button", { name: "Send" }).click();
+      await expect(noteItem(page, text)).toBeVisible();
+    }
+
+    // swipe drags a finger across the note's bubble by dx, dy, in steps.
+    async function swipe(page: Page, text: string, dx: number, dy = 0) {
+      const box = await noteItem(page, text).first().getByText(text).first().boundingBox();
+      if (!box) throw new Error(`no bubble for ${text}`);
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      const cdp = await page.context().newCDPSession(page);
+      const touch = (type: "touchStart" | "touchMove" | "touchEnd", points: { x: number; y: number }[]) =>
+        cdp.send("Input.dispatchTouchEvent", { type, touchPoints: points.map((p, id) => ({ ...p, id })) });
+      await touch("touchStart", [{ x, y }]);
+      for (let i = 1; i <= 12; i++) {
+        await touch("touchMove", [{ x: x + (dx * i) / 12, y: y + (dy * i) / 12 }]);
+        await page.waitForTimeout(16);
+      }
+      await touch("touchEnd", []);
+      await cdp.detach();
+    }
+
+    test("a swipe left past the mark starts a reply; a short one doesn't", async ({ page }) => {
+      const text = unique("swipe me");
+      await postOnPhone(page, text);
+
+      await swipe(page, text, -30);
+      await expect(replyBar(page)).toHaveCount(0);
+
+      await swipe(page, text, -150);
+      await expect(replyBar(page)).toContainText(text);
+      // The bubble springs back into place.
+      await expect
+        .poll(() => noteItem(page, text).first().locator("[data-swipe]").evaluate((el) => getComputedStyle(el).transform))
+        .toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+
+      const answer = unique("swiped reply");
+      await page.getByRole("textbox", { name: "New note" }).fill(answer);
+      await page.getByRole("button", { name: "Send" }).click();
+      await expect(quoteIn(page, answer)).toContainText(text);
+    });
+
+    test("a mostly vertical drag or a swipe right doesn't start a reply", async ({ page }) => {
+      const text = unique("scroll past me");
+      await postOnPhone(page, text);
+      await swipe(page, text, -60, -200);
+      await swipe(page, text, 150);
+      await expect(replyBar(page)).toHaveCount(0);
+    });
+  });
+
+  test("with a mouse, hovering a note shows a Reply button", async ({ page }) => {
+    const text = unique("hover me");
+    await post(page, text);
+    const button = noteItem(page, text).getByRole("button", { name: "Reply", exact: true });
+    await noteItem(page, text).hover();
+    await expect(button).toBeVisible();
+    await button.click();
+    await expect(replyBar(page)).toContainText(text);
+  });
+});

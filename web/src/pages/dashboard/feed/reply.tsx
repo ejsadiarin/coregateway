@@ -1,5 +1,8 @@
+import { useRef, type ReactNode } from "react";
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { Archive, Reply, X } from "lucide-react";
 import { quoteLine } from "@/lib/feed";
+import { SWIPE, swipeIntent, swipeOffset } from "@/lib/swipe-reply";
 import type { Note, Quote } from "@/types/feed";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,5 +73,82 @@ export function ReplyBar({
         <X className="h-4 w-4" aria-hidden />
       </Button>
     </section>
+  );
+}
+
+// SwipeToReply lets a finger drag a note left to reply to it, like a chat
+// app: the note follows the finger, a reply arrow grows behind it, the
+// phone ticks once it is far enough, and letting go there replies. Either
+// way the note springs back. Only touch counts (a mouse selects text), and
+// only a clearly leftward drag: the page keeps vertical scrolls
+// (touch-action: pan-y), and taps reach the note as before.
+export function SwipeToReply({ onReply, children }: { onReply: () => void; children: ReactNode }) {
+  const x = useMotionValue(0);
+  const arrowOpacity = useTransform(x, [0, -SWIPE.mark], [0, 1]);
+  const arrowScale = useTransform(x, [0, -SWIPE.mark], [0.4, 1]);
+  const reduce = useReducedMotion();
+  const drag = useRef<{ id: number; x: number; y: number; mode: "swipe" | "ignore" | null; reached: boolean } | null>(
+    null,
+  );
+  // A swipe ends in a pointerup over the note; the click a browser may
+  // send after it, even a while later, isn't a tap. The flag lasts until
+  // that click, the next touch, or half a second, whichever comes first.
+  const swallowClick = useRef(false);
+
+  const end = (commit: boolean) => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.mode !== "swipe") return;
+    swallowClick.current = true;
+    window.setTimeout(() => (swallowClick.current = false), 500);
+    if (commit && d.reached) onReply();
+    animate(x, 0, reduce ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 35 });
+  };
+
+  return (
+    <div
+      className="relative"
+      style={{ touchAction: "pan-y" }}
+      onPointerDown={(e) => {
+        swallowClick.current = false;
+        // A text box being edited keeps its own touches.
+        if (e.pointerType !== "touch" || (e.target as Element).closest("textarea, input")) return;
+        drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: null, reached: false };
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d || e.pointerId !== d.id || d.mode === "ignore") return;
+        const dx = e.clientX - d.x;
+        if (d.mode === null) {
+          d.mode = swipeIntent(dx, e.clientY - d.y);
+          if (d.mode !== "swipe") return;
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+        const at = swipeOffset(dx);
+        x.set(at);
+        const reached = at <= -SWIPE.mark;
+        if (reached && !d.reached) navigator.vibrate?.(10);
+        d.reached = reached;
+      }}
+      onPointerUp={() => end(true)}
+      onPointerCancel={() => end(false)}
+      onClickCapture={(e) => {
+        if (!swallowClick.current) return;
+        swallowClick.current = false;
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <motion.span
+        aria-hidden
+        style={{ opacity: arrowOpacity, scale: arrowScale }}
+        className="pointer-events-none absolute right-2 top-1/2 -mt-4 grid h-8 w-8 place-items-center rounded-full bg-muted text-muted-foreground"
+      >
+        <Reply className="h-4 w-4" />
+      </motion.span>
+      <motion.div data-swipe style={{ x }} className="relative">
+        {children}
+      </motion.div>
+    </div>
   );
 }

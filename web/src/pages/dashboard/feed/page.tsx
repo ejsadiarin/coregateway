@@ -71,7 +71,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { ExchangeDialog } from "@/components/exchange/exchange-compare";
 import { AttachmentGrid, AttachmentViewer, UploadTray } from "./attachments";
 import { useUploads } from "./use-uploads";
-import { QuoteBlock, ReplyBar } from "./reply";
+import { QuoteBlock, ReplyBar, SwipeToReply } from "./reply";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
@@ -405,7 +405,7 @@ function LiveNote({
   const link = note.link;
   const quote = note.reply_to && <QuoteBlock quote={note.reply_to} categoryName={categoryName} />;
   return (
-    <div className="flex items-start justify-end gap-1">
+    <div className="group flex items-start justify-end gap-1">
       {link ? (
         link.deleted && isBudgetLink(link) ? (
           // A deleted expense or income: one muted line, its last content.
@@ -447,8 +447,27 @@ function LiveNote({
           onClose={() => setViewing(null)}
         />
       )}
+      {/* A mouse has no swipe: hovering shows Reply beside the menu. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="hidden h-11 w-11 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:hover)]:inline-flex"
+        aria-label="Reply"
+        onClick={actions.reply}
+      >
+        <Reply className="h-4 w-4" />
+      </Button>
       <NoteMenu note={note} actions={actions} onEditText={() => setDraft(note.text)} />
     </div>
+  );
+}
+
+// LiveNoteRow is a live note that a finger can swipe left to reply to.
+function LiveNoteRow(props: { note: Note; actions: NoteActions; saving: boolean; categoryName: CategoryName }) {
+  return (
+    <SwipeToReply onReply={props.actions.reply}>
+      <LiveNote {...props} />
+    </SwipeToReply>
   );
 }
 
@@ -1175,7 +1194,7 @@ export default function FeedPage() {
                             categoryName={categoryName}
                           />
                         ) : (
-                          <LiveNote
+                          <LiveNoteRow
                             note={note}
                             saving={editMutation.isPending}
                             actions={actionsFor(note)}
