@@ -115,3 +115,17 @@ _Avoid_: backup window, expiry, TTL
 **Last failure**:
 The most recent backup that failed, nightly or manual, with when and why; shown to admins until a backup next succeeds. A skipped nightly (one already taken that day, or another backup running) is not a failure.
 _Avoid_: error log, alert, incident
+
+### Exports
+
+**Export**:
+A user's own data written out as one versioned JSON file they can keep or import again, made of one or more parts. Unlike a backup, it belongs to one user, is asked for by that user, and leaves out device and credential data.
+_Avoid_: backup, dump, snapshot, download
+
+**Part**:
+The slice of an export one service owns (budget, kanban, draw, or the export-only account part), with its own format and version, valid as a file on its own and imported on its own.
+_Avoid_: section, module, service export
+
+**Import**:
+Loading an export's chosen parts into the caller's own data, keeping each record's id: what the caller already has is skipped, so importing the same file twice changes nothing.
+_Avoid_: restore, upload, merge, sync
