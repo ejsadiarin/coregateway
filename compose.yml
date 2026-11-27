@@ -85,10 +85,13 @@ services:
       - net.ipv6.conf.default.disable_ipv6=1
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/.well-known/jwks.json"]
-      interval: 5s
+      # Only startup needs this to be quick (downstreams wait on it), so poll
+      # every 2s while starting and once a minute after.
+      interval: 60s
       timeout: 3s
-      retries: 10
-      start_period: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
 
   corefinance-api:
     build:
