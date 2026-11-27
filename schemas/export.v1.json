@@ -24,6 +24,11 @@
           "$ref": "#/$defs/part",
           "properties": { "format": { "const": "coregateway.kanban" } },
           "description": "coreban's part: https://raw.githubusercontent.com/ejsadiarin/coreban/main/schemas/kanban.v1.json"
+        },
+        "draw": {
+          "$ref": "#/$defs/part",
+          "properties": { "format": { "const": "coregateway.draw" } },
+          "description": "coredraw's part: https://raw.githubusercontent.com/ejsadiarin/coredraw/main/schemas/draw.v1.json"
         }
       },
       "additionalProperties": { "$ref": "#/$defs/part" }

@@ -34,6 +34,7 @@ test("export downloads a bundle that imports back with nothing new", async ({ pa
     expect(bundle.parts.budget.format).toBe("coregateway.budget");
     expect(bundle.parts.budget.data.expenses.some((e: { id: string }) => e.id === id)).toBe(true);
     expect(bundle.parts.kanban.format).toBe("coregateway.kanban");
+    expect(bundle.parts.draw.format).toBe("coregateway.draw");
 
     await page.getByLabel("Export file").setInputFiles({ name: download.suggestedFilename(), mimeType: "application/json", buffer: file });
     const parts = page.getByRole("group", { name: "Parts to import" });
@@ -51,6 +52,7 @@ test("export downloads a bundle that imports back with nothing new", async ({ pa
     await expect(result.getByText("expenses", { exact: true })).toBeVisible();
     await expect(result).not.toContainText(/[1-9]\d* new/);
     await expect(page.getByTestId("import-result-kanban")).toContainText("Imported");
+    await expect(page.getByTestId("import-result-draw")).toContainText("Imported");
   } finally {
     await page.request.delete(`${api}/api/budget/expenses/${id}`);
   }

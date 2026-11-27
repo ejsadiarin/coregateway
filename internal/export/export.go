@@ -65,8 +65,14 @@ var Kanban = Part{
 	ExportPath: "/api/coreban/export", ImportPath: "/api/coreban/import",
 }
 
+// Draw is coredraw's part: whiteboards, each saved whole.
+var Draw = Part{
+	Name: "draw", Format: "coregateway.draw", Downstream: "coredraw",
+	ExportPath: "/api/coredraw/export", ImportPath: "/api/coredraw/import",
+}
+
 // Parts is every part this gateway offers, in export order.
-var Parts = []Part{Budget, Kanban}
+var Parts = []Part{Budget, Kanban, Draw}
 
 // Bundle is the export file.
 type Bundle struct {

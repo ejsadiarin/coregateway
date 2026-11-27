@@ -24,6 +24,7 @@ import (
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 	"github.com/ejsadiarin/coregateway/internal/export"
 	"github.com/ejsadiarin/coregateway/internal/services/coreban"
+	"github.com/ejsadiarin/coregateway/internal/services/coredraw"
 	"github.com/ejsadiarin/coregateway/internal/services/corefinance"
 	"github.com/ejsadiarin/coregateway/internal/token"
 )
@@ -52,6 +53,12 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.query = append(f.query, r.URL.RawQuery)
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
+	case "/api/coredraw/export":
+		_, _ = io.WriteString(w, `{"format":"coregateway.draw","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[]}}`)
+	case "/api/coredraw/import":
+		body, _ := io.ReadAll(r.Body)
+		f.imports = append(f.imports, string(body))
+		_ = json.NewEncoder(w).Encode(map[string]any{"part": "draw", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})
 	case "/api/coreban/export":
 		_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[]}}`)
 	case "/api/coreban/import":
@@ -100,7 +107,7 @@ func exportSetup(t *testing.T) (http.Handler, *fakeBudget, *keyAuthStubQuerier) 
 		t.Fatal(err)
 	}
 	iss, err := token.NewIssuer(token.Key{KID: "k", Private: priv, Public: pub}, nil,
-		"https://gateway.internal", []string{"corefinance", "coreban"}, 300*time.Second)
+		"https://gateway.internal", []string{"corefinance", "coreban", "coredraw"}, 300*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +118,7 @@ func exportSetup(t *testing.T) (http.Handler, *fakeBudget, *keyAuthStubQuerier) 
 		TokenIssuer:       iss,
 		CorefinanceClient: corefinance.New(downstream.URL),
 		CorebanClient:     coreban.New(downstream.URL),
+		CoredrawClient:    coredraw.New(downstream.URL),
 		KeysService:       auth.NewKeysService(q),
 		AuthService:       auth.NewService(q),
 	}
@@ -160,8 +168,8 @@ func TestExportBundle(t *testing.T) {
 		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export", "")
 		var b export.Bundle
 		mustDecode(t, rec.Body.Bytes(), &b)
-		if len(b.Parts) != 2 {
-			t.Errorf("parts = %v, want budget and kanban", b.Parts)
+		if len(b.Parts) != 3 {
+			t.Errorf("parts = %v, want budget, kanban and draw", b.Parts)
 		}
 		validate(t, rec.Body.Bytes())
 	})
