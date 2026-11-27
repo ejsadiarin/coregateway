@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
-import { EXPORT_PARTS, ExportFileError, MAX_IMPORT_BYTES, downloadExport, importExport, readExportFile } from "@/lib/export";
+import { EXPORT_PARTS, ExportFileError, MAX_IMPORT_BYTES, downloadExport, importExport, isExportOnly, readExportFile } from "@/lib/export";
 import type { FilePart, ImportResponse, PartResult } from "@/types/export";
 
 // DataSettings is the Data section of the Settings page: export your data
@@ -119,7 +119,7 @@ function ImportPanel() {
 
   const run = useMutation({
     mutationFn: ({ dryRun }: { dryRun: boolean }) => {
-      const inFile = file!.parts.filter((p) => p.known).map((p) => p.name);
+      const inFile = file!.parts.filter((p) => p.known && !isExportOnly(p.name)).map((p) => p.name);
       return importExport(file!.text, chosen, inFile, dryRun);
     },
     onSuccess: (res) => {
@@ -145,7 +145,7 @@ function ImportPanel() {
     try {
       const parts = readExportFile(text);
       setFile({ name: picked.name, text, parts });
-      setChosen(parts.filter((p) => p.known).map((p) => p.name));
+      setChosen(parts.filter((p) => p.known && !isExportOnly(p.name)).map((p) => p.name));
     } catch (err) {
       setFileError(err instanceof ExportFileError ? err.message : "Couldn't read this file.");
     }
@@ -174,9 +174,12 @@ function ImportPanel() {
               <div className="mt-3" role="group" aria-label="Parts to import">
                 {file.parts.map((p) => {
                   const known = EXPORT_PARTS.find((k) => k.name === p.name);
+                  const exportOnly = isExportOnly(p.name);
                   const detail = !p.known
                     ? "Not on this server; it will be skipped"
-                    : p.version === 0
+                    : exportOnly
+                      ? "For reference only; importing never changes your account"
+                      : p.version === 0
                       ? "An older export, from before versions"
                       : `Version ${p.version}`;
                   return (
@@ -185,8 +188,8 @@ function ImportPanel() {
                       id={`import-part-${p.name}`}
                       label={known?.label ?? p.name}
                       detail={detail}
-                      checked={p.known && chosen.includes(p.name)}
-                      disabled={!p.known || busy}
+                      checked={p.known && !exportOnly && chosen.includes(p.name)}
+                      disabled={!p.known || exportOnly || busy}
                       onChange={(on) => {
                         setChosen((c) => toggle(c, p.name, on));
                         setResult(null);

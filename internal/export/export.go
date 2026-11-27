@@ -44,9 +44,11 @@ const (
 type Part struct {
 	Name       string // the key under "parts"
 	Format     string // the part's own format, e.g. coregateway.budget
-	Downstream string // the service whose key scopes cover it
+	Downstream string // the service whose key scopes cover it; "" needs none
 	ExportPath string
 	ImportPath string
+	// ExportOnly parts are for reference: import reports them skipped.
+	ExportOnly bool
 	// Legacy reports whether a file with no format is this part's
 	// unversioned export (its version 0).
 	Legacy func(top map[string]json.RawMessage) bool
@@ -72,7 +74,7 @@ var Draw = Part{
 }
 
 // Parts is every part this gateway offers, in export order.
-var Parts = []Part{Budget, Kanban, Draw}
+var Parts = []Part{Budget, Kanban, Draw, Account}
 
 // Bundle is the export file.
 type Bundle struct {
@@ -207,6 +209,11 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	results := map[string]json.RawMessage{}
 	for _, p := range parts {
+		if p.ExportOnly {
+			results[p.Name] = mustJSON(PartResult{Part: p.Name, Format: p.Format, DryRun: dryRun, Status: StatusSkipped,
+				Errors: []PartError{{Entity: "part", Reason: "the " + p.Name + " part is for reference; importing it changes nothing"}}})
+			continue
+		}
 		rec := h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
 		results[p.Name] = partResult(p, dryRun, rec)
 	}
@@ -309,7 +316,7 @@ func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part,
 	for _, p := range chosen {
 		need := p.Downstream + ":" + op
 		switch {
-		case auth.KeyCoversScope(scopes, need):
+		case p.Downstream == "" || auth.KeyCoversScope(scopes, need):
 			reachable = append(reachable, p)
 		case named:
 			helper.RespondErrorJSON(w, http.StatusForbidden, "the "+p.Name+" part needs the "+need+" scope")

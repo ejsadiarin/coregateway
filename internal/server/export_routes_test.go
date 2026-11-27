@@ -155,11 +155,12 @@ func TestExportBundle(t *testing.T) {
 			t.Errorf("Content-Disposition = %q, want the date in the owner's zone", got)
 		}
 		validate(t, rec.Body.Bytes())
-		// A key gets the parts its scopes can read: this one, budget only.
+		// A key gets the parts its scopes can read: this one, budget and
+		// the account part, which needs no service scope.
 		var b export.Bundle
 		mustDecode(t, rec.Body.Bytes(), &b)
-		if _, ok := b.Parts["budget"]; !ok || len(b.Parts) != 1 {
-			t.Errorf("parts = %v, want budget only", b.Parts)
+		if _, ok := b.Parts["budget"]; !ok || len(b.Parts) != 2 || b.Parts["account"] == nil {
+			t.Errorf("parts = %v, want budget and account", b.Parts)
 		}
 	})
 
@@ -168,10 +169,14 @@ func TestExportBundle(t *testing.T) {
 		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export", "")
 		var b export.Bundle
 		mustDecode(t, rec.Body.Bytes(), &b)
-		if len(b.Parts) != 3 {
-			t.Errorf("parts = %v, want budget, kanban and draw", b.Parts)
+		if len(b.Parts) != 4 {
+			t.Errorf("parts = %v, want budget, kanban, draw and account", b.Parts)
 		}
 		validate(t, rec.Body.Bytes())
+		account := string(b.Parts["account"])
+		if !strings.Contains(account, `"email":"admin@example.com"`) || strings.Contains(account, "password") {
+			t.Errorf("account = %s", account)
+		}
 	})
 
 	t.Run("naming a part the key can't read is a 403", func(t *testing.T) {
@@ -215,6 +220,24 @@ func TestExportBundle(t *testing.T) {
 		}
 		if got := fake.sub[0]; !strings.HasSuffix(got, "|"+target.String()) {
 			t.Errorf("token sub|act_as = %q, want act_as %s", got, target)
+		}
+	})
+
+	t.Run("only an admin reads another user's account", func(t *testing.T) {
+		h, _, q := exportSetup(t)
+		var admin uuid.UUID
+		for id, u := range q.users {
+			if u.Role == auth.RoleAdmin {
+				admin = id
+			}
+		}
+		rec := doKeyRequest(t, h, testReadKeyPlaintext, http.MethodGet, "/api/account/export?user_id="+admin.String(), "")
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("user key: status = %d", rec.Code)
+		}
+		rec = doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export?parts=account&user_id="+admin.String(), "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"format":"coregateway.account"`) {
+			t.Errorf("admin key: status = %d, body %s", rec.Code, rec.Body)
 		}
 	})
 
@@ -305,6 +328,17 @@ func TestImportBundle(t *testing.T) {
 		}
 	})
 
+	t.Run("the account part is export-only", func(t *testing.T) {
+		h, _, _ := exportSetup(t)
+		account := `{"format":"coregateway.account","version":1,"data":{"id":"` + uuid.NewString() + `","email":"x@example.com","role":"admin","timezone":"UTC"}}`
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import", account)
+		var got export.ImportResponse
+		mustDecode(t, rec.Body.Bytes(), &got)
+		if !strings.Contains(string(got.Parts["account"]), `"status":"skipped"`) {
+			t.Errorf("response = %s", rec.Body)
+		}
+	})
+
 	t.Run("a read-only key can export but not import", func(t *testing.T) {
 		h, fake, _ := exportSetup(t)
 		rec := doKeyRequest(t, h, testReadKeyPlaintext, http.MethodPost, "/api/import", bundle(part))
@@ -361,18 +395,20 @@ func TestImportBundle(t *testing.T) {
 
 func validate(t *testing.T, file []byte) {
 	t.Helper()
-	raw, err := os.ReadFile("../../schemas/export.v1.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-	if err != nil {
-		t.Fatal(err)
-	}
 	c := jsonschema.NewCompiler()
 	c.AssertFormat()
-	if err := c.AddResource(export.Schema, doc); err != nil {
-		t.Fatal(err)
+	for name, id := range map[string]string{"export.v1.json": export.Schema, "account.v1.json": export.AccountSchema} {
+		raw, err := os.ReadFile("../../schemas/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := c.AddResource(id, doc); err != nil {
+			t.Fatal(err)
+		}
 	}
 	schema, err := c.Compile(export.Schema)
 	if err != nil {

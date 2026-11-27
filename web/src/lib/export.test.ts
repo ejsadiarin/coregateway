@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExportFileError, readExportFile } from "./export";
+import { ExportFileError, isExportOnly, readExportFile } from "./export";
 
 describe("readExportFile", () => {
   it("lists a bundle's parts, known ones first", () => {
@@ -14,6 +14,11 @@ describe("readExportFile", () => {
       { name: "budget", format: "coregateway.budget", version: 1, known: true },
       { name: "garden", format: "coregateway.garden", version: 3, known: false },
     ]);
+  });
+
+  it("marks the account part export-only", () => {
+    expect(isExportOnly("account")).toBe(true);
+    expect(isExportOnly("budget")).toBe(false);
   });
 
   it("reads one part's own file", () => {

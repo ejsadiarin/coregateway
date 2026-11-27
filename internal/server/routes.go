@@ -112,6 +112,20 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Use(auth.RequireAuth())
 		r.Get("/api/export", exports.Export)
 		r.Post("/api/import", exports.Import)
+		r.Get("/api/account/export", export.AccountExport(func(ctx context.Context, id uuid.UUID) (export.AccountData, bool, error) {
+			user, err := s.AuthService.GetUser(ctx, id)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return export.AccountData{}, false, nil
+			}
+			if err != nil {
+				return export.AccountData{}, false, err
+			}
+			rec, err := s.AuthService.LookupUser(ctx, id)
+			if err != nil {
+				return export.AccountData{}, false, err
+			}
+			return export.AccountData{ID: id, Email: user.Email, Role: user.Role, Timezone: rec.Timezone, CreatedAt: user.CreatedAt}, true, nil
+		}, time.Now))
 	})
 
 	// A user's role, timezone and existence, for ?user_id= targeting, for

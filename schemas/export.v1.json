@@ -29,6 +29,10 @@
           "$ref": "#/$defs/part",
           "properties": { "format": { "const": "coregateway.draw" } },
           "description": "coredraw's part: https://raw.githubusercontent.com/ejsadiarin/coredraw/main/schemas/draw.v1.json"
+        },
+        "account": {
+          "$ref": "account.v1.json",
+          "description": "The gateway's own, export-only part: who the data belongs to."
         }
       },
       "additionalProperties": { "$ref": "#/$defs/part" }

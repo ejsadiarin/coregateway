@@ -7,7 +7,13 @@ export const EXPORT_PARTS = [
   { name: "budget", format: "coregateway.budget", label: "Budget", blurb: "Expenses, incomes, recurring rules and tags" },
   { name: "kanban", format: "coregateway.kanban", label: "Kanban and Feed", blurb: "Boards, cards, reminders and notes; photo and video files stay out" },
   { name: "draw", format: "coregateway.draw", label: "Draw", blurb: "Whiteboards with their side docs" },
+  { name: "account", format: "coregateway.account", label: "Account", blurb: "Your email, role and timezone, for reference", exportOnly: true },
 ] as const;
+
+// isExportOnly is a part an import reads but never applies.
+export function isExportOnly(name: string): boolean {
+  return EXPORT_PARTS.some((p) => p.name === name && "exportOnly" in p && p.exportOnly);
+}
 
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
 

@@ -35,11 +35,15 @@ test("export downloads a bundle that imports back with nothing new", async ({ pa
     expect(bundle.parts.budget.data.expenses.some((e: { id: string }) => e.id === id)).toBe(true);
     expect(bundle.parts.kanban.format).toBe("coregateway.kanban");
     expect(bundle.parts.draw.format).toBe("coregateway.draw");
+    expect(bundle.parts.account.data.email).toBe("admin@e2e.local");
 
     await page.getByLabel("Export file").setInputFiles({ name: download.suggestedFilename(), mimeType: "application/json", buffer: file });
     const parts = page.getByRole("group", { name: "Parts to import" });
     await expect(parts.getByRole("checkbox", { name: /Budget/ })).toBeChecked();
     await expect(parts.getByRole("checkbox", { name: /Kanban/ })).toBeChecked();
+    // The account part is listed for reference and never imported.
+    await expect(parts.getByRole("checkbox", { name: /Account/ })).toBeDisabled();
+    await expect(parts.getByText("For reference only; importing never changes your account")).toBeVisible();
 
     await page.getByRole("button", { name: "Check" }).click();
     const result = page.getByTestId("import-result-budget");
