@@ -140,6 +140,12 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 	files := map[string]json.RawMessage{}
 	for _, p := range parts {
 		rec := h.sub(r, http.MethodGet, p.ExportPath, query, nil)
+		if rec.Code == http.StatusNotFound && r.URL.Query().Get("parts") == "" && !errorSays(rec, "target user not found") {
+			// A service not yet deployed with its part: export the rest,
+			// so services and the gateway deploy in any order.
+			slog.Warn("export: part not served, left out", "part", p.Name)
+			continue
+		}
 		if rec.Code != http.StatusOK {
 			slog.Warn("export: part failed", "part", p.Name, "status", rec.Code)
 			helper.RespondErrorJSON(w, rec.Code, p.Name+" part: "+errorMessage(rec))
@@ -153,6 +159,10 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 	name := "coregateway-export-" + date + ".json"
 	var body any = Bundle{Schema: Schema, Format: Format, Version: Version,
 		ExportedAt: h.now().UTC().Truncate(time.Second), Parts: files}
+	if len(files) == 0 {
+		helper.RespondErrorJSON(w, http.StatusBadGateway, "no service could export its part")
+		return
+	}
 	if len(parts) == 1 && r.URL.Query().Get("parts") != "" {
 		name = "coregateway-" + parts[0].Name + "-" + date + ".json"
 		body = files[parts[0].Name]
@@ -367,6 +377,10 @@ func partResult(p Part, dryRun bool, rec *httptest.ResponseRecorder) json.RawMes
 	slog.Warn("import: part failed", "part", p.Name, "status", rec.Code)
 	return mustJSON(PartResult{Part: p.Name, Format: p.Format, DryRun: dryRun, Status: StatusFailed,
 		Errors: []PartError{{Entity: "part", Reason: errorMessage(rec)}}})
+}
+
+func errorSays(rec *httptest.ResponseRecorder, message string) bool {
+	return errorMessage(rec) == message
 }
 
 func errorMessage(rec *httptest.ResponseRecorder) string {

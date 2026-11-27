@@ -35,6 +35,7 @@ const testGuestKeyPlaintext = "cgk_guest_export_test_key_0000000000000000"
 // import answers with a part result, failing a body that says "refuse" and
 // erroring on one that says "explode".
 type fakeBudget struct {
+	missing string // a path answered 404, as by a service without its part
 	mu      sync.Mutex
 	imports []string
 	query   []string
@@ -52,6 +53,10 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.sub = append(f.sub, claims.Subject+"|"+claims.ActAs)
 	f.query = append(f.query, r.URL.RawQuery)
 	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Path == f.missing {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	switch r.URL.Path {
 	case "/api/coredraw/export":
 		_, _ = io.WriteString(w, `{"format":"coregateway.draw","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[]}}`)
@@ -195,6 +200,20 @@ func TestExportBundle(t *testing.T) {
 		}
 		if len(fake.query) != 0 {
 			t.Errorf("downstream asked %d times", len(fake.query))
+		}
+	})
+
+	t.Run("a service without its part yet is left out of a default export", func(t *testing.T) {
+		h, fake, _ := exportSetup(t)
+		fake.missing = "/api/coredraw/export"
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export", "")
+		var b export.Bundle
+		mustDecode(t, rec.Body.Bytes(), &b)
+		if rec.Code != http.StatusOK || b.Parts["draw"] != nil || b.Parts["budget"] == nil {
+			t.Fatalf("status = %d, parts %v", rec.Code, b.Parts)
+		}
+		if rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export?parts=draw", ""); rec.Code != http.StatusNotFound {
+			t.Errorf("named: status = %d, want 404", rec.Code)
 		}
 	})
 
