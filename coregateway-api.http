@@ -441,4 +441,38 @@ Content-Type: application/json
 
 GET {{host}}/api/coreban/health
 
+### Export everything (ADR-0008; a bundle with a part per service)
+
+GET {{host}}/api/export
+
+### Export only the budget part (that part's own file)
+
+GET {{host}}/api/export?parts=budget
+
+### Check an import without writing (paste an export file as the body)
+
+POST {{host}}/api/import?dry_run=true
+Content-Type: application/json
+
+{
+  "format": "coregateway.export",
+  "version": 1,
+  "exported_at": "2026-11-27T00:00:00Z",
+  "parts": {
+    "budget": {
+      "format": "coregateway.budget",
+      "version": 1,
+      "data": { "tags": [], "rules": [], "expenses": [], "incomes": [] }
+    }
+  }
+}
+
+### Import with a read-only API key (expect 403 naming corefinance:write)
+
+POST {{host}}/api/import
+Authorization: Bearer cgw_live_PASTE_READ_KEY_HERE
+Content-Type: application/json
+
+{ "format": "coregateway.budget", "version": 1, "data": { "tags": [], "rules": [], "expenses": [], "incomes": [] } }
+
 # @key_id = 00000000-0000-0000-0000-000000000000

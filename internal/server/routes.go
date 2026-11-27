@@ -9,6 +9,7 @@ import (
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
 	"github.com/ejsadiarin/coregateway/internal/config"
+	"github.com/ejsadiarin/coregateway/internal/export"
 	"github.com/ejsadiarin/coregateway/internal/helper"
 	"github.com/ejsadiarin/coregateway/internal/middleware"
 	"github.com/go-chi/chi/v5"
@@ -96,6 +97,23 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Post("/api/admin/backups", s.BackupHandler.Trigger)
 	})
 
+	// The official export and import (ADR-0008): one file with a part per
+	// service. Each part is asked for through the part's own route below,
+	// as the caller, so scopes, targeting and minting are the proxies' own.
+	exports := export.NewHandler(export.Parts, func(ctx context.Context, id uuid.UUID) string {
+		user, err := s.AuthService.LookupUser(ctx, id)
+		if err != nil {
+			return ""
+		}
+		return user.Timezone
+	})
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireIdentity(s.AuthService, s.KeysService))
+		r.Use(auth.RequireAuth())
+		r.Get("/api/export", exports.Export)
+		r.Post("/api/import", exports.Import)
+	})
+
 	// A user's role, timezone and existence, for ?user_id= targeting, for
 	// the restrictions a key carries from its owner, and for the token's tz
 	// claim (user authority stays in the gateway; downstream never looks up
@@ -149,6 +167,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Handle("/*", s.Statuses.Observe("coreban", s.CorebanClient.Proxy()))
 	})
 
+	exports.Mount(r)
 	return r
 }
 

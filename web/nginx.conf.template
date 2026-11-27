@@ -31,6 +31,18 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # Imports (ADR-0008) take files up to the gateway's 25 MB cap; nginx's
+    # default of 1 MB would refuse a real one before the gateway saw it.
+    location ~ ^/api/(budget/|coreban/|coredraw/)?import$ {
+        client_max_body_size 25m;
+        set $gateway http://${GATEWAY_UPSTREAM};
+        proxy_pass $gateway;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # A share from another app is a POST the service worker takes (sw.js).
     # Without one yet (just installed, or its site data cleared) it reaches
     # here: open the share page, which asks for the share again, instead

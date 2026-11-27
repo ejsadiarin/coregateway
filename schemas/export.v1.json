@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/ejsadiarin/coregateway/main/schemas/export.v1.json",
+  "title": "coregateway export, version 1",
+  "description": "A user's own data as one file with a part per service (coregateway ADR-0008). Each part is its own format and version, is valid as a file on its own, and is checked against its own schema, which its $schema names.",
+  "type": "object",
+  "required": ["format", "version", "exported_at", "parts"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "coregateway.export" },
+    "version": { "const": 1 },
+    "exported_at": { "type": "string", "format": "date-time" },
+    "parts": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/part",
+          "properties": { "format": { "const": "coregateway.budget" } },
+          "description": "corefinance's part: https://raw.githubusercontent.com/ejsadiarin/corefinance/main/schemas/budget.v1.json"
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/part" }
+    }
+  },
+  "$defs": {
+    "part": {
+      "type": "object",
+      "required": ["format", "version", "data"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "format": { "type": "string", "pattern": "^coregateway\\.[a-z]+$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "exported_at": { "type": "string", "format": "date-time" },
+        "source": { "type": "object" },
+        "data": {}
+      }
+    }
+  }
+}

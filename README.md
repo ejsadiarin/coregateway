@@ -254,6 +254,13 @@ coregateway/
 | PUT | `/api/services/{id}` | Update service |
 | DELETE | `/api/services/{id}` | Delete service |
 
+### Export and import ([ADR-0008](docs/adr/0008-exports-are-versioned-parts-that-keep-ids.md))
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/export?parts=budget` | Your data as one file ([`schemas/export.v1.json`](schemas/export.v1.json)), a part per service; one part named is that part's own file. Admins may add `user_id`. Keys need each part's `<service>:read` |
+| POST | `/api/import?parts=budget&dry_run=true` | Import a bundle or one part's file into your own data, keeping ids; reports each part's result. Keys need `<service>:write`; the demo account can't import. Max 25 MB |
+
 ## Architecture
 
 ```
