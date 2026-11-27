@@ -234,3 +234,79 @@ test.describe("on a phone", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   });
 });
+
+// A reply answers an earlier note and shows it as a quote, like a chat
+// app's reply (coreban CONTEXT "Reply").
+const quoteIn = (page: Page, text: string) => noteItem(page, text).getByRole("figure", { name: "Replying to" });
+const replyBar = (page: Page) => page.getByRole("region", { name: "Replying to" });
+// A reply's quote holds its original's text too; the original, posted
+// first, is the first match.
+const replyTo = async (page: Page, text: string, action = "Reply") => {
+  await noteItem(page, text).first().getByRole("button", { name: "Note actions" }).click();
+  await page.getByRole("menuitem", { name: action }).click();
+};
+
+test("replying from a note's menu quotes it above the reply, live, after a reload", async ({ page }) => {
+  const original = unique("dinner at 7?");
+  const answer = unique("make it 8");
+  await post(page, original);
+
+  await replyTo(page, original, "Reply");
+  await expect(replyBar(page)).toContainText(original);
+  await expect(page.getByRole("textbox", { name: "New note" })).toBeFocused();
+  await post(page, answer);
+  await expect(replyBar(page)).toHaveCount(0);
+  await expect(quoteIn(page, answer)).toContainText(original);
+
+  // The quote shows the original as it is now.
+  await replyTo(page, original, "Edit text");
+  const edited = `${original} or 7:30`;
+  await page.getByRole("textbox", { name: "Note text" }).fill(edited);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(quoteIn(page, answer)).toContainText(edited);
+  await page.reload();
+  await expect(quoteIn(page, answer)).toContainText(edited);
+});
+
+test("a reply can be cancelled with the bar's close button or Esc", async ({ page }) => {
+  const original = unique("never mind");
+  await post(page, original);
+
+  await replyTo(page, original, "Reply");
+  await replyBar(page).getByRole("button", { name: "Cancel reply" }).click();
+  await expect(replyBar(page)).toHaveCount(0);
+
+  await replyTo(page, original, "Reply");
+  await page.getByRole("textbox", { name: "New note" }).press("Escape");
+  await expect(replyBar(page)).toHaveCount(0);
+
+  const plain = unique("just a note");
+  await post(page, plain);
+  await expect(quoteIn(page, plain)).toHaveCount(0);
+});
+
+test("an archived original stays quoted, tagged archived; a deleted one reads Note deleted", async ({ page }) => {
+  const kept = unique("put away later");
+  const gone = unique("erase later");
+  const toKept = unique("about the kept one");
+  const toGone = unique("about the erased one");
+  await post(page, kept);
+  await post(page, gone);
+  await replyTo(page, kept, "Reply");
+  await post(page, toKept);
+  await replyTo(page, gone, "Reply");
+  await post(page, toGone);
+
+  await replyTo(page, kept, "Archive");
+  await expect(quoteIn(page, toKept)).toContainText(kept);
+  await expect(quoteIn(page, toKept)).toContainText("Archived");
+
+  await replyTo(page, gone, "Permanently delete");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Permanently delete" }).click();
+  await expect(quoteIn(page, toGone)).toContainText("Note deleted");
+  await expect(quoteIn(page, toGone)).not.toContainText(gone);
+
+  await page.reload();
+  await expect(quoteIn(page, toKept)).toContainText("Archived");
+  await expect(quoteIn(page, toGone)).toContainText("Note deleted");
+});

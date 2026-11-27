@@ -19,6 +19,7 @@ import {
   Pencil,
   Plus,
   ReceiptText,
+  Reply,
   Search,
   SendHorizontal,
   SquareKanban,
@@ -70,6 +71,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { ExchangeDialog } from "@/components/exchange/exchange-compare";
 import { AttachmentGrid, AttachmentViewer, UploadTray } from "./attachments";
 import { useUploads } from "./use-uploads";
+import { QuoteBlock, ReplyBar } from "./reply";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
@@ -225,6 +227,8 @@ function useEnterToSend(send: () => void, onEscape?: () => void) {
 
 // What a live note's menu and taps can do.
 interface NoteActions {
+  // Starts a reply to the note in the composer.
+  reply: () => void;
   copy: () => void;
   saveText: (text: string, done: () => void) => void;
   makeReminder: () => void;
@@ -242,6 +246,8 @@ interface NoteActions {
 
 function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActions; onEditText: () => void }) {
   const link = note.link;
+  // Reply leaves focus in the composer, not back on this menu's button.
+  const replying = useRef(false);
   const item = "min-h-11 gap-2";
   // A note with attachments stays a plain note, and Copy copies text only.
   const convertible = !link && !note.attachments?.length;
@@ -253,7 +259,20 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(e) => {
+          if (!replying.current) return;
+          replying.current = false;
+          e.preventDefault();
+          actions.reply();
+        }}
+      >
+        <DropdownMenuItem className={item} onSelect={() => (replying.current = true)}>
+          <Reply className="h-4 w-4" aria-hidden />
+          Reply
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         {convertible && (
           <>
             <DropdownMenuItem className={item} onSelect={actions.makeReminder}>
@@ -384,6 +403,7 @@ function LiveNote({
   }
 
   const link = note.link;
+  const quote = note.reply_to && <QuoteBlock quote={note.reply_to} categoryName={categoryName} />;
   return (
     <div className="flex items-start justify-end gap-1">
       {link ? (
@@ -394,11 +414,13 @@ function LiveNote({
           </div>
         ) : link.deleted ? (
           <div className={bubble}>
+            {quote}
             <LinkLine link={link} categoryName={categoryName} />
             <NoteTime note={note} className="text-right" />
           </div>
         ) : (
           <button type="button" onClick={actions.openRecord} className={cn(bubble, "hover:border-primary/40")}>
+            {quote}
             {isBudgetLink(link) ? (
               <BudgetLine link={link} categoryName={categoryName} />
             ) : (
@@ -409,6 +431,7 @@ function LiveNote({
         )
       ) : (
         <div className={cn(bubble, note.attachments?.length && "w-full p-1.5 pb-2")}>
+          {quote}
           {note.attachments?.length ? (
             <AttachmentGrid attachments={note.attachments} onOpen={setViewing} />
           ) : null}
@@ -502,6 +525,8 @@ export default function FeedPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [draft, setDraft] = useState("");
+  // The note the composer's next post answers, if any.
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [status, setStatus] = useState("");
   const [deleting, setDeleting] = useState<Note | null>(null);
@@ -772,9 +797,10 @@ export default function FeedPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, pageCount]);
 
   const postMutation = useMutation({
-    mutationFn: (v: { text: string; attachments?: string[]; keys?: string[] }) => postNote(v),
+    mutationFn: (v: { text: string; attachments?: string[]; keys?: string[]; replyTo?: string }) => postNote(v),
     onSuccess: (note, { keys }) => {
       setDraft("");
+      setReplyingTo(null);
       if (keys) uploads.posted(keys);
       toBottom.current = true;
       // A posted note isn't a budget note: the Budget view doesn't show it.
@@ -906,10 +932,21 @@ export default function FeedPage() {
       return;
     }
     setActionError("");
-    postMutation.mutate({ text, attachments: uploads.sending?.ids, keys: uploads.sending?.keys });
+    postMutation.mutate({
+      text,
+      attachments: uploads.sending?.ids,
+      keys: uploads.sending?.keys,
+      replyTo: replyingTo ?? undefined,
+    });
     input.current?.focus();
   };
-  const keys = useEnterToSend(send);
+  const keys = useEnterToSend(send, replyingTo ? () => setReplyingTo(null) : undefined);
+  // The reply bar shows the note as it is now; it goes once the note
+  // leaves the view (archived or deleted meanwhile).
+  const replyNote = replyingTo ? notes.find((n) => n.id === replyingTo && !n.archived_at) : undefined;
+  useEffect(() => {
+    if (replyingTo && !replyNote && feedQuery.isSuccess) setReplyingTo(null);
+  }, [replyingTo, replyNote, feedQuery.isSuccess]);
 
   useEffect(() => {
     if (!status) return;
@@ -918,6 +955,10 @@ export default function FeedPage() {
   }, [status]);
 
   const actionsFor = (note: Note): NoteActions => ({
+    reply: () => {
+      setReplyingTo(note.id);
+      input.current?.focus();
+    },
     copy: () =>
       copyText(noteCopyText(note, new Date().getFullYear(), categoryName)).then(
         () => setStatus("Copied."),
@@ -1205,6 +1246,16 @@ export default function FeedPage() {
             FX
           </Button>
         </div>
+        {replyNote && (
+          <ReplyBar
+            note={replyNote}
+            categoryName={categoryName}
+            onCancel={() => {
+              setReplyingTo(null);
+              input.current?.focus();
+            }}
+          />
+        )}
         <UploadTray
           files={uploads.files}
           onRemove={uploads.remove}

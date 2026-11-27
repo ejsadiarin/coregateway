@@ -22,8 +22,10 @@ export function budgetRecordOf(link: NoteLink): Expense | Income | undefined {
 export function budgetRecordIds(notes: Note[]): Record<BudgetKind, string[]> {
   const ids: Record<BudgetKind, string[]> = { expense: [], income: [] };
   for (const n of notes) {
-    const l = n.link;
-    if (isBudgetLink(l) && !l.deleted) ids[l.kind].push(l.record_id);
+    // A reply's quote shows its note's record too.
+    for (const l of [n.link, n.reply_to?.note?.link]) {
+      if (isBudgetLink(l) && !l.deleted && !ids[l.kind].includes(l.record_id)) ids[l.kind].push(l.record_id);
+    }
   }
   return ids;
 }
@@ -108,6 +110,13 @@ export function showBudget(
   records: BudgetRecords | undefined,
   shown: Shown,
 ): { note: Note; snapshot?: Expense | Income } {
+  // A quoted note shows its record too; only the note itself saves a
+  // snapshot.
+  const quoted = note.reply_to?.note;
+  if (quoted) {
+    const filled = showBudget(quoted, records, shown).note;
+    if (filled !== quoted) note = { ...note, reply_to: { deleted: false, note: filled } };
+  }
   const l = note.link;
   if (!isBudgetLink(l) || l.deleted || !records?.asked.has(l.record_id)) {
     return { note };

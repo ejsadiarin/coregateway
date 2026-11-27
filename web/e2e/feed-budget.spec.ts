@@ -186,3 +186,30 @@ test.describe("on a phone", () => {
     expect(await scrolls()).toBe(false);
   });
 });
+
+// coregateway#77: a reply to an expense's note quotes the expense as
+// corefinance has it now.
+test("a reply to an expense's note quotes the expense, live", async ({ page }) => {
+  const lunch = unique("Lunch");
+  const id = await captureExpense(page, lunch, "250");
+  try {
+    await noteItem(page, lunch).first().getByRole("button", { name: "Note actions" }).click();
+    await page.getByRole("menuitem", { name: "Reply" }).click();
+    await expect(page.getByRole("region", { name: "Replying to" })).toContainText(lunch);
+    const why = unique("why so much");
+    await page.getByRole("textbox", { name: "New note" }).fill(why);
+    await page.getByRole("textbox", { name: "New note" }).press("Enter");
+    const quote = noteItem(page, why).getByRole("figure", { name: "Replying to" });
+    await expect(quote).toContainText(lunch);
+    await expect(quote).toContainText("250");
+
+    // Changed elsewhere: the quote follows the expense after a reload.
+    const current = await (await page.request.get(`${api}/api/budget/expenses/${id}`)).json();
+    const res = await page.request.put(`${api}/api/budget/expenses/${id}`, { data: { ...current, amount: 320 } });
+    expect(res.ok()).toBe(true);
+    await page.reload();
+    await expect(noteItem(page, why).getByRole("figure", { name: "Replying to" })).toContainText("320");
+  } finally {
+    await page.request.delete(`${api}/api/budget/expenses/${id}`);
+  }
+});

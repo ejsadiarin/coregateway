@@ -113,3 +113,19 @@ describe("rememberShown", () => {
     expect(Object.keys(shown).sort()).toEqual(["e1", "e3"]);
   });
 });
+
+describe("quoted budget notes", () => {
+  const quoting = (id: string, to: Note): Note => ({ ...note(id), reply_to: { deleted: false, note: to } });
+  const expenseNote = note("n1", { kind: "expense", deleted: false, record_id: "e1" });
+
+  it("asks corefinance for a quoted note's record too", () => {
+    expect(budgetRecordIds([quoting("r", expenseNote)])).toEqual({ expense: ["e1"], income: [] });
+  });
+
+  it("fills a quoted note's record in", () => {
+    const records = { asked: new Set(["e1"]), expense: new Map([["e1", lunch]]), income: new Map() };
+    const shown = showBudget(quoting("r", expenseNote), records, {}).note;
+    const link = shown.reply_to?.note?.link;
+    expect(link?.kind === "expense" && link.expense?.description).toBe("Lunch");
+  });
+});

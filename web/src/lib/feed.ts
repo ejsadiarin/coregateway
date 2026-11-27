@@ -1,6 +1,6 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import { format, isSameDay, isSameYear, subDays } from "date-fns";
-import type { BudgetKind, FeedFilter, FeedPage, Note, NoteLink } from "@/types/feed";
+import type { BudgetKind, FeedFilter, FeedPage, Note, NoteLink, Quote } from "@/types/feed";
 import type { Expense, Income } from "@/types/api";
 import { budgetRecordOf, isBudgetLink } from "@/lib/feed-records";
 import { describeSchedule, formatWall } from "@/lib/kanban-schedule";
@@ -105,9 +105,15 @@ async function send(method: string, url: string, body: unknown, op: string): Pro
   return res.json();
 }
 
-// postNote posts text, or uploads (by id) with the text as their caption.
-export const postNote = ({ text, attachments }: { text: string; attachments?: string[] }) =>
-  send("POST", notesUrl, attachments?.length ? { text, attachments } : { text }, "post this note");
+// postNote posts text, or uploads (by id) with the text as their caption;
+// replyTo makes it a reply to that note.
+export const postNote = ({ text, attachments, replyTo }: { text: string; attachments?: string[]; replyTo?: string }) =>
+  send(
+    "POST",
+    notesUrl,
+    { text, ...(attachments?.length && { attachments }), ...(replyTo && { reply_to: replyTo }) },
+    "post this note",
+  );
 
 export const editNoteText = (id: string, text: string) =>
   send("PATCH", `${notesUrl}/${id}`, { text }, "edit this note");
@@ -171,13 +177,26 @@ function mapPages(data: FeedData | undefined, f: (page: FeedPage, i: number) => 
 export const appendNote = (data: FeedData | undefined, note: Note) =>
   mapPages(data, (p, i) => (i === 0 ? { ...p, notes: [...p.notes, note] } : p));
 
-// replaceNote swaps in a note's new state (edited, archived, restored).
-export const replaceNote = (data: FeedData | undefined, note: Note) =>
-  mapPages(data, (p) => ({ ...p, notes: p.notes.map((n) => (n.id === note.id ? note : n)) }));
+// requote gives every reply to id the quote q: a quote shows the note as
+// it is now.
+const requote = (n: Note, id: string, q: Quote): Note => (n.reply_to?.note?.id === id ? { ...n, reply_to: q } : n);
 
-// removeNote drops a permanently deleted note.
+// replaceNote swaps in a note's new state (edited, archived, restored),
+// in its place and in every quote of it.
+export const replaceNote = (data: FeedData | undefined, note: Note) => {
+  const q: Quote = { deleted: false, note: { ...note, reply_to: null } };
+  return mapPages(data, (p) => ({
+    ...p,
+    notes: p.notes.map((n) => requote(n.id === note.id ? note : n, note.id, q)),
+  }));
+};
+
+// removeNote drops a permanently deleted note; its replies quote nothing.
 export const removeNote = (data: FeedData | undefined, id: string) =>
-  mapPages(data, (p) => ({ ...p, notes: p.notes.filter((n) => n.id !== id) }));
+  mapPages(data, (p) => ({
+    ...p,
+    notes: p.notes.filter((n) => n.id !== id).map((n) => requote(n, id, { deleted: true, note: null })),
+  }));
 
 // noteTime says when a note was posted, in the device's timezone: just
 // the time today, with the day before that, and the year once it differs.
@@ -413,6 +432,15 @@ export function notePreview(
     .filter(([n]) => n)
     .map(([n, what]) => `${n} ${what}${n === 1 ? "" : "s"}`)
     .join(", ");
+}
+
+// quoteLine is the one line a reply's quote shows of the note it answers.
+export function quoteLine(
+  quote: Quote,
+  currentYear: number,
+  categoryName?: (id: string) => string | undefined,
+): string {
+  return quote.note ? notePreview(quote.note, currentYear, categoryName) : "Note deleted";
 }
 
 // noteCopyText is what Copy puts on the clipboard: a plain note's text

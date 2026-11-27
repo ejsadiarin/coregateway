@@ -21,8 +21,19 @@ export interface Note {
   posted_at: string;
   // "feed" for a note posted from the Feed, "budget" for one the sync made.
   origin: "feed" | "budget";
+  // The note a reply answers (coreban CONTEXT "Reply"); null on a note
+  // that isn't a reply, and on the note inside a quote.
+  reply_to?: Quote | null;
   created_at: string;
   updated_at: string;
+}
+
+// Quote is the note a reply answers, as it is now: still quoted once
+// archived (its archived_at set), and gone (deleted, no note) once
+// permanently deleted.
+export interface Quote {
+  deleted: boolean;
+  note: Note | null;
 }
 
 // FeedFilter narrows the Feed: every note, only plain/reminder/card

@@ -14,6 +14,7 @@ import {
   noteCopyText,
   notePreview,
   noteTime,
+  quoteLine,
   removeNote,
   replaceNote,
   splitLinks,
@@ -433,5 +434,40 @@ describe("feedDays", () => {
       at("d", "2026-11-13T09:00:00", { kind: "expense", deleted: true, record_id: "d", expense: exp }),
     ];
     expect(dayNet(notes)).toEqual({ net: -5657.3, any: true });
+  });
+});
+
+describe("replies", () => {
+  const reply = (id: string, to: Note | null): Note => ({ ...note(id), reply_to: { deleted: to === null, note: to } });
+  const quotes = (data: Parameters<typeof feedNotes>[0]) =>
+    feedNotes(data).map((n) => (n.reply_to ? [n.id, n.reply_to.deleted, n.reply_to.note?.text ?? null] : [n.id]));
+
+  it("an edited or archived note changes in every quote of it, keeping its place", () => {
+    const data = { ...feed(["a"]), pages: [{ notes: [note("a"), reply("r", note("a"))], older: null }] };
+    const edited = { ...note("a", "changed"), archived_at: "2026-11-11T11:00:00Z" };
+    const next = replaceNote(data, edited);
+    expect(quotes(next)).toEqual([["a"], ["r", false, "changed"]]);
+    expect(feedNotes(next)[1].reply_to?.note?.archived_at).toBe("2026-11-11T11:00:00Z");
+  });
+
+  it("a quote never nests the quoted note's own quote", () => {
+    const data = { ...feed(), pages: [{ notes: [reply("b", note("a")), reply("c", note("b"))], older: null }] };
+    const next = replaceNote(data, reply("b", note("a")));
+    expect(feedNotes(next)[1].reply_to?.note?.reply_to).toBeNull();
+  });
+
+  it("a permanently deleted note leaves its replies quoting nothing", () => {
+    const data = { ...feed(), pages: [{ notes: [note("a"), reply("r", note("a"))], older: null }] };
+    expect(quotes(removeNote(data, "a"))).toEqual([["r", true, null]]);
+  });
+
+  it("a quote's line is the quoted note's preview, or Note deleted", () => {
+    expect(quoteLine({ deleted: false, note: note("a", "dinner at 7?") }, 2026)).toBe("dinner at 7?");
+    expect(quoteLine({ deleted: true, note: null }, 2026)).toBe("Note deleted");
+    const photo = {
+      ...note("p", ""),
+      attachments: [{ id: "x", kind: "image" as const, content_type: "image/webp", size: 1, filename: "x.webp" }],
+    };
+    expect(quoteLine({ deleted: false, note: photo }, 2026)).toBe("1 image");
   });
 });
