@@ -22,6 +22,10 @@ type ServiceView struct {
 	ResponseTime  *int32     `json:"response_time,omitempty"`
 	StatusCode    *int32     `json:"status_code,omitempty"`
 	LastError     string     `json:"last_error,omitempty"`
+	// Built-ins only: proxied requests the downstream failed in the last
+	// 10 minutes. Any make an otherwise healthy service "degraded".
+	RecentFailures int        `json:"recent_failures,omitempty"`
+	LastFailureAt  *time.Time `json:"last_failure_at,omitempty"`
 }
 
 type Service struct {
@@ -35,17 +39,26 @@ func NewService(queries sqlc.Querier, statuses *Statuses) *Service {
 
 func (s *Service) view(service sqlc.CoregatewayService) ServiceView {
 	v := ServiceView{CoregatewayService: service, CurrentStatus: "unknown"}
-	check, ok := s.statuses.Get(service.ID)
-	if !ok {
-		return v
+	if check, ok := s.statuses.Get(service.ID); ok {
+		v.CurrentStatus = check.Status
+		v.LastCheck = &check.CheckedAt
+		v.ResponseTime = &check.ResponseTime
+		if check.StatusCode != 0 {
+			v.StatusCode = &check.StatusCode
+		}
+		v.LastError = check.Error
 	}
-	v.CurrentStatus = check.Status
-	v.LastCheck = &check.CheckedAt
-	v.ResponseTime = &check.ResponseTime
-	if check.StatusCode != 0 {
-		v.StatusCode = &check.StatusCode
+
+	if service.IsBuiltin && service.BuiltinKey.Valid {
+		if n, last := s.statuses.recentFailures(service.BuiltinKey.String); n > 0 {
+			v.RecentFailures = n
+			v.LastFailureAt = &last
+			// Down (a failed health check) outranks degraded.
+			if v.CurrentStatus != "offline" {
+				v.CurrentStatus = "degraded"
+			}
+		}
 	}
-	v.LastError = check.Error
 	return v
 }
 

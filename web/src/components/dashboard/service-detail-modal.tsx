@@ -147,6 +147,16 @@ export function ServiceDetailModal({
           </div>
 
           {/* Latest check result; only the latest is kept, not a history. */}
+          {!!service.recent_failures && service.last_failure_at && (
+            <div className="p-4 rounded-lg border border-amber-500/40 bg-amber-500/5">
+              <p className="text-xs text-muted-foreground mb-1">Failed requests</p>
+              <p className="text-sm text-amber-500">
+                {service.recent_failures} in the last 10 minutes, last{" "}
+                {formatDistanceToNow(new Date(service.last_failure_at), { addSuffix: true })}
+              </p>
+            </div>
+          )}
+
           {service.last_error && (
             <div className="p-4 rounded-lg border border-destructive/40 bg-destructive/5">
               <p className="text-xs text-muted-foreground mb-1">Last check failed</p>

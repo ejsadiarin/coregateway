@@ -28,6 +28,7 @@ type Server struct {
 	KeysService       *auth.KeysService
 	UserHandler       *user.Handler
 	ServiceHandler    *monitor.Handler
+	Statuses          *monitor.Statuses
 	BackupHandler     *backup.Handler
 	AuthService       *auth.Service
 	CorefinanceClient *corefinance.Client
@@ -73,6 +74,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, statuses *
 	s.KeysService = auth.NewKeysService(queries)
 	s.KeysHandler = auth.NewKeysHandler(s.KeysService)
 	s.UserHandler = user.NewHandler(user.NewService(queries))
+	s.Statuses = statuses
 	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries, statuses))
 	folder := backupFolder(cfg, pool)
 	s.BackupHandler = backup.NewHandler(folder)

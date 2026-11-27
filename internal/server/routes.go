@@ -120,11 +120,14 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		// otherwise); sessions pass through to downstream role checks.
 		r.Use(auth.RequireServiceKeyScope("corefinance"))
 		r.Use(middleware.ForwardHeaders())
+		// Failed proxied requests mark the built-in degraded (passive
+		// health checking; health checks only probe liveness).
+		corefinance := s.Statuses.Observe("corefinance", s.CorefinanceClient.Proxy())
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middleware.RequireScope("admin"))
-			r.Handle("/*", s.CorefinanceClient.Proxy())
+			r.Handle("/*", corefinance)
 		})
-		r.Handle("/*", s.CorefinanceClient.Proxy())
+		r.Handle("/*", corefinance)
 	})
 
 	// boards — authenticated at the edge, streamed to coredraw-api.
@@ -135,7 +138,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Use(middleware.EdgeIdentity("coredraw", s.TokenIssuer, s.KeysService, userLookup))
 		r.Use(auth.RequireServiceKeyScope("coredraw"))
 		r.Use(middleware.ForwardHeaders())
-		r.Handle("/*", s.CoredrawClient.Proxy())
+		r.Handle("/*", s.Statuses.Observe("coredraw", s.CoredrawClient.Proxy()))
 	})
 
 	// coreban — same proxy contract as coredraw: internal token downstream
@@ -145,7 +148,7 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Use(middleware.EdgeIdentity("coreban", s.TokenIssuer, s.KeysService, userLookup))
 		r.Use(auth.RequireServiceKeyScope("coreban"))
 		r.Use(middleware.ForwardHeaders())
-		r.Handle("/*", s.CorebanClient.Proxy())
+		r.Handle("/*", s.Statuses.Observe("coreban", s.CorebanClient.Proxy()))
 	})
 
 	return r

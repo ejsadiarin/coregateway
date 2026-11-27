@@ -23,6 +23,9 @@ export interface Service {
     response_time?: number;
     status_code?: number;
     last_error?: string;
+    /** Built-ins only: proxied requests that failed in the last 10 minutes. */
+    recent_failures?: number;
+    last_failure_at?: string;
 }
 
 export interface CreateServiceRequest {

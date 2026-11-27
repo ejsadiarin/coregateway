@@ -18,15 +18,23 @@ type Check struct {
 	CheckedAt    time.Time `json:"checked_at"`
 }
 
-// Statuses holds each monitored service's latest check. Safe for concurrent
-// use by the checker and the API.
+// Statuses holds each monitored service's latest check, and the failed
+// requests the gateway proxied to each built-in service. Safe for concurrent
+// use by the checker, the proxy and the API.
 type Statuses struct {
-	mu     sync.RWMutex
-	checks map[uuid.UUID]Check
+	now func() time.Time
+
+	mu       sync.RWMutex
+	checks   map[uuid.UUID]Check
+	failures map[string][]time.Time // by built-in key, oldest first
 }
 
 func NewStatuses() *Statuses {
-	return &Statuses{checks: make(map[uuid.UUID]Check)}
+	return &Statuses{
+		now:      time.Now,
+		checks:   make(map[uuid.UUID]Check),
+		failures: make(map[string][]time.Time),
+	}
 }
 
 func (s *Statuses) Set(id uuid.UUID, check Check) {

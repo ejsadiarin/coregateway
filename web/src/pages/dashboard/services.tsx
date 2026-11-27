@@ -72,6 +72,10 @@ function formatResponseTime(ms?: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function failedRequests(count: number, lastAt: string): string {
+  return `${count} failed ${count === 1 ? "request" : "requests"} in the last 10 min · last ${formatDistanceToNow(new Date(lastAt), { addSuffix: true })}`;
+}
+
 export default function ServicesPage() {
   const { data: services, isLoading, error, refetch, isFetching } = useServices();
   const deleteService = useDeleteService();
@@ -408,6 +412,11 @@ export default function ServicesPage() {
                   {service.is_active && status !== "online" && service.last_error && (
                     <p className="mt-2 max-w-[42rem] truncate font-mono text-[10px] text-destructive">
                       {service.last_error}
+                    </p>
+                  )}
+                  {service.is_active && !!service.recent_failures && service.last_failure_at && (
+                    <p className="mt-2 max-w-[42rem] truncate font-mono text-[10px] text-amber-500">
+                      {failedRequests(service.recent_failures, service.last_failure_at)}
                     </p>
                   )}
                 </div>
