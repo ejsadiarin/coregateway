@@ -18,7 +18,11 @@ const (
 	// roundEvery is how often every active service is checked. Checks keep
 	// their results in memory and the list is read once a round, so between
 	// rounds the monitor sends nothing to the database.
-	roundEvery          = 5 * time.Minute
+	roundEvery = 5 * time.Minute
+	// retryEvery rechecks services down at their last check, from the list
+	// already in memory, so one that was still starting (downstreams start
+	// after the gateway) shows up within seconds, not at the next round.
+	retryEvery          = 30 * time.Second
 	defaultTimeout      = 5 * time.Second
 	maxConcurrentChecks = 4
 	degradedAfter       = 5 * time.Second
@@ -36,6 +40,7 @@ type HealthChecker struct {
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	active map[uuid.UUID]bool
+	last   []sqlc.ListActiveServicesForHealthCheckRow // the latest round's list
 }
 
 func NewHealthChecker(queries sqlc.Querier, statuses *Statuses) *HealthChecker {
@@ -50,23 +55,27 @@ func NewHealthChecker(queries sqlc.Querier, statuses *Statuses) *HealthChecker {
 }
 
 // Run blocks until ctx is cancelled, running a round at start and then
-// every roundEvery.
+// every roundEvery, and rechecking down services every retryEvery.
 func (ch *HealthChecker) Run(ctx context.Context) {
-	ticker := time.NewTicker(roundEvery)
-	defer ticker.Stop()
-	ch.run(ctx, ticker.C)
+	rounds := time.NewTicker(roundEvery)
+	defer rounds.Stop()
+	retries := time.NewTicker(retryEvery)
+	defer retries.Stop()
+	ch.run(ctx, rounds.C, retries.C)
 }
 
-// run is Run with an injectable tick channel, so tests don't sleep.
-func (ch *HealthChecker) run(ctx context.Context, ticks <-chan time.Time) {
+// run is Run with injectable tick channels, so tests don't sleep.
+func (ch *HealthChecker) run(ctx context.Context, rounds, retries <-chan time.Time) {
 	ch.round(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			ch.wg.Wait()
 			return
-		case <-ticks:
+		case <-rounds:
 			ch.round(ctx)
+		case <-retries:
+			ch.retry(ctx)
 		}
 	}
 }
@@ -80,22 +89,55 @@ func (ch *HealthChecker) round(ctx context.Context) {
 		return
 	}
 
+	ch.mu.Lock()
+	ch.last = services
+	ch.mu.Unlock()
+
 	seen := make(map[uuid.UUID]bool, len(services))
 	for _, service := range services {
 		seen[service.ID] = true
-
-		ch.mu.Lock()
-		if ch.active[service.ID] {
-			ch.mu.Unlock()
-			continue
+		if ch.claim(service.ID) {
+			ch.wg.Add(1)
+			go ch.dispatch(ctx, service)
 		}
-		ch.active[service.ID] = true
-		ch.mu.Unlock()
-
-		ch.wg.Add(1)
-		go ch.dispatch(ctx, service)
 	}
 	ch.statuses.keepOnly(seen)
+}
+
+// retry rechecks the latest round's services that were down at their last
+// check, without reading the database, and returns when those checks finish.
+func (ch *HealthChecker) retry(ctx context.Context) {
+	ch.mu.Lock()
+	services := ch.last
+	ch.mu.Unlock()
+
+	var done sync.WaitGroup
+	for _, service := range services {
+		if check, ok := ch.statuses.Get(service.ID); !ok || check.Status != "offline" {
+			continue
+		}
+		if !ch.claim(service.ID) {
+			continue
+		}
+		ch.wg.Add(1)
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			ch.dispatch(ctx, service)
+		}()
+	}
+	done.Wait()
+}
+
+// claim marks a service as being checked, false if it already is.
+func (ch *HealthChecker) claim(id uuid.UUID) bool {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if ch.active[id] {
+		return false
+	}
+	ch.active[id] = true
+	return true
 }
 
 func (ch *HealthChecker) dispatch(ctx context.Context, service sqlc.ListActiveServicesForHealthCheckRow) {

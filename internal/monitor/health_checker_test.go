@@ -121,7 +121,7 @@ func TestRunChecksEveryServiceAtStartAndOnEachRound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ticks := make(chan time.Time)
 	done := make(chan struct{})
-	go func() { ch.run(ctx, ticks); close(done) }()
+	go func() { ch.run(ctx, ticks, nil); close(done) }()
 
 	waitFor(t, func() bool { return count(a) == 1 })
 	if got := queries.listCalls(); got != 1 {
@@ -212,7 +212,7 @@ func TestRunStopsOnCancel(t *testing.T) {
 	ch := NewHealthChecker(&fakeHealthQueries{}, NewStatuses())
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { ch.run(ctx, make(chan time.Time)); close(done) }()
+	go func() { ch.run(ctx, make(chan time.Time), make(chan time.Time)); close(done) }()
 
 	cancel()
 	select {
@@ -231,4 +231,60 @@ func waitFor(t *testing.T, cond func() bool) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+}
+
+// A service down at a round (say, still starting after the gateway) is
+// rechecked soon, from the list already in memory, until it comes up.
+func TestFailedServicesAreRecheckedBetweenRoundsWithoutTheDatabase(t *testing.T) {
+	up, down := uuid.New(), uuid.New()
+	queries := &fakeHealthQueries{}
+	queries.set(service(up, "http://up", 500), service(down, "http://down", 500))
+	statuses := NewStatuses()
+	ch := NewHealthChecker(queries, statuses)
+
+	var mu sync.Mutex
+	counts := map[uuid.UUID]int{}
+	healthy := map[uuid.UUID]bool{up: true}
+	ch.check = func(_ context.Context, svc sqlc.ListActiveServicesForHealthCheckRow) {
+		mu.Lock()
+		defer mu.Unlock()
+		counts[svc.ID]++
+		status := "offline"
+		if healthy[svc.ID] {
+			status = "online"
+		}
+		statuses.Set(svc.ID, Check{Status: status, CheckedAt: time.Now()})
+	}
+	count := func(id uuid.UUID) int { mu.Lock(); defer mu.Unlock(); return counts[id] }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	retries := make(chan time.Time)
+	done := make(chan struct{})
+	go func() { ch.run(ctx, make(chan time.Time), retries); close(done) }()
+	waitFor(t, func() bool { return count(up) == 1 && count(down) == 1 })
+
+	retries <- time.Now()
+	waitFor(t, func() bool { return count(down) == 2 })
+	if count(up) != 1 {
+		t.Errorf("healthy service rechecked %d times, want only at the round", count(up))
+	}
+
+	mu.Lock()
+	healthy[down] = true
+	mu.Unlock()
+	retries <- time.Now()
+	waitFor(t, func() bool { return count(down) == 3 })
+	retries <- time.Now()
+	// The retry loop is synchronous with the tick, so a fourth check would
+	// have started by now if it were going to.
+	retries <- time.Now()
+	if got := count(down); got != 3 {
+		t.Errorf("recovered service checked %d times, want no more retries after it came up", got)
+	}
+	if got := queries.listCalls(); got != 1 {
+		t.Errorf("service list read %d times, want only at the round", got)
+	}
+
+	cancel()
+	<-done
 }
