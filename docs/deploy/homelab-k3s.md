@@ -1828,6 +1828,10 @@ readinessProbe:
   httpGet: {path: /health, port: 6972}
 ```
 
+Probe `/health`, never a route that queries the database (corefinance's
+`/ready`): a probe every few seconds would keep Neon from scaling to zero
+(ADR-0007).
+
 A downstream fails to boot if the JWKS URL is unreachable, so on a cold start
 its pods restart until the gateway is ready. That is expected and settles in
 under a minute.

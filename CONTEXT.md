@@ -91,8 +91,12 @@ A dashboard record describing an external endpoint the gateway probes and report
 _Avoid_: service, downstream, target, endpoint
 
 **Health check**:
-One probe of a monitored service: its status, response time, and status code. Every active service is checked once a round (every 5 minutes), and only the latest result is kept, in the gateway's memory, never the database; after a restart a service is unknown until the first round.
+One probe of a monitored service: whether it answered as expected, how fast, and with what status code. Only the latest one is kept; there is no history and no uptime figure.
 _Avoid_: ping, uptime check, probe
+
+**Service status**:
+What the dashboard says about a monitored service: **online** (its latest health check passed), **offline** (its latest health check failed), **degraded** (a built-in service whose real requests failed recently, or whose health check was slow), **unknown** (not checked since the gateway started), or **paused** (not being checked). Offline outranks degraded.
+_Avoid_: uptime, health, state
 
 **Built-in service**:
 A monitored service the gateway creates from its own config for a downstream it proxies to. It follows the configured URL and can be paused or tuned, but not deleted or repointed.

@@ -253,9 +253,6 @@ coregateway/
 | GET | `/api/services/{id}` | Get service |
 | PUT | `/api/services/{id}` | Update service |
 | DELETE | `/api/services/{id}` | Delete service |
-| GET | `/api/services/{id}/history` | Health check history |
-| GET | `/api/services/{id}/stats` | Uptime stats (24h/7d/30d) |
-| GET | `/api/services/stats/all` | Overall stats |
 
 ## Architecture
 
