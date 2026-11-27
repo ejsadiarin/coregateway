@@ -4,19 +4,12 @@ import {
   fetchService,
   createService,
   updateService,
-  deleteService,
-  fetchServiceHistory,
-  fetchServiceStats,
-  fetchServiceUptime,
-  fetchAllServicesStats
+  deleteService
 } from '@/lib/api';
 import type {
   Service,
   CreateServiceRequest,
-  UpdateServiceRequest,
-  ServiceHealthHistory,
-  ServiceStats,
-  UptimeBucket
+  UpdateServiceRequest
 } from '@/types/api';
 
 export const serviceKeys = {
@@ -24,12 +17,7 @@ export const serviceKeys = {
   lists: () => [...serviceKeys.all, 'list'] as const,
   list: () => [...serviceKeys.lists()] as const,
   details: () => [...serviceKeys.all, 'detail'] as const,
-  detail: (id: string) => [...serviceKeys.details(), id] as const,
-  history: (id: string) => [...serviceKeys.all, 'history', id] as const,
-  stats: (id: string) => [...serviceKeys.all, 'stats', id] as const,
-  allStats: () => [...serviceKeys.all, 'stats', 'all'] as const,
-  uptime: (id: string, bucket: 'hour' | 'day', count: number) =>
-    [...serviceKeys.all, 'uptime', id, bucket, count] as const
+  detail: (id: string) => [...serviceKeys.details(), id] as const
 };
 
 export function useServices() {
@@ -46,42 +34,6 @@ export function useService(id: string | null) {
     queryKey: serviceKeys.detail(id ?? ''),
     queryFn: () => fetchService(id!),
     enabled: !!id
-  });
-}
-
-export function useServiceHistory(id: string | null, enabled: boolean = true) {
-  return useQuery<ServiceHealthHistory[]>({
-    queryKey: serviceKeys.history(id ?? ''),
-    queryFn: () => fetchServiceHistory(id!),
-    enabled: !!id && enabled,
-    staleTime: 30000
-  });
-}
-
-export function useServiceStats(id: string | null, enabled: boolean = true) {
-  return useQuery<ServiceStats>({
-    queryKey: serviceKeys.stats(id ?? ''),
-    queryFn: () => fetchServiceStats(id!),
-    enabled: !!id && enabled,
-    staleTime: 60000
-  });
-}
-
-export function useServiceUptime(id: string, bucket: 'hour' | 'day', count: number) {
-  return useQuery<UptimeBucket[]>({
-    queryKey: serviceKeys.uptime(id, bucket, count),
-    queryFn: () => fetchServiceUptime(id, bucket, count),
-    staleTime: 30000
-  });
-}
-
-export function useAllServicesStats(enabled = true) {
-  return useQuery({
-    queryKey: serviceKeys.allStats(),
-    queryFn: fetchAllServicesStats,
-    enabled,
-    refetchInterval: 60000,
-    staleTime: 30000
   });
 }
 

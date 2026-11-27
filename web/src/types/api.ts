@@ -5,7 +5,6 @@ export interface Service {
     icon?: string;
     description?: string;
     service_type?: string;
-    health_check_interval: number;
     health_check_method: string;
     expected_status_codes: number[];
     timeout: number;
@@ -22,33 +21,8 @@ export interface Service {
         | "unknown";
     last_check?: string;
     response_time?: number;
-}
-
-export interface UptimeBucket {
-    start_at: string;
-    checks: number;
-    successes: number;
-    avg_latency: number;
-}
-
-export interface ServiceHealthHistory {
-    id: string;
-    service_id: string;
-    status: string;
-    response_time?: number;
     status_code?: number;
-    error_message?: string;
-    checked_at: string;
-}
-
-export interface ServiceStats {
-    service_id: string;
-    uptime_24h: number;
-    uptime_7d: number;
-    uptime_30d: number;
-    avg_response_time: number;
-    total_checks: number;
-    successful_checks: number;
+    last_error?: string;
 }
 
 export interface CreateServiceRequest {
@@ -57,7 +31,6 @@ export interface CreateServiceRequest {
     icon?: string;
     description?: string;
     service_type?: string;
-    health_check_interval?: number;
     health_check_method?: string;
     expected_status_codes?: number[];
     timeout?: number;
@@ -69,7 +42,6 @@ export interface UpdateServiceRequest {
     icon?: string;
     description?: string;
     service_type?: string;
-    health_check_interval?: number;
     health_check_method?: string;
     expected_status_codes?: number[];
     timeout?: number;

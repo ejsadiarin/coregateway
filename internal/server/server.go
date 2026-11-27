@@ -41,7 +41,7 @@ type Server struct {
 // New builds the server. It fails closed when internal JWT identity cannot
 // be established: without key material the gateway refuses to start rather
 // than run unable to create tokens.
-func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Server, error) {
+func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, statuses *monitor.Statuses) (*http.Server, error) {
 	issuer, err := token.NewIssuerFromPEM(
 		cfg.JWTPrivateKeyPEM,
 		cfg.JWTKID,
@@ -73,7 +73,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries) (*http.Ser
 	s.KeysService = auth.NewKeysService(queries)
 	s.KeysHandler = auth.NewKeysHandler(s.KeysService)
 	s.UserHandler = user.NewHandler(user.NewService(queries))
-	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries))
+	s.ServiceHandler = monitor.NewHandler(monitor.NewService(queries, statuses))
 	folder := backupFolder(cfg, pool)
 	s.BackupHandler = backup.NewHandler(folder)
 	s.CorefinanceClient = corefinance.New(cfg.CorefinanceURL)

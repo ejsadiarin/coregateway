@@ -4,17 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 
 	sqlc "github.com/ejsadiarin/coregateway/internal/db/sqlc"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// mockQuerier answers the service queries these tests use; any other query
+// panics on the nil embedded Querier.
 type mockQuerier struct {
+	sqlc.Querier
+
 	createServiceFn func(ctx context.Context, arg sqlc.CreateServiceParams) (sqlc.CoregatewayService, error)
 	getServiceFn    func(ctx context.Context, id uuid.UUID) (sqlc.CoregatewayService, error)
 	deleteServiceFn func(ctx context.Context, id uuid.UUID) error
-	listServicesFn  func(ctx context.Context) ([]sqlc.ListServicesRow, error)
+	listServicesFn  func(ctx context.Context) ([]sqlc.CoregatewayService, error)
 }
 
 func (m *mockQuerier) CreateService(ctx context.Context, arg sqlc.CreateServiceParams) (sqlc.CoregatewayService, error) {
@@ -23,101 +28,26 @@ func (m *mockQuerier) CreateService(ctx context.Context, arg sqlc.CreateServiceP
 	}
 	return sqlc.CoregatewayService{}, nil
 }
-func (m *mockQuerier) GetService(_ context.Context, id uuid.UUID) (sqlc.CoregatewayService, error) {
+
+func (m *mockQuerier) GetService(ctx context.Context, id uuid.UUID) (sqlc.CoregatewayService, error) {
 	if m.getServiceFn != nil {
-		return m.getServiceFn(context.Background(), id)
+		return m.getServiceFn(ctx, id)
 	}
 	return sqlc.CoregatewayService{}, sql.ErrNoRows
 }
-func (m *mockQuerier) DeleteService(_ context.Context, id uuid.UUID) error {
+
+func (m *mockQuerier) DeleteService(ctx context.Context, id uuid.UUID) error {
 	if m.deleteServiceFn != nil {
-		return m.deleteServiceFn(context.Background(), id)
+		return m.deleteServiceFn(ctx, id)
 	}
 	return sql.ErrNoRows
 }
-func (m *mockQuerier) GetServiceUptimeBuckets(context.Context, sqlc.GetServiceUptimeBucketsParams) ([]sqlc.GetServiceUptimeBucketsRow, error) {
-	return nil, nil
-}
 
-func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
-	return sqlc.CoregatewayService{}, nil
-}
-
-func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamptz) (int64, error) {
-	return 0, nil
-}
-
-func (m *mockQuerier) ListServices(_ context.Context) ([]sqlc.ListServicesRow, error) {
+func (m *mockQuerier) ListServices(ctx context.Context) ([]sqlc.CoregatewayService, error) {
 	if m.listServicesFn != nil {
-		return m.listServicesFn(context.Background())
+		return m.listServicesFn(ctx)
 	}
 	return nil, nil
-}
-
-func (m *mockQuerier) CountActiveSessions(context.Context) (int64, error) { return 0, nil }
-func (m *mockQuerier) CountAdmins(context.Context) (int64, error)         { return 0, nil }
-func (m *mockQuerier) CreateApiKey(context.Context, sqlc.CreateApiKeyParams) (sqlc.CoregatewayApiKey, error) {
-	return sqlc.CoregatewayApiKey{}, nil
-}
-func (m *mockQuerier) GetApiKeyByHash(context.Context, string) (sqlc.CoregatewayApiKey, error) {
-	return sqlc.CoregatewayApiKey{}, nil
-}
-func (m *mockQuerier) ListApiKeys(context.Context) ([]sqlc.ListApiKeysRow, error) {
-	return nil, nil
-}
-func (m *mockQuerier) RevokeApiKey(context.Context, uuid.UUID) (int64, error) { return 0, nil }
-func (m *mockQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error   { return nil }
-func (m *mockQuerier) CreateHealthHistory(context.Context, sqlc.CreateHealthHistoryParams) (sqlc.CoregatewayServiceHealthHistory, error) {
-	return sqlc.CoregatewayServiceHealthHistory{}, nil
-}
-func (m *mockQuerier) CreateSession(context.Context, sqlc.CreateSessionParams) (sqlc.CoregatewaySession, error) {
-	return sqlc.CoregatewaySession{}, nil
-}
-func (m *mockQuerier) CreateUser(context.Context, sqlc.CreateUserParams) (sqlc.CoregatewayUser, error) {
-	return sqlc.CoregatewayUser{}, nil
-}
-func (m *mockQuerier) DeleteExpiredSessions(context.Context) error                   { return nil }
-func (m *mockQuerier) DeleteSession(context.Context, uuid.UUID) error                { return nil }
-func (m *mockQuerier) DeleteSessionByTokenHash(context.Context, string) error        { return nil }
-func (m *mockQuerier) ExtendSession(context.Context, sqlc.ExtendSessionParams) error { return nil }
-func (m *mockQuerier) DeleteUser(context.Context, uuid.UUID) error                   { return nil }
-func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezoneParams) (pgtype.Text, error) {
-	return arg.Timezone, nil
-}
-func (m *mockQuerier) DeleteUserSessions(context.Context, uuid.UUID) error { return nil }
-func (m *mockQuerier) GetAllServicesStats(context.Context) (sqlc.GetAllServicesStatsRow, error) {
-	return sqlc.GetAllServicesStatsRow{}, nil
-}
-func (m *mockQuerier) GetServiceHistory(context.Context, sqlc.GetServiceHistoryParams) ([]sqlc.CoregatewayServiceHealthHistory, error) {
-	return nil, nil
-}
-func (m *mockQuerier) GetServiceStats24h(context.Context, pgtype.UUID) (sqlc.GetServiceStats24hRow, error) {
-	return sqlc.GetServiceStats24hRow{}, nil
-}
-func (m *mockQuerier) GetServiceStats7d(context.Context, pgtype.UUID) (sqlc.GetServiceStats7dRow, error) {
-	return sqlc.GetServiceStats7dRow{}, nil
-}
-func (m *mockQuerier) GetServiceStats30d(context.Context, pgtype.UUID) (sqlc.GetServiceStats30dRow, error) {
-	return sqlc.GetServiceStats30dRow{}, nil
-}
-func (m *mockQuerier) GetSessionByTokenHash(context.Context, string) (sqlc.GetSessionByTokenHashRow, error) {
-	return sqlc.GetSessionByTokenHashRow{}, nil
-}
-func (m *mockQuerier) GetUser(context.Context, uuid.UUID) (sqlc.CoregatewayUser, error) {
-	return sqlc.CoregatewayUser{}, nil
-}
-func (m *mockQuerier) GetUserByEmail(context.Context, string) (sqlc.CoregatewayUser, error) {
-	return sqlc.CoregatewayUser{}, nil
-}
-func (m *mockQuerier) ListActiveServicesForHealthCheck(context.Context) ([]sqlc.ListActiveServicesForHealthCheckRow, error) {
-	return nil, nil
-}
-func (m *mockQuerier) ListUsers(context.Context) ([]sqlc.CoregatewayUser, error) { return nil, nil }
-func (m *mockQuerier) UpdateService(context.Context, sqlc.UpdateServiceParams) (sqlc.CoregatewayService, error) {
-	return sqlc.CoregatewayService{}, nil
-}
-func (m *mockQuerier) UpdateUser(context.Context, sqlc.UpdateUserParams) (sqlc.CoregatewayUser, error) {
-	return sqlc.CoregatewayUser{}, nil
 }
 
 func TestCreateService_Success(t *testing.T) {
@@ -126,7 +56,7 @@ func TestCreateService_Success(t *testing.T) {
 			return sqlc.CoregatewayService{ID: uuid.New(), Name: arg.Name, Url: arg.Url}, nil
 		},
 	}
-	svc := NewService(mock)
+	svc := NewService(mock, NewStatuses())
 	result, err := svc.CreateService(context.Background(), CreateServiceRequest{Name: "My Service", URL: "https://example.com"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -137,41 +67,74 @@ func TestCreateService_Success(t *testing.T) {
 }
 
 func TestGetService_NotFound(t *testing.T) {
-	mock := &mockQuerier{}
-	svc := NewService(mock)
+	svc := NewService(&mockQuerier{}, NewStatuses())
 	_, err := svc.GetService(context.Background(), uuid.New())
-	if err == nil {
-		t.Fatal("expected error for service not found")
-	}
-	if err.Error() != "service not found" {
-		t.Errorf("expected 'service not found', got: %v", err)
+	if err == nil || err.Error() != "service not found" {
+		t.Fatalf("err = %v, want service not found", err)
 	}
 }
 
 func TestDeleteService_NotFound(t *testing.T) {
-	mock := &mockQuerier{}
-	svc := NewService(mock)
+	svc := NewService(&mockQuerier{}, NewStatuses())
 	err := svc.DeleteService(context.Background(), uuid.New())
-	if err == nil {
-		t.Fatal("expected error for service not found")
-	}
-	if err.Error() != "service not found" {
-		t.Errorf("expected 'service not found', got: %v", err)
+	if err == nil || err.Error() != "service not found" {
+		t.Fatalf("err = %v, want service not found", err)
 	}
 }
 
 func TestListServices_Empty(t *testing.T) {
-	mock := &mockQuerier{
-		listServicesFn: func(_ context.Context) ([]sqlc.ListServicesRow, error) {
-			return []sqlc.ListServicesRow{}, nil
-		},
-	}
-	svc := NewService(mock)
+	svc := NewService(&mockQuerier{}, NewStatuses())
 	services, err := svc.ListServices(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(services) != 0 {
-		t.Errorf("expected 0 services, got %d", len(services))
+	if services == nil || len(services) != 0 {
+		t.Errorf("services = %#v, want an empty list", services)
+	}
+}
+
+func TestServicesCarryTheirLatestCheckFromMemory(t *testing.T) {
+	checked, unchecked := uuid.New(), uuid.New()
+	at := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	statuses := NewStatuses()
+	statuses.Set(checked, Check{Status: "offline", ResponseTime: 42, StatusCode: 503, Error: "Unexpected status code: 503", CheckedAt: at})
+
+	rows := map[uuid.UUID]sqlc.CoregatewayService{
+		checked:   {ID: checked, Name: "a"},
+		unchecked: {ID: unchecked, Name: "b"},
+	}
+	mock := &mockQuerier{
+		listServicesFn: func(context.Context) ([]sqlc.CoregatewayService, error) {
+			return []sqlc.CoregatewayService{rows[checked], rows[unchecked]}, nil
+		},
+		getServiceFn: func(_ context.Context, id uuid.UUID) (sqlc.CoregatewayService, error) {
+			return rows[id], nil
+		},
+	}
+	svc := NewService(mock, statuses)
+
+	list, err := svc.ListServices(context.Background())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("listed %d services, want 2", len(list))
+	}
+	a, b := list[0], list[1]
+	if a.CurrentStatus != "offline" || a.LastCheck == nil || !a.LastCheck.Equal(at) ||
+		a.ResponseTime == nil || *a.ResponseTime != 42 || a.StatusCode == nil || *a.StatusCode != 503 ||
+		a.LastError != "Unexpected status code: 503" {
+		t.Errorf("checked service = %+v, want its latest check", a)
+	}
+	if b.CurrentStatus != "unknown" || b.LastCheck != nil || b.ResponseTime != nil {
+		t.Errorf("unchecked service = %+v, want unknown with no check", b)
+	}
+
+	one, err := svc.GetService(context.Background(), checked)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if one.CurrentStatus != "offline" {
+		t.Errorf("get status = %q, want offline", one.CurrentStatus)
 	}
 }

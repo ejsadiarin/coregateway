@@ -73,9 +73,6 @@ func (m *mockQuerier) RevokeApiKey(context.Context, uuid.UUID) (int64, error) {
 	return 0, nil
 }
 func (m *mockQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error { return nil }
-func (m *mockQuerier) CreateHealthHistory(context.Context, sqlc.CreateHealthHistoryParams) (sqlc.CoregatewayServiceHealthHistory, error) {
-	return sqlc.CoregatewayServiceHealthHistory{}, nil
-}
 func (m *mockQuerier) CreateService(context.Context, sqlc.CreateServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }
@@ -86,41 +83,21 @@ func (m *mockQuerier) SetUserTimezone(_ context.Context, arg sqlc.SetUserTimezon
 	return arg.Timezone, nil
 }
 func (m *mockQuerier) DeleteUserSessions(context.Context, uuid.UUID) error { return nil }
-func (m *mockQuerier) GetAllServicesStats(context.Context) (sqlc.GetAllServicesStatsRow, error) {
-	return sqlc.GetAllServicesStatsRow{}, nil
-}
 func (m *mockQuerier) GetService(context.Context, uuid.UUID) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
-}
-func (m *mockQuerier) GetServiceHistory(context.Context, sqlc.GetServiceHistoryParams) ([]sqlc.CoregatewayServiceHealthHistory, error) {
-	return nil, nil
-}
-func (m *mockQuerier) GetServiceUptimeBuckets(context.Context, sqlc.GetServiceUptimeBucketsParams) ([]sqlc.GetServiceUptimeBucketsRow, error) {
-	return nil, nil
 }
 
 func (m *mockQuerier) UpsertBuiltinService(context.Context, sqlc.UpsertBuiltinServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }
 
-func (m *mockQuerier) DeleteOldHealthHistory(context.Context, pgtype.Timestamptz) (int64, error) {
-	return 0, nil
-}
-
-func (m *mockQuerier) GetServiceStats24h(context.Context, pgtype.UUID) (sqlc.GetServiceStats24hRow, error) {
-	return sqlc.GetServiceStats24hRow{}, nil
-}
-func (m *mockQuerier) GetServiceStats30d(context.Context, pgtype.UUID) (sqlc.GetServiceStats30dRow, error) {
-	return sqlc.GetServiceStats30dRow{}, nil
-}
-func (m *mockQuerier) GetServiceStats7d(context.Context, pgtype.UUID) (sqlc.GetServiceStats7dRow, error) {
-	return sqlc.GetServiceStats7dRow{}, nil
-}
 func (m *mockQuerier) ListActiveServicesForHealthCheck(context.Context) ([]sqlc.ListActiveServicesForHealthCheckRow, error) {
 	return nil, nil
 }
-func (m *mockQuerier) ListServices(context.Context) ([]sqlc.ListServicesRow, error) { return nil, nil }
-func (m *mockQuerier) ListUsers(context.Context) ([]sqlc.CoregatewayUser, error)    { return nil, nil }
+func (m *mockQuerier) ListServices(context.Context) ([]sqlc.CoregatewayService, error) {
+	return nil, nil
+}
+func (m *mockQuerier) ListUsers(context.Context) ([]sqlc.CoregatewayUser, error) { return nil, nil }
 func (m *mockQuerier) UpdateService(context.Context, sqlc.UpdateServiceParams) (sqlc.CoregatewayService, error) {
 	return sqlc.CoregatewayService{}, nil
 }

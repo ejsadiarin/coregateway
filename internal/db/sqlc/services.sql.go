@@ -12,51 +12,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createHealthHistory = `-- name: CreateHealthHistory :one
-INSERT INTO coregateway.service_health_history (
-    service_id, status, response_time, status_code, error_message
-) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING id, service_id, status, response_time, status_code, error_message, checked_at
-`
-
-type CreateHealthHistoryParams struct {
-	ServiceID    pgtype.UUID `json:"service_id"`
-	Status       string      `json:"status"`
-	ResponseTime pgtype.Int4 `json:"response_time"`
-	StatusCode   pgtype.Int4 `json:"status_code"`
-	ErrorMessage pgtype.Text `json:"error_message"`
-}
-
-func (q *Queries) CreateHealthHistory(ctx context.Context, arg CreateHealthHistoryParams) (CoregatewayServiceHealthHistory, error) {
-	row := q.db.QueryRow(ctx, createHealthHistory,
-		arg.ServiceID,
-		arg.Status,
-		arg.ResponseTime,
-		arg.StatusCode,
-		arg.ErrorMessage,
-	)
-	var i CoregatewayServiceHealthHistory
-	err := row.Scan(
-		&i.ID,
-		&i.ServiceID,
-		&i.Status,
-		&i.ResponseTime,
-		&i.StatusCode,
-		&i.ErrorMessage,
-		&i.CheckedAt,
-	)
-	return i, err
-}
-
 const createService = `-- name: CreateService :one
 INSERT INTO coregateway.services (
     name, url, icon, description, service_type,
-    health_check_interval, health_check_method,
-    expected_status_codes, timeout
+    health_check_method, expected_status_codes, timeout
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
+    $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, name, url, icon, description, service_type, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
 `
 
 type CreateServiceParams struct {
@@ -65,7 +27,6 @@ type CreateServiceParams struct {
 	Icon                pgtype.Text `json:"icon"`
 	Description         pgtype.Text `json:"description"`
 	ServiceType         pgtype.Text `json:"service_type"`
-	HealthCheckInterval pgtype.Int4 `json:"health_check_interval"`
 	HealthCheckMethod   pgtype.Text `json:"health_check_method"`
 	ExpectedStatusCodes []int32     `json:"expected_status_codes"`
 	Timeout             pgtype.Int4 `json:"timeout"`
@@ -78,7 +39,6 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (C
 		arg.Icon,
 		arg.Description,
 		arg.ServiceType,
-		arg.HealthCheckInterval,
 		arg.HealthCheckMethod,
 		arg.ExpectedStatusCodes,
 		arg.Timeout,
@@ -91,7 +51,6 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (C
 		&i.Icon,
 		&i.Description,
 		&i.ServiceType,
-		&i.HealthCheckInterval,
 		&i.HealthCheckMethod,
 		&i.ExpectedStatusCodes,
 		&i.Timeout,
@@ -104,19 +63,6 @@ func (q *Queries) CreateService(ctx context.Context, arg CreateServiceParams) (C
 	return i, err
 }
 
-const deleteOldHealthHistory = `-- name: DeleteOldHealthHistory :execrows
-DELETE FROM coregateway.service_health_history
-WHERE checked_at < $1
-`
-
-func (q *Queries) DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamptz) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteOldHealthHistory, checkedBefore)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteService = `-- name: DeleteService :exec
 DELETE FROM coregateway.services
 WHERE id = $1
@@ -127,37 +73,8 @@ func (q *Queries) DeleteService(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const getAllServicesStats = `-- name: GetAllServicesStats :one
-SELECT 
-    COUNT(DISTINCT service_id) as total_services,
-    COUNT(*) as total_checks,
-    COUNT(CASE WHEN status = 'online' THEN 1 END) as successful_checks,
-    COALESCE(AVG(CASE WHEN response_time IS NOT NULL THEN response_time ELSE 0 END), 0) as avg_response_time
-FROM coregateway.service_health_history
-WHERE checked_at >= NOW() - INTERVAL '24 hours'
-`
-
-type GetAllServicesStatsRow struct {
-	TotalServices    int64       `json:"total_services"`
-	TotalChecks      int64       `json:"total_checks"`
-	SuccessfulChecks int64       `json:"successful_checks"`
-	AvgResponseTime  interface{} `json:"avg_response_time"`
-}
-
-func (q *Queries) GetAllServicesStats(ctx context.Context) (GetAllServicesStatsRow, error) {
-	row := q.db.QueryRow(ctx, getAllServicesStats)
-	var i GetAllServicesStatsRow
-	err := row.Scan(
-		&i.TotalServices,
-		&i.TotalChecks,
-		&i.SuccessfulChecks,
-		&i.AvgResponseTime,
-	)
-	return i, err
-}
-
 const getService = `-- name: GetService :one
-SELECT id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key FROM coregateway.services
+SELECT id, name, url, icon, description, service_type, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key FROM coregateway.services
 WHERE id = $1 LIMIT 1
 `
 
@@ -171,7 +88,6 @@ func (q *Queries) GetService(ctx context.Context, id uuid.UUID) (CoregatewayServ
 		&i.Icon,
 		&i.Description,
 		&i.ServiceType,
-		&i.HealthCheckInterval,
 		&i.HealthCheckMethod,
 		&i.ExpectedStatusCodes,
 		&i.Timeout,
@@ -184,189 +100,8 @@ func (q *Queries) GetService(ctx context.Context, id uuid.UUID) (CoregatewayServ
 	return i, err
 }
 
-const getServiceHistory = `-- name: GetServiceHistory :many
-SELECT id, service_id, status, response_time, status_code, error_message, checked_at FROM coregateway.service_health_history
-WHERE service_id = $1
-ORDER BY checked_at DESC
-LIMIT $2
-`
-
-type GetServiceHistoryParams struct {
-	ServiceID pgtype.UUID `json:"service_id"`
-	Limit     int32       `json:"limit"`
-}
-
-func (q *Queries) GetServiceHistory(ctx context.Context, arg GetServiceHistoryParams) ([]CoregatewayServiceHealthHistory, error) {
-	rows, err := q.db.Query(ctx, getServiceHistory, arg.ServiceID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CoregatewayServiceHealthHistory{}
-	for rows.Next() {
-		var i CoregatewayServiceHealthHistory
-		if err := rows.Scan(
-			&i.ID,
-			&i.ServiceID,
-			&i.Status,
-			&i.ResponseTime,
-			&i.StatusCode,
-			&i.ErrorMessage,
-			&i.CheckedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getServiceStats24h = `-- name: GetServiceStats24h :one
-SELECT 
-    COUNT(*) as total_checks,
-    COUNT(CASE WHEN status = 'online' THEN 1 END) as successful_checks,
-    COALESCE(AVG(CASE WHEN response_time IS NOT NULL THEN response_time ELSE 0 END), 0) as avg_response_time
-FROM coregateway.service_health_history
-WHERE service_id = $1 AND checked_at >= NOW() - INTERVAL '24 hours'
-`
-
-type GetServiceStats24hRow struct {
-	TotalChecks      int64       `json:"total_checks"`
-	SuccessfulChecks int64       `json:"successful_checks"`
-	AvgResponseTime  interface{} `json:"avg_response_time"`
-}
-
-func (q *Queries) GetServiceStats24h(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats24hRow, error) {
-	row := q.db.QueryRow(ctx, getServiceStats24h, serviceID)
-	var i GetServiceStats24hRow
-	err := row.Scan(&i.TotalChecks, &i.SuccessfulChecks, &i.AvgResponseTime)
-	return i, err
-}
-
-const getServiceStats30d = `-- name: GetServiceStats30d :one
-SELECT 
-    COUNT(*) as total_checks,
-    COUNT(CASE WHEN status = 'online' THEN 1 END) as successful_checks
-FROM coregateway.service_health_history
-WHERE service_id = $1 AND checked_at >= NOW() - INTERVAL '30 days'
-`
-
-type GetServiceStats30dRow struct {
-	TotalChecks      int64 `json:"total_checks"`
-	SuccessfulChecks int64 `json:"successful_checks"`
-}
-
-func (q *Queries) GetServiceStats30d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats30dRow, error) {
-	row := q.db.QueryRow(ctx, getServiceStats30d, serviceID)
-	var i GetServiceStats30dRow
-	err := row.Scan(&i.TotalChecks, &i.SuccessfulChecks)
-	return i, err
-}
-
-const getServiceStats7d = `-- name: GetServiceStats7d :one
-SELECT 
-    COUNT(*) as total_checks,
-    COUNT(CASE WHEN status = 'online' THEN 1 END) as successful_checks
-FROM coregateway.service_health_history
-WHERE service_id = $1 AND checked_at >= NOW() - INTERVAL '7 days'
-`
-
-type GetServiceStats7dRow struct {
-	TotalChecks      int64 `json:"total_checks"`
-	SuccessfulChecks int64 `json:"successful_checks"`
-}
-
-func (q *Queries) GetServiceStats7d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats7dRow, error) {
-	row := q.db.QueryRow(ctx, getServiceStats7d, serviceID)
-	var i GetServiceStats7dRow
-	err := row.Scan(&i.TotalChecks, &i.SuccessfulChecks)
-	return i, err
-}
-
-const getServiceUptimeBuckets = `-- name: GetServiceUptimeBuckets :many
-WITH bounds AS (
-    SELECT $1::uuid AS service_id,
-           $2::text AS unit,
-           $3::timestamp AS start_at,
-           $4::timestamp AS end_at
-), buckets AS (
-    SELECT generate_series(
-        date_trunc((SELECT unit FROM bounds), (SELECT start_at FROM bounds)),
-        date_trunc((SELECT unit FROM bounds), (SELECT end_at FROM bounds)),
-        ('1 ' || (SELECT unit FROM bounds))::interval
-    ) AS bucket_start
-), checks AS (
-    -- Buckets are UTC hours and days, whatever the session's TimeZone.
-    SELECT date_trunc(b.unit, h.checked_at AT TIME ZONE 'UTC') AS bucket_start,
-           COUNT(*)::bigint AS check_count,
-           COUNT(*) FILTER (WHERE h.status = 'online')::bigint AS successes,
-           COALESCE(AVG(h.response_time) FILTER (WHERE h.response_time IS NOT NULL), 0)::float8 AS avg_latency
-    FROM coregateway.service_health_history h, bounds b
-    WHERE h.service_id = b.service_id
-      AND h.checked_at >= b.start_at AT TIME ZONE 'UTC'
-      AND h.checked_at <= b.end_at AT TIME ZONE 'UTC'
-    GROUP BY 1
-)
-SELECT buckets.bucket_start::timestamp AS bucket_start,
-       COALESCE(checks.check_count, 0)::bigint AS checks,
-       COALESCE(checks.successes, 0)::bigint AS successes,
-       COALESCE(checks.avg_latency, 0)::float8 AS avg_latency
-FROM buckets
-LEFT JOIN checks USING (bucket_start)
-ORDER BY buckets.bucket_start
-`
-
-type GetServiceUptimeBucketsParams struct {
-	ServiceID uuid.UUID        `json:"service_id"`
-	Bucket    string           `json:"bucket"`
-	StartAt   pgtype.Timestamp `json:"start_at"`
-	EndAt     pgtype.Timestamp `json:"end_at"`
-}
-
-type GetServiceUptimeBucketsRow struct {
-	BucketStart pgtype.Timestamp `json:"bucket_start"`
-	Checks      int64            `json:"checks"`
-	Successes   int64            `json:"successes"`
-	AvgLatency  float64          `json:"avg_latency"`
-}
-
-// Contiguous hour or day buckets ending with the current one. A bucket with
-// no checks comes back as zeroes, so the page can tell "no data" from down.
-func (q *Queries) GetServiceUptimeBuckets(ctx context.Context, arg GetServiceUptimeBucketsParams) ([]GetServiceUptimeBucketsRow, error) {
-	rows, err := q.db.Query(ctx, getServiceUptimeBuckets,
-		arg.ServiceID,
-		arg.Bucket,
-		arg.StartAt,
-		arg.EndAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetServiceUptimeBucketsRow{}
-	for rows.Next() {
-		var i GetServiceUptimeBucketsRow
-		if err := rows.Scan(
-			&i.BucketStart,
-			&i.Checks,
-			&i.Successes,
-			&i.AvgLatency,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listActiveServicesForHealthCheck = `-- name: ListActiveServicesForHealthCheck :many
-SELECT id, name, url, health_check_method, expected_status_codes, timeout, health_check_interval
+SELECT id, name, url, health_check_method, expected_status_codes, timeout
 FROM coregateway.services
 WHERE is_active = true
 `
@@ -378,7 +113,6 @@ type ListActiveServicesForHealthCheckRow struct {
 	HealthCheckMethod   pgtype.Text `json:"health_check_method"`
 	ExpectedStatusCodes []int32     `json:"expected_status_codes"`
 	Timeout             pgtype.Int4 `json:"timeout"`
-	HealthCheckInterval pgtype.Int4 `json:"health_check_interval"`
 }
 
 func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListActiveServicesForHealthCheckRow, error) {
@@ -397,7 +131,6 @@ func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListA
 			&i.HealthCheckMethod,
 			&i.ExpectedStatusCodes,
 			&i.Timeout,
-			&i.HealthCheckInterval,
 		); err != nil {
 			return nil, err
 		}
@@ -410,52 +143,19 @@ func (q *Queries) ListActiveServicesForHealthCheck(ctx context.Context) ([]ListA
 }
 
 const listServices = `-- name: ListServices :many
-SELECT 
-    s.id, s.name, s.url, s.icon, s.description, s.service_type, s.health_check_interval, s.health_check_method, s.expected_status_codes, s.timeout, s.created_at, s.updated_at, s.is_active, s.is_builtin, s.builtin_key,
-    COALESCE(h.status, 'unknown') as current_status,
-    h.checked_at as last_check,
-    h.response_time
-FROM coregateway.services s
-LEFT JOIN LATERAL (
-    SELECT status, checked_at, response_time
-    FROM coregateway.service_health_history
-    WHERE service_id = s.id
-    ORDER BY checked_at DESC
-    LIMIT 1
-) h ON true
-ORDER BY s.name
+SELECT id, name, url, icon, description, service_type, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key FROM coregateway.services
+ORDER BY name
 `
 
-type ListServicesRow struct {
-	ID                  uuid.UUID          `json:"id"`
-	Name                string             `json:"name"`
-	Url                 string             `json:"url"`
-	Icon                pgtype.Text        `json:"icon"`
-	Description         pgtype.Text        `json:"description"`
-	ServiceType         pgtype.Text        `json:"service_type"`
-	HealthCheckInterval pgtype.Int4        `json:"health_check_interval"`
-	HealthCheckMethod   pgtype.Text        `json:"health_check_method"`
-	ExpectedStatusCodes []int32            `json:"expected_status_codes"`
-	Timeout             pgtype.Int4        `json:"timeout"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	IsActive            pgtype.Bool        `json:"is_active"`
-	IsBuiltin           bool               `json:"is_builtin"`
-	BuiltinKey          pgtype.Text        `json:"builtin_key"`
-	CurrentStatus       string             `json:"current_status"`
-	LastCheck           pgtype.Timestamptz `json:"last_check"`
-	ResponseTime        pgtype.Int4        `json:"response_time"`
-}
-
-func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {
+func (q *Queries) ListServices(ctx context.Context) ([]CoregatewayService, error) {
 	rows, err := q.db.Query(ctx, listServices)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListServicesRow{}
+	items := []CoregatewayService{}
 	for rows.Next() {
-		var i ListServicesRow
+		var i CoregatewayService
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -463,7 +163,6 @@ func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {
 			&i.Icon,
 			&i.Description,
 			&i.ServiceType,
-			&i.HealthCheckInterval,
 			&i.HealthCheckMethod,
 			&i.ExpectedStatusCodes,
 			&i.Timeout,
@@ -472,9 +171,6 @@ func (q *Queries) ListServices(ctx context.Context) ([]ListServicesRow, error) {
 			&i.IsActive,
 			&i.IsBuiltin,
 			&i.BuiltinKey,
-			&i.CurrentStatus,
-			&i.LastCheck,
-			&i.ResponseTime,
 		); err != nil {
 			return nil, err
 		}
@@ -494,14 +190,13 @@ SET
     icon = COALESCE($3, icon),
     description = COALESCE($4, description),
     service_type = COALESCE($5, service_type),
-    health_check_interval = COALESCE($6, health_check_interval),
-    health_check_method = COALESCE($7, health_check_method),
-    expected_status_codes = COALESCE($8, expected_status_codes),
-    timeout = COALESCE($9, timeout),
-    is_active = COALESCE($10, is_active),
+    health_check_method = COALESCE($6, health_check_method),
+    expected_status_codes = COALESCE($7, expected_status_codes),
+    timeout = COALESCE($8, timeout),
+    is_active = COALESCE($9, is_active),
     updated_at = NOW()
-WHERE id = $11
-RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
+WHERE id = $10
+RETURNING id, name, url, icon, description, service_type, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
 `
 
 type UpdateServiceParams struct {
@@ -510,7 +205,6 @@ type UpdateServiceParams struct {
 	Icon                pgtype.Text `json:"icon"`
 	Description         pgtype.Text `json:"description"`
 	ServiceType         pgtype.Text `json:"service_type"`
-	HealthCheckInterval pgtype.Int4 `json:"health_check_interval"`
 	HealthCheckMethod   pgtype.Text `json:"health_check_method"`
 	ExpectedStatusCodes []int32     `json:"expected_status_codes"`
 	Timeout             pgtype.Int4 `json:"timeout"`
@@ -525,7 +219,6 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (C
 		arg.Icon,
 		arg.Description,
 		arg.ServiceType,
-		arg.HealthCheckInterval,
 		arg.HealthCheckMethod,
 		arg.ExpectedStatusCodes,
 		arg.Timeout,
@@ -540,7 +233,6 @@ func (q *Queries) UpdateService(ctx context.Context, arg UpdateServiceParams) (C
 		&i.Icon,
 		&i.Description,
 		&i.ServiceType,
-		&i.HealthCheckInterval,
 		&i.HealthCheckMethod,
 		&i.ExpectedStatusCodes,
 		&i.Timeout,
@@ -564,7 +256,7 @@ ON CONFLICT (builtin_key) DO UPDATE SET
     description = EXCLUDED.description,
     service_type = EXCLUDED.service_type,
     updated_at = NOW()
-RETURNING id, name, url, icon, description, service_type, health_check_interval, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
+RETURNING id, name, url, icon, description, service_type, health_check_method, expected_status_codes, timeout, created_at, updated_at, is_active, is_builtin, builtin_key
 `
 
 type UpsertBuiltinServiceParams struct {
@@ -575,7 +267,7 @@ type UpsertBuiltinServiceParams struct {
 	BuiltinKey  pgtype.Text `json:"builtin_key"`
 }
 
-// The config owns a built-in's URL and identity; its pause flag, interval,
+// The config owns a built-in's URL and identity; its pause flag,
 // timeout and other tuning stay as the admin left them.
 func (q *Queries) UpsertBuiltinService(ctx context.Context, arg UpsertBuiltinServiceParams) (CoregatewayService, error) {
 	row := q.db.QueryRow(ctx, upsertBuiltinService,
@@ -593,7 +285,6 @@ func (q *Queries) UpsertBuiltinService(ctx context.Context, arg UpsertBuiltinSer
 		&i.Icon,
 		&i.Description,
 		&i.ServiceType,
-		&i.HealthCheckInterval,
 		&i.HealthCheckMethod,
 		&i.ExpectedStatusCodes,
 		&i.Timeout,

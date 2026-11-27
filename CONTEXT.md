@@ -91,7 +91,7 @@ A dashboard record describing an external endpoint the gateway probes and report
 _Avoid_: service, downstream, target, endpoint
 
 **Health check**:
-One probe of a monitored service, recorded with its status, response time, and status code.
+One probe of a monitored service: its status, response time, and status code. Every active service is checked once a round (every 5 minutes), and only the latest result is kept, in the gateway's memory, never the database; after a restart a service is unknown until the first round.
 _Avoid_: ping, uptime check, probe
 
 **Built-in service**:

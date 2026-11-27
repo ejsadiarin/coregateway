@@ -172,7 +172,6 @@ Content-Type: application/json
   "icon": "🚀",
   "description": "A test service",
   "service_type": "web",
-  "health_check_interval": 60,
   "health_check_method": "GET",
   "expected_status_codes": [200],
   "timeout": 5000
@@ -181,10 +180,6 @@ Content-Type: application/json
 ### List Services
 
 GET {{host}}/api/services/list
-
-### Get All Services Stats
-
-GET {{host}}/api/services/stats/all
 
 ### Get Service
 
@@ -204,13 +199,6 @@ Content-Type: application/json
 
 DELETE {{host}}/api/services/{{service_id}}
 
-### Get Service History (limit hardcoded to 100)
-
-GET {{host}}/api/services/{{service_id}}/history
-
-### Get Service Stats (24h / 7d / 30d uptime)
-
-GET {{host}}/api/services/{{service_id}}/stats
 
 
 # ─── API Keys (self-service mint; admin-only list/revoke) ───────────────────

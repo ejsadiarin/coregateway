@@ -16,43 +16,33 @@ type Querier interface {
 	CountAdmins(ctx context.Context) (int64, error)
 	// API keys (gateway-owned credentials for programmatic and service callers)
 	CreateApiKey(ctx context.Context, arg CreateApiKeyParams) (CoregatewayApiKey, error)
-	CreateHealthHistory(ctx context.Context, arg CreateHealthHistoryParams) (CoregatewayServiceHealthHistory, error)
 	CreateService(ctx context.Context, arg CreateServiceParams) (CoregatewayService, error)
 	// Sessions
 	CreateSession(ctx context.Context, arg CreateSessionParams) (CoregatewaySession, error)
 	// Users
 	CreateUser(ctx context.Context, arg CreateUserParams) (CoregatewayUser, error)
 	DeleteExpiredSessions(ctx context.Context) error
-	DeleteOldHealthHistory(ctx context.Context, checkedBefore pgtype.Timestamptz) (int64, error)
 	DeleteService(ctx context.Context, id uuid.UUID) error
 	DeleteSession(ctx context.Context, id uuid.UUID) error
 	DeleteSessionByTokenHash(ctx context.Context, tokenHash string) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
 	DeleteUserSessions(ctx context.Context, userID uuid.UUID) error
 	ExtendSession(ctx context.Context, arg ExtendSessionParams) error
-	GetAllServicesStats(ctx context.Context) (GetAllServicesStatsRow, error)
 	GetApiKeyByHash(ctx context.Context, keyHash string) (CoregatewayApiKey, error)
 	GetService(ctx context.Context, id uuid.UUID) (CoregatewayService, error)
-	GetServiceHistory(ctx context.Context, arg GetServiceHistoryParams) ([]CoregatewayServiceHealthHistory, error)
-	GetServiceStats24h(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats24hRow, error)
-	GetServiceStats30d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats30dRow, error)
-	GetServiceStats7d(ctx context.Context, serviceID pgtype.UUID) (GetServiceStats7dRow, error)
-	// Contiguous hour or day buckets ending with the current one. A bucket with
-	// no checks comes back as zeroes, so the page can tell "no data" from down.
-	GetServiceUptimeBuckets(ctx context.Context, arg GetServiceUptimeBucketsParams) ([]GetServiceUptimeBucketsRow, error)
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (GetSessionByTokenHashRow, error)
 	GetUser(ctx context.Context, id uuid.UUID) (CoregatewayUser, error)
 	GetUserByEmail(ctx context.Context, email string) (CoregatewayUser, error)
 	ListActiveServicesForHealthCheck(ctx context.Context) ([]ListActiveServicesForHealthCheckRow, error)
 	ListApiKeys(ctx context.Context) ([]ListApiKeysRow, error)
-	ListServices(ctx context.Context) ([]ListServicesRow, error)
+	ListServices(ctx context.Context) ([]CoregatewayService, error)
 	ListUsers(ctx context.Context) ([]CoregatewayUser, error)
 	RevokeApiKey(ctx context.Context, id uuid.UUID) (int64, error)
 	SetUserTimezone(ctx context.Context, arg SetUserTimezoneParams) (pgtype.Text, error)
 	TouchApiKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	UpdateService(ctx context.Context, arg UpdateServiceParams) (CoregatewayService, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (CoregatewayUser, error)
-	// The config owns a built-in's URL and identity; its pause flag, interval,
+	// The config owns a built-in's URL and identity; its pause flag,
 	// timeout and other tuning stay as the admin left them.
 	UpsertBuiltinService(ctx context.Context, arg UpsertBuiltinServiceParams) (CoregatewayService, error)
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
 )
@@ -118,72 +117,4 @@ func (h *Handler) DeleteService(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("monitor.Handler.DeleteService: service deleted", "id", id)
 	helper.RespondJSON(w, http.StatusNoContent, nil)
-}
-
-func (h *Handler) GetServiceUptime(w http.ResponseWriter, r *http.Request) {
-	id, ok := helper.ParseUUID(w, r, "id")
-	if !ok {
-		return
-	}
-	bucket := r.URL.Query().Get("bucket")
-	if bucket != "hour" && bucket != "day" {
-		helper.RespondErrorJSON(w, http.StatusBadRequest, "bucket must be hour or day")
-		return
-	}
-	count, err := strconv.Atoi(r.URL.Query().Get("count"))
-	if err != nil || count < 1 || count > 720 {
-		helper.RespondErrorJSON(w, http.StatusBadRequest, "count must be between 1 and 720")
-		return
-	}
-	buckets, err := h.service.UptimeBuckets(r.Context(), id, bucket, int32(count))
-	if err != nil {
-		slog.Error("monitor.Handler.GetServiceUptime: failed", "error", err, "id", id)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	helper.RespondJSON(w, http.StatusOK, buckets)
-}
-
-func (h *Handler) GetServiceHistory(w http.ResponseWriter, r *http.Request) {
-	id, ok := helper.ParseUUID(w, r, "id")
-	if !ok {
-		return
-	}
-	slog.Debug("monitor.Handler.GetServiceHistory: request received", "id", id)
-	history, err := h.service.GetServiceHistory(r.Context(), id, 100)
-	if err != nil {
-		slog.Error("monitor.Handler.GetServiceHistory: failed", "error", err, "id", id)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	slog.Debug("monitor.Handler.GetServiceHistory: success", "id", id, "count", len(history))
-	helper.RespondJSON(w, http.StatusOK, history)
-}
-
-func (h *Handler) GetServiceStats(w http.ResponseWriter, r *http.Request) {
-	id, ok := helper.ParseUUID(w, r, "id")
-	if !ok {
-		return
-	}
-	slog.Debug("monitor.Handler.GetServiceStats: request received", "id", id)
-	stats, err := h.service.GetServiceStats(r.Context(), id)
-	if err != nil {
-		slog.Error("monitor.Handler.GetServiceStats: failed", "error", err, "id", id)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	slog.Debug("monitor.Handler.GetServiceStats: success", "id", id)
-	helper.RespondJSON(w, http.StatusOK, stats)
-}
-
-func (h *Handler) GetAllServicesStats(w http.ResponseWriter, r *http.Request) {
-	slog.Debug("monitor.Handler.GetAllServicesStats: request received")
-	stats, err := h.service.GetAllServiceStats(r.Context())
-	if err != nil {
-		slog.Error("monitor.Handler.GetAllServicesStats: failed", "error", err)
-		helper.RespondErrorJSON(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	slog.Debug("monitor.Handler.GetAllServicesStats: success")
-	helper.RespondJSON(w, http.StatusOK, stats)
 }

@@ -84,13 +84,9 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 		r.Use(auth.RequireKeyScope("admin"))
 		r.Post("/api/services", s.ServiceHandler.CreateService)
 		r.Get("/api/services/list", s.ServiceHandler.ListServices)
-		r.Get("/api/services/stats/all", s.ServiceHandler.GetAllServicesStats)
 		r.Get("/api/services/{id}", s.ServiceHandler.GetService)
 		r.Put("/api/services/{id}", s.ServiceHandler.UpdateService)
 		r.Delete("/api/services/{id}", s.ServiceHandler.DeleteService)
-		r.Get("/api/services/{id}/history", s.ServiceHandler.GetServiceHistory)
-		r.Get("/api/services/{id}/uptime", s.ServiceHandler.GetServiceUptime)
-		r.Get("/api/services/{id}/stats", s.ServiceHandler.GetServiceStats)
 	})
 
 	// backups (ADR-0006) — admin-only; key callers need the admin scope.

@@ -30,9 +30,9 @@ import (
 // password login. Unknown keys/hashes report pgx.ErrNoRows like postgres.
 type keyAuthStubQuerier struct {
 	db.Querier
-	users       map[uuid.UUID]db.CoregatewayUser
-	keyByHash   map[string]db.CoregatewayApiKey
-	keysCreated []db.CreateApiKeyParams
+	users        map[uuid.UUID]db.CoregatewayUser
+	keyByHash    map[string]db.CoregatewayApiKey
+	keysCreated  []db.CreateApiKeyParams
 	usersCreated int
 }
 
@@ -115,19 +115,19 @@ func (q *keyAuthStubQuerier) RevokeApiKey(context.Context, uuid.UUID) (int64, er
 
 func (q *keyAuthStubQuerier) TouchApiKeyLastUsed(context.Context, uuid.UUID) error { return nil }
 
-func (q *keyAuthStubQuerier) ListServices(context.Context) ([]db.ListServicesRow, error) {
-	return []db.ListServicesRow{}, nil
+func (q *keyAuthStubQuerier) ListServices(context.Context) ([]db.CoregatewayService, error) {
+	return []db.CoregatewayService{}, nil
 }
 
 const (
-	testAdminKeyPlaintext = "test-admin-key"
-	testReadKeyPlaintext  = "test-read-key"
-	testWriteKeyPlaintext = "test-write-key"
-	testAdminReadKeyPlaintext = "test-admin-read-key"
-	testCoredrawReadKeyPlaintext = "test-coredraw-read-key"
+	testAdminKeyPlaintext         = "test-admin-key"
+	testReadKeyPlaintext          = "test-read-key"
+	testWriteKeyPlaintext         = "test-write-key"
+	testAdminReadKeyPlaintext     = "test-admin-read-key"
+	testCoredrawReadKeyPlaintext  = "test-coredraw-read-key"
 	testCoredrawWriteKeyPlaintext = "test-coredraw-write-key"
-	testCorebanReadKeyPlaintext = "test-coreban-read-key"
-	testCorebanWriteKeyPlaintext = "test-coreban-write-key"
+	testCorebanReadKeyPlaintext   = "test-coreban-read-key"
+	testCorebanWriteKeyPlaintext  = "test-coreban-write-key"
 )
 
 func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUID, uuid.UUID) {
@@ -144,14 +144,14 @@ func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUI
 			userID:  {ID: userID, Email: "user@example.com", Role: auth.RoleUser},
 		},
 		keyByHash: map[string]db.CoregatewayApiKey{
-			auth.HashAPIKey(testAdminKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"admin"}},
-			auth.HashAPIKey(testReadKeyPlaintext):  {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"corefinance:read"}},
-			auth.HashAPIKey(testWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:write"}},
-			auth.HashAPIKey(testAdminReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:read"}},
-			auth.HashAPIKey(testCoredrawReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coredraw:read"}},
+			auth.HashAPIKey(testAdminKeyPlaintext):         {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"admin"}},
+			auth.HashAPIKey(testReadKeyPlaintext):          {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"corefinance:read"}},
+			auth.HashAPIKey(testWriteKeyPlaintext):         {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:write"}},
+			auth.HashAPIKey(testAdminReadKeyPlaintext):     {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"corefinance:read"}},
+			auth.HashAPIKey(testCoredrawReadKeyPlaintext):  {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coredraw:read"}},
 			auth.HashAPIKey(testCoredrawWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"coredraw:write"}},
-			auth.HashAPIKey(testCorebanReadKeyPlaintext): {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coreban:read"}},
-			auth.HashAPIKey(testCorebanWriteKeyPlaintext): {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"coreban:write"}},
+			auth.HashAPIKey(testCorebanReadKeyPlaintext):   {ID: uuid.New(), OwnerUserID: userID, Scopes: []string{"coreban:read"}},
+			auth.HashAPIKey(testCorebanWriteKeyPlaintext):  {ID: uuid.New(), OwnerUserID: adminID, Scopes: []string{"coreban:write"}},
 		},
 	}
 	authSvc := auth.NewService(q)
@@ -176,7 +176,7 @@ func keyAuthTestSetup(t *testing.T) (http.Handler, *keyAuthStubQuerier, uuid.UUI
 		KeysService:       keysSvc,
 		KeysHandler:       auth.NewKeysHandler(keysSvc),
 		UserHandler:       user.NewHandler(user.NewService(q)),
-		ServiceHandler:    monitor.NewHandler(monitor.NewService(q)),
+		ServiceHandler:    monitor.NewHandler(monitor.NewService(q, monitor.NewStatuses())),
 		CorefinanceClient: corefinance.New(downstream.URL),
 		TokenIssuer:       iss,
 	}

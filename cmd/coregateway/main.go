@@ -42,7 +42,8 @@ func main() {
 		log.Fatalf("Failed to seed built-in services: %v", err)
 	}
 
-	healthChecker := monitor.NewHealthChecker(queries)
+	statuses := monitor.NewStatuses()
+	healthChecker := monitor.NewHealthChecker(queries, statuses)
 	checkerCtx, stopChecker := context.WithCancel(context.Background())
 	checkerDone := make(chan struct{})
 	go func() {
@@ -50,7 +51,7 @@ func main() {
 		close(checkerDone)
 	}()
 
-	srv, err := server.New(cfg, pool, queries)
+	srv, err := server.New(cfg, pool, queries, statuses)
 	if err != nil {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}

@@ -2016,68 +2016,6 @@ paths:
       summary: Update a service
       tags:
       - services
-  /api/services/{id}/history:
-    get:
-      description: Get health check history for a specific service
-      parameters:
-      - description: Service ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - default: 100
-        description: Limit
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/core-gateway_internal_repository_sqlc.ServiceHealthHistory'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
-      summary: Get service health history
-      tags:
-      - services
-  /api/services/{id}/stats:
-    get:
-      description: Get uptime statistics for a specific service
-      parameters:
-      - description: Service ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
-      summary: Get service statistics
-      tags:
-      - services
   /api/services/list:
     get:
       description: Get all active services with their current health status
@@ -2095,24 +2033,6 @@ paths:
           schema:
             $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
       summary: List all services
-      tags:
-      - services
-  /api/services/stats/all:
-    get:
-      description: Get overall statistics for all services
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/core-gateway_internal_shared_models.ErrorResponse'
-      summary: Get overall statistics
       tags:
       - services
   /api/system/stats:

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,31 +15,36 @@ import (
 	sqlc "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 )
 
+// fakeHealthQueries answers only the service list; any other query panics
+// on the nil embedded Querier, so a test fails if checks touch the database.
 type fakeHealthQueries struct {
 	sqlc.Querier
 
+	mu       sync.Mutex
 	services []sqlc.ListActiveServicesForHealthCheckRow
-	created  []sqlc.CreateHealthHistoryParams
-	cutoff   pgtype.Timestamptz
-	prunes   int
+	lists    int
 }
 
 func (f *fakeHealthQueries) ListActiveServicesForHealthCheck(context.Context) ([]sqlc.ListActiveServicesForHealthCheckRow, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lists++
 	return f.services, nil
 }
 
-func (f *fakeHealthQueries) CreateHealthHistory(_ context.Context, arg sqlc.CreateHealthHistoryParams) (sqlc.CoregatewayServiceHealthHistory, error) {
-	f.created = append(f.created, arg)
-	return sqlc.CoregatewayServiceHealthHistory{}, nil
+func (f *fakeHealthQueries) set(services ...sqlc.ListActiveServicesForHealthCheckRow) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.services = services
 }
 
-func (f *fakeHealthQueries) DeleteOldHealthHistory(_ context.Context, cutoff pgtype.Timestamptz) (int64, error) {
-	f.prunes++
-	f.cutoff = cutoff
-	return 1, nil
+func (f *fakeHealthQueries) listCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lists
 }
 
-func service(id uuid.UUID, url string, interval, timeout int32) sqlc.ListActiveServicesForHealthCheckRow {
+func service(id uuid.UUID, url string, timeout int32) sqlc.ListActiveServicesForHealthCheckRow {
 	return sqlc.ListActiveServicesForHealthCheckRow{
 		ID:                  id,
 		Name:                "svc",
@@ -48,111 +52,126 @@ func service(id uuid.UUID, url string, interval, timeout int32) sqlc.ListActiveS
 		HealthCheckMethod:   pgtype.Text{String: "GET", Valid: true},
 		ExpectedStatusCodes: []int32{200},
 		Timeout:             pgtype.Int4{Int32: timeout, Valid: true},
-		HealthCheckInterval: pgtype.Int4{Int32: interval, Valid: true},
 	}
 }
 
-func TestCheckServiceUsesExpectedStatusAndTimeout(t *testing.T) {
-	t.Run("expected status records online", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
+func checkOnce(t *testing.T, handler http.HandlerFunc, timeout int32) Check {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	defer server.Close()
 
-		queries := &fakeHealthQueries{}
-		ch := NewHealthChecker(queries)
-		ch.checkService(context.Background(), service(uuid.New(), server.URL, 60, 500))
+	id := uuid.New()
+	statuses := NewStatuses()
+	ch := NewHealthChecker(&fakeHealthQueries{}, statuses)
+	ch.checkService(context.Background(), service(id, server.URL, timeout))
 
-		if len(queries.created) != 1 || queries.created[0].Status != "online" {
-			t.Fatalf("created = %+v, want one online check", queries.created)
-		}
-	})
-
-	t.Run("unexpected status records offline", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusTeapot)
-		}))
-		defer server.Close()
-
-		queries := &fakeHealthQueries{}
-		ch := NewHealthChecker(queries)
-		ch.checkService(context.Background(), service(uuid.New(), server.URL, 60, 500))
-
-		if len(queries.created) != 1 || queries.created[0].Status != "offline" {
-			t.Fatalf("created = %+v, want one offline check", queries.created)
-		}
-		if !strings.Contains(queries.created[0].ErrorMessage.String, "418") {
-			t.Errorf("error = %q, want the status code", queries.created[0].ErrorMessage.String)
-		}
-	})
-
-	t.Run("timeout records offline", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			<-r.Context().Done()
-		}))
-		defer server.Close()
-
-		queries := &fakeHealthQueries{}
-		ch := NewHealthChecker(queries)
-		ch.checkService(context.Background(), service(uuid.New(), server.URL, 60, 20))
-
-		if len(queries.created) != 1 || queries.created[0].Status != "offline" {
-			t.Fatalf("created = %+v, want one offline check", queries.created)
-		}
-	})
-}
-
-func TestCheckDueUsesEachServicesInterval(t *testing.T) {
-	serviceA, serviceB := uuid.New(), uuid.New()
-	queries := &fakeHealthQueries{services: []sqlc.ListActiveServicesForHealthCheckRow{
-		service(serviceA, "http://a", 30, 500),
-		service(serviceB, "http://b", 60, 500),
-	}}
-	ch := NewHealthChecker(queries)
-	var checked sync.Map
-	ch.check = func(_ context.Context, svc sqlc.ListActiveServicesForHealthCheckRow) {
-		count, _ := checked.LoadOrStore(svc.ID, new(atomic.Int32))
-		count.(*atomic.Int32).Add(1)
-	}
-
-	now := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
-	ch.checkDue(context.Background(), now)
-	ch.wg.Wait()
-	if got := countOf(&checked, serviceA); got != 1 {
-		t.Fatalf("A after start = %d, want 1", got)
-	}
-
-	ch.checkDue(context.Background(), now.Add(30*time.Second))
-	ch.wg.Wait()
-	if got := countOf(&checked, serviceA); got != 2 {
-		t.Errorf("A after 30s = %d, want 2", got)
-	}
-	if got := countOf(&checked, serviceB); got != 1 {
-		t.Errorf("B after 30s = %d, want 1", got)
-	}
-
-	ch.checkDue(context.Background(), now.Add(60*time.Second))
-	ch.wg.Wait()
-	if got := countOf(&checked, serviceB); got != 2 {
-		t.Errorf("B after 60s = %d, want 2", got)
-	}
-}
-
-func countOf(checked *sync.Map, id uuid.UUID) int32 {
-	value, ok := checked.Load(id)
+	got, ok := statuses.Get(id)
 	if !ok {
-		return 0
+		t.Fatal("no status kept for the checked service")
 	}
-	return value.(*atomic.Int32).Load()
+	return got
 }
 
-func TestCheckDueBoundsConcurrencyAndNeverOverlapsOneService(t *testing.T) {
+func TestCheckKeepsTheResultInMemory(t *testing.T) {
+	t.Run("expected status is online", func(t *testing.T) {
+		got := checkOnce(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }, 500)
+		if got.Status != "online" || got.StatusCode != 200 || got.CheckedAt.IsZero() {
+			t.Fatalf("check = %+v, want online 200 with a check time", got)
+		}
+	})
+
+	t.Run("unexpected status is offline with the code", func(t *testing.T) {
+		got := checkOnce(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }, 500)
+		if got.Status != "offline" || !strings.Contains(got.Error, "418") {
+			t.Fatalf("check = %+v, want offline naming 418", got)
+		}
+	})
+
+	t.Run("timeout is offline", func(t *testing.T) {
+		got := checkOnce(t, func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }, 20)
+		if got.Status != "offline" || got.Error == "" {
+			t.Fatalf("check = %+v, want offline with an error", got)
+		}
+	})
+}
+
+// recordChecks replaces the HTTP check with a counter.
+func recordChecks(ch *HealthChecker) func(uuid.UUID) int {
+	var mu sync.Mutex
+	counts := map[uuid.UUID]int{}
+	ch.check = func(_ context.Context, svc sqlc.ListActiveServicesForHealthCheckRow) {
+		mu.Lock()
+		counts[svc.ID]++
+		mu.Unlock()
+	}
+	return func(id uuid.UUID) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return counts[id]
+	}
+}
+
+func TestRunChecksEveryServiceAtStartAndOnEachRound(t *testing.T) {
+	a, b := uuid.New(), uuid.New()
+	queries := &fakeHealthQueries{}
+	queries.set(service(a, "http://a", 500))
+	ch := NewHealthChecker(queries, NewStatuses())
+	count := recordChecks(ch)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ticks := make(chan time.Time)
+	done := make(chan struct{})
+	go func() { ch.run(ctx, ticks); close(done) }()
+
+	waitFor(t, func() bool { return count(a) == 1 })
+	if got := queries.listCalls(); got != 1 {
+		t.Fatalf("service list read %d times before any round tick, want 1", got)
+	}
+
+	// A service added between rounds is picked up by the next one.
+	queries.set(service(a, "http://a", 500), service(b, "http://b", 500))
+	ticks <- time.Now()
+	waitFor(t, func() bool { return count(a) == 2 && count(b) == 1 })
+	if got := queries.listCalls(); got != 2 {
+		t.Errorf("service list read %d times after one round, want 2", got)
+	}
+
+	cancel()
+	<-done
+}
+
+func TestRoundForgetsServicesNoLongerActive(t *testing.T) {
+	a := uuid.New()
+	queries := &fakeHealthQueries{}
+	queries.set(service(a, "http://a", 500))
+	statuses := NewStatuses()
+	ch := NewHealthChecker(queries, statuses)
+	ch.check = func(_ context.Context, svc sqlc.ListActiveServicesForHealthCheckRow) {
+		statuses.Set(svc.ID, Check{Status: "online", CheckedAt: time.Now()})
+	}
+
+	ch.round(context.Background())
+	ch.wg.Wait()
+	if _, ok := statuses.Get(a); !ok {
+		t.Fatal("no status after the first round")
+	}
+
+	queries.set() // paused or deleted
+	ch.round(context.Background())
+	ch.wg.Wait()
+	if got, ok := statuses.Get(a); ok {
+		t.Errorf("status %+v kept for a service no longer active", got)
+	}
+}
+
+func TestRoundBoundsConcurrencyAndNeverOverlapsOneService(t *testing.T) {
+	queries := &fakeHealthQueries{}
 	var services []sqlc.ListActiveServicesForHealthCheckRow
 	for i := 0; i < 8; i++ {
-		services = append(services, service(uuid.New(), "http://svc", 1, 500))
+		services = append(services, service(uuid.New(), "http://svc", 500))
 	}
-	queries := &fakeHealthQueries{services: services}
-	ch := NewHealthChecker(queries)
+	queries.set(services...)
+	ch := NewHealthChecker(queries, NewStatuses())
 
 	release := make(chan struct{})
 	started := make(chan struct{}, len(services))
@@ -162,7 +181,7 @@ func TestCheckDueBoundsConcurrencyAndNeverOverlapsOneService(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	ch.checkDue(ctx, time.Now())
+	ch.round(ctx)
 	for i := 0; i < maxConcurrentChecks; i++ {
 		select {
 		case <-started:
@@ -176,9 +195,9 @@ func TestCheckDueBoundsConcurrencyAndNeverOverlapsOneService(t *testing.T) {
 	default:
 	}
 
-	// A second due tick while the first checks run must not overlap any of
+	// A round while the first one's checks still run must not overlap any of
 	// the same services.
-	ch.checkDue(ctx, time.Now().Add(2*time.Second))
+	ch.round(ctx)
 	select {
 	case <-started:
 		t.Fatal("a still-running service started another check")
@@ -189,45 +208,27 @@ func TestCheckDueBoundsConcurrencyAndNeverOverlapsOneService(t *testing.T) {
 	ch.wg.Wait()
 }
 
-func TestPruneKeepsThirtyDaysAndRunsDaily(t *testing.T) {
-	queries := &fakeHealthQueries{}
-	ch := NewHealthChecker(queries)
-	now := time.Date(2026, 11, 18, 9, 0, 0, 0, time.UTC)
-
-	ch.prune(context.Background(), now)
-	if queries.prunes != 1 {
-		t.Fatalf("prunes = %d, want 1", queries.prunes)
-	}
-	if want := now.Add(-30 * 24 * time.Hour); !queries.cutoff.Time.Equal(want) {
-		t.Errorf("cutoff = %s, want %s", queries.cutoff.Time, want)
-	}
-
-	ch.prune(context.Background(), now.Add(time.Hour))
-	if queries.prunes != 1 {
-		t.Errorf("prunes within a day = %d, want 1", queries.prunes)
-	}
-	ch.prune(context.Background(), now.Add(24*time.Hour))
-	if queries.prunes != 2 {
-		t.Errorf("prunes after a day = %d, want 2", queries.prunes)
-	}
-}
-
 func TestRunStopsOnCancel(t *testing.T) {
-	queries := &fakeHealthQueries{}
-	ch := NewHealthChecker(queries)
+	ch := NewHealthChecker(&fakeHealthQueries{}, NewStatuses())
 	ctx, cancel := context.WithCancel(context.Background())
-	ticks := make(chan time.Time)
 	done := make(chan struct{})
-
-	go func() {
-		ch.run(ctx, ticks)
-		close(done)
-	}()
+	go func() { ch.run(ctx, make(chan time.Time)); close(done) }()
 
 	cancel()
 	select {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("run did not stop on context cancel")
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatal("condition not met within a second")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

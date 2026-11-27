@@ -30,7 +30,6 @@ type CoregatewayService struct {
 	Icon                pgtype.Text        `json:"icon"`
 	Description         pgtype.Text        `json:"description"`
 	ServiceType         pgtype.Text        `json:"service_type"`
-	HealthCheckInterval pgtype.Int4        `json:"health_check_interval"`
 	HealthCheckMethod   pgtype.Text        `json:"health_check_method"`
 	ExpectedStatusCodes []int32            `json:"expected_status_codes"`
 	Timeout             pgtype.Int4        `json:"timeout"`
@@ -39,16 +38,6 @@ type CoregatewayService struct {
 	IsActive            pgtype.Bool        `json:"is_active"`
 	IsBuiltin           bool               `json:"is_builtin"`
 	BuiltinKey          pgtype.Text        `json:"builtin_key"`
-}
-
-type CoregatewayServiceHealthHistory struct {
-	ID           uuid.UUID          `json:"id"`
-	ServiceID    pgtype.UUID        `json:"service_id"`
-	Status       string             `json:"status"`
-	ResponseTime pgtype.Int4        `json:"response_time"`
-	StatusCode   pgtype.Int4        `json:"status_code"`
-	ErrorMessage pgtype.Text        `json:"error_message"`
-	CheckedAt    pgtype.Timestamptz `json:"checked_at"`
 }
 
 type CoregatewaySession struct {

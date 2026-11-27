@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/ejsadiarin/coregateway/internal/auth"
 	"github.com/ejsadiarin/coregateway/internal/config"
@@ -78,8 +77,8 @@ func (q *nativeStubQuerier) CreateService(_ context.Context, arg db.CreateServic
 	return db.CoregatewayService{ID: uuid.New(), Name: arg.Name}, nil
 }
 
-func (q *nativeStubQuerier) ListServices(context.Context) ([]db.ListServicesRow, error) {
-	return []db.ListServicesRow{}, nil
+func (q *nativeStubQuerier) ListServices(context.Context) ([]db.CoregatewayService, error) {
+	return []db.CoregatewayService{}, nil
 }
 
 func (q *nativeStubQuerier) GetService(_ context.Context, id uuid.UUID) (db.CoregatewayService, error) {
@@ -91,26 +90,6 @@ func (q *nativeStubQuerier) UpdateService(_ context.Context, arg db.UpdateServic
 }
 
 func (q *nativeStubQuerier) DeleteService(context.Context, uuid.UUID) error { return nil }
-
-func (q *nativeStubQuerier) GetServiceHistory(context.Context, db.GetServiceHistoryParams) ([]db.CoregatewayServiceHealthHistory, error) {
-	return []db.CoregatewayServiceHealthHistory{}, nil
-}
-
-func (q *nativeStubQuerier) GetServiceStats24h(context.Context, pgtype.UUID) (db.GetServiceStats24hRow, error) {
-	return db.GetServiceStats24hRow{}, nil
-}
-
-func (q *nativeStubQuerier) GetServiceStats7d(context.Context, pgtype.UUID) (db.GetServiceStats7dRow, error) {
-	return db.GetServiceStats7dRow{}, nil
-}
-
-func (q *nativeStubQuerier) GetServiceStats30d(context.Context, pgtype.UUID) (db.GetServiceStats30dRow, error) {
-	return db.GetServiceStats30dRow{}, nil
-}
-
-func (q *nativeStubQuerier) GetAllServicesStats(context.Context) (db.GetAllServicesStatsRow, error) {
-	return db.GetAllServicesStatsRow{}, nil
-}
 
 func nativeTestSetup(t *testing.T) (http.Handler, *nativeStubQuerier, uuid.UUID, uuid.UUID, uuid.UUID) {
 	t.Helper()
@@ -124,7 +103,7 @@ func nativeTestSetup(t *testing.T) (http.Handler, *nativeStubQuerier, uuid.UUID,
 	}}
 	s := &Server{
 		UserHandler:    user.NewHandler(user.NewService(q)),
-		ServiceHandler: monitor.NewHandler(monitor.NewService(q)),
+		ServiceHandler: monitor.NewHandler(monitor.NewService(q, monitor.NewStatuses())),
 	}
 	// Real route table (nil CorefinanceClient is fine: these tests never
 	// touch /api/budget/*). AuthMiddleware passes identity-less requests
@@ -294,15 +273,12 @@ func TestNativeServiceRoutesMatrix(t *testing.T) {
 	routes := []struct{ method, target, body string }{
 		{http.MethodPost, "/api/services", `{"name":"x","url":"https://example.com"}`},
 		{http.MethodGet, "/api/services/list", ""},
-		{http.MethodGet, "/api/services/stats/all", ""},
 		{http.MethodGet, "/api/services/" + svcID, ""},
 		{http.MethodPut, "/api/services/" + svcID, `{"name":"y"}`},
 		{http.MethodDelete, "/api/services/" + svcID, ""},
-		{http.MethodGet, "/api/services/" + svcID + "/history", ""},
-		{http.MethodGet, "/api/services/" + svcID + "/stats", ""},
 	}
 
-	t.Run("anonymous rejected on all eight", func(t *testing.T) {
+	t.Run("anonymous rejected on all five", func(t *testing.T) {
 		h, _, _, _, _ := nativeTestSetup(t)
 		for _, rt := range routes {
 			if rec := doNative(t, h, "", uuid.Nil, rt.method, rt.target, rt.body); rec.Code != http.StatusUnauthorized {
@@ -311,7 +287,7 @@ func TestNativeServiceRoutesMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("non-admin rejected on all eight", func(t *testing.T) {
+	t.Run("non-admin rejected on all five", func(t *testing.T) {
 		h, _, _, userID, _ := nativeTestSetup(t)
 		for _, rt := range routes {
 			if rec := doNative(t, h, auth.RoleUser, userID, rt.method, rt.target, rt.body); rec.Code != http.StatusForbidden {
@@ -320,7 +296,7 @@ func TestNativeServiceRoutesMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("admin passes on all eight", func(t *testing.T) {
+	t.Run("admin passes on all five", func(t *testing.T) {
 		h, _, adminID, _, _ := nativeTestSetup(t)
 		for _, rt := range routes {
 			rec := doNative(t, h, auth.RoleAdmin, adminID, rt.method, rt.target, rt.body)

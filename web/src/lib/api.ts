@@ -2,9 +2,6 @@ import type {
   Service,
   CreateServiceRequest,
   UpdateServiceRequest,
-  ServiceHealthHistory,
-  ServiceStats,
-  UptimeBucket,
   Category,
   PriorityGroup,
   Tag,
@@ -646,57 +643,6 @@ export async function deleteService(id: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`Error deleting service: ${res.status}`);
   }
-}
-
-export async function fetchServiceHistory(id: string): Promise<ServiceHealthHistory[]> {
-  const res = await fetch(url + `/api/services/${id}/history`, {
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error fetching service history: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function fetchServiceUptime(
-  id: string,
-  bucket: 'hour' | 'day',
-  count: number
-): Promise<UptimeBucket[]> {
-  const params = new URLSearchParams({ bucket, count: String(count) });
-  const res = await fetch(url + `/api/services/${id}/uptime?${params}`, {
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error fetching service uptime: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function fetchServiceStats(id: string): Promise<ServiceStats> {
-  const res = await fetch(url + `/api/services/${id}/stats`, {
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error fetching service stats: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function fetchAllServicesStats(): Promise<{
-  total_services: number;
-  total_checks: number;
-  successful_checks: number;
-  overall_uptime: number;
-  avg_response_time: number;
-}> {
-  const res = await fetch(url + '/api/services/stats/all', {
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error fetching services stats: ${res.status}`);
-  }
-  return res.json();
 }
 
 // Incomes

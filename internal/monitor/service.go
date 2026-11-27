@@ -13,39 +13,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ServiceStats struct {
-	ServiceID        string      `json:"service_id"`
-	Uptime24h        float64     `json:"uptime_24h"`
-	Uptime7d         float64     `json:"uptime_7d"`
-	Uptime30d        float64     `json:"uptime_30d"`
-	AvgResponseTime  interface{} `json:"avg_response_time"`
-	TotalChecks      int64       `json:"total_checks"`
-	SuccessfulChecks int64       `json:"successful_checks"`
-}
-
-type AllServiceStats struct {
-	TotalServices    int64       `json:"total_services"`
-	TotalChecks      int64       `json:"total_checks"`
-	SuccessfulChecks int64       `json:"successful_checks"`
-	OverallUptime    float64     `json:"overall_uptime"`
-	AvgResponseTime  interface{} `json:"avg_response_time"`
+// ServiceView is a monitored service with its latest health check, which the
+// checker keeps in memory. A service not yet checked is "unknown".
+type ServiceView struct {
+	sqlc.CoregatewayService
+	CurrentStatus string     `json:"current_status"`
+	LastCheck     *time.Time `json:"last_check,omitempty"`
+	ResponseTime  *int32     `json:"response_time,omitempty"`
+	StatusCode    *int32     `json:"status_code,omitempty"`
+	LastError     string     `json:"last_error,omitempty"`
 }
 
 type Service struct {
-	queries sqlc.Querier
+	queries  sqlc.Querier
+	statuses *Statuses
 }
 
-func NewService(queries sqlc.Querier) *Service {
-	return &Service{queries: queries}
+func NewService(queries sqlc.Querier, statuses *Statuses) *Service {
+	return &Service{queries: queries, statuses: statuses}
+}
+
+func (s *Service) view(service sqlc.CoregatewayService) ServiceView {
+	v := ServiceView{CoregatewayService: service, CurrentStatus: "unknown"}
+	check, ok := s.statuses.Get(service.ID)
+	if !ok {
+		return v
+	}
+	v.CurrentStatus = check.Status
+	v.LastCheck = &check.CheckedAt
+	v.ResponseTime = &check.ResponseTime
+	if check.StatusCode != 0 {
+		v.StatusCode = &check.StatusCode
+	}
+	v.LastError = check.Error
+	return v
 }
 
 func (s *Service) CreateService(ctx context.Context, req CreateServiceRequest) (*sqlc.CoregatewayService, error) {
 	slog.Debug("monitor.Service.CreateService", "name", req.Name, "url", req.URL)
-	healthCheckInterval := int32(60)
-	if req.HealthCheckInterval != nil {
-		healthCheckInterval = *req.HealthCheckInterval
-	}
-
 	healthCheckMethod := "GET"
 	if req.HealthCheckMethod != nil {
 		healthCheckMethod = *req.HealthCheckMethod
@@ -78,7 +83,6 @@ func (s *Service) CreateService(ctx context.Context, req CreateServiceRequest) (
 		Icon:                icon,
 		Description:         description,
 		ServiceType:         serviceType,
-		HealthCheckInterval: pgtype.Int4{Int32: healthCheckInterval, Valid: true},
 		HealthCheckMethod:   pgtype.Text{String: healthCheckMethod, Valid: true},
 		ExpectedStatusCodes: expectedStatusCodes,
 		Timeout:             pgtype.Int4{Int32: timeout, Valid: true},
@@ -90,21 +94,21 @@ func (s *Service) CreateService(ctx context.Context, req CreateServiceRequest) (
 	return &service, nil
 }
 
-func (s *Service) ListServices(ctx context.Context) ([]sqlc.ListServicesRow, error) {
+func (s *Service) ListServices(ctx context.Context) ([]ServiceView, error) {
 	slog.Debug("monitor.Service.ListServices")
 	services, err := s.queries.ListServices(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list services: %w", err)
 	}
 
-	if services == nil {
-		services = []sqlc.ListServicesRow{}
+	views := make([]ServiceView, len(services))
+	for i, service := range services {
+		views[i] = s.view(service)
 	}
-
-	return services, nil
+	return views, nil
 }
 
-func (s *Service) GetService(ctx context.Context, id uuid.UUID) (*sqlc.CoregatewayService, error) {
+func (s *Service) GetService(ctx context.Context, id uuid.UUID) (*ServiceView, error) {
 	slog.Debug("monitor.Service.GetService", "id", id)
 	service, err := s.queries.GetService(ctx, id)
 	if err != nil {
@@ -114,7 +118,8 @@ func (s *Service) GetService(ctx context.Context, id uuid.UUID) (*sqlc.Coregatew
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
 
-	return &service, nil
+	v := s.view(service)
+	return &v, nil
 }
 
 func (s *Service) UpdateService(ctx context.Context, id uuid.UUID, req UpdateServiceRequest) (*sqlc.CoregatewayService, error) {
@@ -146,9 +151,6 @@ func (s *Service) UpdateService(ctx context.Context, id uuid.UUID, req UpdateSer
 	}
 	if req.ServiceType != nil {
 		params.ServiceType = pgtype.Text{String: *req.ServiceType, Valid: true}
-	}
-	if req.HealthCheckInterval != nil {
-		params.HealthCheckInterval = pgtype.Int4{Int32: *req.HealthCheckInterval, Valid: true}
 	}
 	if req.HealthCheckMethod != nil {
 		params.HealthCheckMethod = pgtype.Text{String: *req.HealthCheckMethod, Valid: true}
@@ -195,119 +197,4 @@ func (s *Service) DeleteService(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
-}
-
-// UptimeBuckets returns count contiguous hour or day buckets ending with
-// the current one. Buckets with no checks are kept as zeroes.
-func (s *Service) UptimeBuckets(ctx context.Context, serviceID uuid.UUID, bucket string, count int32) ([]UptimeBucket, error) {
-	if bucket != "hour" && bucket != "day" {
-		return nil, fmt.Errorf("bucket must be hour or day")
-	}
-	if count < 1 || count > 720 {
-		return nil, fmt.Errorf("count must be between 1 and 720")
-	}
-
-	unit := time.Hour
-	if bucket == "day" {
-		unit = 24 * time.Hour
-	}
-	now := time.Now().UTC()
-	start := now.Truncate(unit).Add(-time.Duration(count-1) * unit)
-
-	rows, err := s.queries.GetServiceUptimeBuckets(ctx, sqlc.GetServiceUptimeBucketsParams{
-		ServiceID: serviceID,
-		Bucket:    bucket,
-		StartAt:   pgtype.Timestamp{Time: start, Valid: true},
-		EndAt:     pgtype.Timestamp{Time: now, Valid: true},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get uptime buckets: %w", err)
-	}
-
-	buckets := make([]UptimeBucket, len(rows))
-	for i, row := range rows {
-		buckets[i] = UptimeBucket{
-			StartAt:    row.BucketStart.Time,
-			Checks:     row.Checks,
-			Successes:  row.Successes,
-			AvgLatency: row.AvgLatency,
-		}
-	}
-	return buckets, nil
-}
-
-func (s *Service) GetServiceHistory(ctx context.Context, serviceID uuid.UUID, limit int32) ([]sqlc.CoregatewayServiceHealthHistory, error) {
-	slog.Debug("monitor.Service.GetServiceHistory", "service_id", serviceID, "limit", limit)
-	history, err := s.queries.GetServiceHistory(ctx, sqlc.GetServiceHistoryParams{
-		ServiceID: pgtype.UUID{Bytes: serviceID, Valid: true},
-		Limit:     limit,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get service history: %w", err)
-	}
-
-	if history == nil {
-		history = []sqlc.CoregatewayServiceHealthHistory{}
-	}
-
-	return history, nil
-}
-
-func (s *Service) GetServiceStats(ctx context.Context, serviceID uuid.UUID) (ServiceStats, error) {
-	slog.Debug("monitor.Service.GetServiceStats", "service_id", serviceID)
-	pgID := pgtype.UUID{Bytes: serviceID, Valid: true}
-
-	stats24h, err := s.queries.GetServiceStats24h(ctx, pgID)
-	if err != nil {
-		return ServiceStats{}, fmt.Errorf("failed to get 24h stats: %w", err)
-	}
-
-	stats7d, _ := s.queries.GetServiceStats7d(ctx, pgID)
-	stats30d, _ := s.queries.GetServiceStats30d(ctx, pgID)
-
-	uptime24h := 0.0
-	if stats24h.TotalChecks > 0 {
-		uptime24h = float64(stats24h.SuccessfulChecks) / float64(stats24h.TotalChecks) * 100
-	}
-
-	uptime7d := 0.0
-	if stats7d.TotalChecks > 0 {
-		uptime7d = float64(stats7d.SuccessfulChecks) / float64(stats7d.TotalChecks) * 100
-	}
-
-	uptime30d := 0.0
-	if stats30d.TotalChecks > 0 {
-		uptime30d = float64(stats30d.SuccessfulChecks) / float64(stats30d.TotalChecks) * 100
-	}
-
-	return ServiceStats{
-		ServiceID:        serviceID.String(),
-		Uptime24h:        uptime24h,
-		Uptime7d:         uptime7d,
-		Uptime30d:        uptime30d,
-		AvgResponseTime:  stats24h.AvgResponseTime,
-		TotalChecks:      stats24h.TotalChecks,
-		SuccessfulChecks: stats24h.SuccessfulChecks,
-	}, nil
-}
-
-func (s *Service) GetAllServiceStats(ctx context.Context) (AllServiceStats, error) {
-	slog.Debug("monitor.Service.GetAllServiceStats")
-	stats, err := s.queries.GetAllServicesStats(ctx)
-	if err != nil {
-		return AllServiceStats{}, fmt.Errorf("failed to get all services stats: %w", err)
-	}
-
-	uptime := 0.0
-	if stats.TotalChecks > 0 {
-		uptime = float64(stats.SuccessfulChecks) / float64(stats.TotalChecks) * 100
-	}
-
-	return AllServiceStats{
-		TotalServices:    stats.TotalServices,
-		TotalChecks:      stats.TotalChecks,
-		SuccessfulChecks: stats.SuccessfulChecks,
-		OverallUptime:    uptime,
-		AvgResponseTime:  stats.AvgResponseTime,
-	}, nil
 }

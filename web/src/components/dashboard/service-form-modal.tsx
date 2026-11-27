@@ -31,7 +31,6 @@ const serviceFormSchema = z.object({
   icon: z.string().optional(),
   description: z.string().optional(),
   service_type: z.string().optional(),
-  health_check_interval: z.number().min(10).max(3600),
   health_check_method: z.enum(["GET", "POST", "HEAD"]),
   timeout: z.number().min(1000).max(30000),
   is_active: z.boolean(),
@@ -74,7 +73,6 @@ export function ServiceFormModal({
           icon: service.icon || "",
           description: service.description || "",
           service_type: service.service_type || "",
-          health_check_interval: service.health_check_interval,
           health_check_method: service.health_check_method as
             | "GET"
             | "POST"
@@ -88,7 +86,6 @@ export function ServiceFormModal({
           icon: "",
           description: "",
           service_type: "",
-          health_check_interval: 60,
           health_check_method: "GET",
           timeout: 5000,
           is_active: true,
@@ -108,7 +105,6 @@ export function ServiceFormModal({
             icon: data.icon || undefined,
             description: data.description || undefined,
             service_type: data.service_type || undefined,
-            health_check_interval: data.health_check_interval,
             health_check_method: data.health_check_method,
             timeout: data.timeout,
             is_active: data.is_active,
@@ -121,7 +117,6 @@ export function ServiceFormModal({
           icon: data.icon || undefined,
           description: data.description || undefined,
           service_type: data.service_type || undefined,
-          health_check_interval: data.health_check_interval,
           health_check_method: data.health_check_method,
           timeout: data.timeout,
         });
@@ -152,7 +147,7 @@ export function ServiceFormModal({
           <DialogDescription>
             {isEditing
               ? "Update the service configuration below."
-              : "Configure a new service to monitor its health and uptime."}
+              : "Configure a new service to monitor its health."}
           </DialogDescription>
         </DialogHeader>
 
@@ -246,25 +241,6 @@ export function ServiceFormModal({
           {/* Advanced Settings */}
           {showAdvanced && (
             <div className="space-y-4 p-4 rounded-lg border border-border bg-card/30">
-              {/* Health Check Interval */}
-              <div className="space-y-2">
-                <Label htmlFor="health_check_interval">
-                  Check Interval (seconds)
-                </Label>
-                <Input
-                  id="health_check_interval"
-                  type="number"
-                  min={10}
-                  max={3600}
-                  {...register("health_check_interval", { valueAsNumber: true })}
-                />
-                {errors.health_check_interval && (
-                  <p className="text-xs text-destructive">
-                    {errors.health_check_interval.message}
-                  </p>
-                )}
-              </div>
-
               {/* Health Check Method */}
               <div className="space-y-2">
                 <Label>HTTP Method</Label>

@@ -4,20 +4,22 @@ test.beforeEach(async ({ page }) => {
   await login(page);
 });
 
-test("services page shows built-in services with uptime and history", async ({ page }) => {
+test("services page shows built-in services with their latest check", async ({ page }) => {
   await page.goto("/dashboard/services");
 
   for (const name of ["corefinance", "coreban", "coredraw"]) {
     await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
   }
   await expect(page.getByText("built-in", { exact: true })).toHaveCount(3);
-  await expect(page.getByLabel("Hourly uptime, last 24 hours")).toHaveCount(3);
-  await expect(page.getByLabel("Daily uptime, last 30 days")).toHaveCount(3);
+  // Only the latest check is kept: no uptime bars or history.
+  await expect(page.getByLabel("Hourly uptime, last 24 hours")).toHaveCount(0);
 
-  // Opening a row shows the recent checks.
+  // Opening a row shows the latest check, not a history.
   await page.getByText("corefinance", { exact: true }).first().click();
   const dialog = page.getByRole("dialog", { name: "corefinance" });
-  await expect(dialog).toContainText("Recent Health Checks");
+  await expect(dialog).toContainText("Last Check");
+  await expect(dialog).not.toContainText("Recent Health Checks");
+  await expect(dialog).not.toContainText("Check Interval");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
 

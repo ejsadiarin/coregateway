@@ -27,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ServiceUptime } from "@/components/dashboard/service-uptime";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -165,7 +164,7 @@ export default function ServicesPage() {
               Services
             </h1>
             <p className="text-sm text-muted-foreground">
-              Status, uptime and settings for every monitored service
+              Latest status and settings for every monitored service
             </p>
           </div>
           <Button onClick={() => setIsAddModalOpen(true)}>
@@ -406,7 +405,11 @@ export default function ServicesPage() {
                       </DropdownMenu>
                     </div>
                   </div>
-                  <ServiceUptime service={service} />
+                  {service.is_active && status !== "online" && service.last_error && (
+                    <p className="mt-2 max-w-[42rem] truncate font-mono text-[10px] text-destructive">
+                      {service.last_error}
+                    </p>
+                  )}
                 </div>
               );
             })}

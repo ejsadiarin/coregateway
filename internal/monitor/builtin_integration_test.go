@@ -111,7 +111,7 @@ func TestEnsureBuiltinServices_Integration(t *testing.T) {
 
 	// A config change moves the URL, and admin tuning survives.
 	if _, err := pool.Exec(ctx,
-		`UPDATE coregateway.services SET is_active = false, health_check_interval = 30 WHERE builtin_key = 'corefinance'`); err != nil {
+		`UPDATE coregateway.services SET is_active = false, timeout = 2000 WHERE builtin_key = 'corefinance'`); err != nil {
 		t.Fatalf("tune built-in: %v", err)
 	}
 	changed := DownstreamBuiltins("http://finance-new:6969", "http://ban:6972", "http://draw:6971")
@@ -120,14 +120,14 @@ func TestEnsureBuiltinServices_Integration(t *testing.T) {
 	}
 	var url string
 	var active bool
-	var interval int32
+	var timeout int32
 	if err := pool.QueryRow(ctx,
-		`SELECT url, is_active, health_check_interval FROM coregateway.services WHERE builtin_key = 'corefinance'`).
-		Scan(&url, &active, &interval); err != nil {
+		`SELECT url, is_active, timeout FROM coregateway.services WHERE builtin_key = 'corefinance'`).
+		Scan(&url, &active, &timeout); err != nil {
 		t.Fatalf("read built-in: %v", err)
 	}
-	if url != "http://finance-new:6969/health" || active || interval != 30 {
-		t.Errorf("built-in = %s active=%v interval=%d, want new URL, paused, 30s", url, active, interval)
+	if url != "http://finance-new:6969/health" || active || timeout != 2000 {
+		t.Errorf("built-in = %s active=%v timeout=%d, want new URL, paused, 2000ms", url, active, timeout)
 	}
 
 	// The built-in cannot be deleted or repointed.
@@ -136,7 +136,7 @@ func TestEnsureBuiltinServices_Integration(t *testing.T) {
 		`SELECT id FROM coregateway.services WHERE builtin_key = 'corefinance'`).Scan(&id); err != nil {
 		t.Fatalf("built-in id: %v", err)
 	}
-	svc := NewService(queries)
+	svc := NewService(queries, NewStatuses())
 	if err := svc.DeleteService(ctx, id); !errors.Is(err, ErrBuiltinService) {
 		t.Errorf("delete built-in error = %v, want %v", err, ErrBuiltinService)
 	}
@@ -150,12 +150,11 @@ func TestEnsureBuiltinServices_Integration(t *testing.T) {
 
 	// An ordinary service is still deletable.
 	custom, err := queries.CreateService(ctx, sqlc.CreateServiceParams{
-		Name:                "homelab",
-		Url:                 "http://homelab:8080/health",
-		ServiceType:         pgtype.Text{String: "custom", Valid: true},
-		HealthCheckInterval: pgtype.Int4{Int32: 60, Valid: true},
-		HealthCheckMethod:   pgtype.Text{String: "GET", Valid: true},
-		Timeout:             pgtype.Int4{Int32: 5000, Valid: true},
+		Name:              "homelab",
+		Url:               "http://homelab:8080/health",
+		ServiceType:       pgtype.Text{String: "custom", Valid: true},
+		HealthCheckMethod: pgtype.Text{String: "GET", Valid: true},
+		Timeout:           pgtype.Int4{Int32: 5000, Valid: true},
 	})
 	if err != nil {
 		t.Fatalf("create custom service: %v", err)

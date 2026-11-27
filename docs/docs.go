@@ -1594,33 +1594,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/services/stats/all": {
-            "get": {
-                "description": "Get overall statistics for all services",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "services"
-                ],
-                "summary": "Get overall statistics",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/services/{id}": {
             "get": {
                 "description": "Get detailed information about a specific service",
@@ -1751,99 +1724,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/services/{id}/history": {
-            "get": {
-                "description": "Get health check history for a specific service",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "services"
-                ],
-                "summary": "Get service health history",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Service ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "Limit",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/core-gateway_internal_repository_sqlc.ServiceHealthHistory"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/services/{id}/stats": {
-            "get": {
-                "description": "Get uptime statistics for a specific service",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "services"
-                ],
-                "summary": "Get service statistics",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Service ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/core-gateway_internal_shared_models.ErrorResponse"
                         }
