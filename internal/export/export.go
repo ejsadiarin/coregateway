@@ -59,8 +59,14 @@ var Budget = Part{
 	Legacy: hasAnyKey("expenses", "incomes", "tags", "recurring_expenses", "recurring_incomes"),
 }
 
+// Kanban is coreban's part: boards, reminders and Feed notes.
+var Kanban = Part{
+	Name: "kanban", Format: "coregateway.kanban", Downstream: "coreban",
+	ExportPath: "/api/coreban/export", ImportPath: "/api/coreban/import",
+}
+
 // Parts is every part this gateway offers, in export order.
-var Parts = []Part{Budget}
+var Parts = []Part{Budget, Kanban}
 
 // Bundle is the export file.
 type Bundle struct {
@@ -111,9 +117,10 @@ func NewHandler(parts []Part, zone ZoneFunc) *Handler {
 func (h *Handler) Mount(router http.Handler) { h.router = router }
 
 // Export serves GET /api/export?parts=a,b[&user_id=]. A bundle, unless
-// ?parts= names one part: then it is that part's own file.
+// ?parts= names one part: then it is that part's own file. Without
+// ?parts= a key gets every part its scopes can read.
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
-	parts, ok := h.pick(w, r, h.parts, false)
+	parts, _, ok := h.pick(w, r, h.parts, false)
 	if !ok {
 		return
 	}
@@ -182,7 +189,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	slices.SortFunc(known, func(a, b Part) int { return h.order(a) - h.order(b) })
 	slices.Sort(unknown)
-	parts, ok := h.pick(w, r, known, true)
+	parts, denied, ok := h.pick(w, r, known, true)
 	if !ok {
 		return
 	}
@@ -196,6 +203,10 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	for _, p := range parts {
 		rec := h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
 		results[p.Name] = partResult(p, dryRun, rec)
+	}
+	for name, need := range denied {
+		results[name] = mustJSON(PartResult{Part: name, DryRun: dryRun, Status: StatusSkipped,
+			Errors: []PartError{{Entity: "part", Reason: "this key needs the " + need + " scope"}}})
 	}
 	if r.URL.Query().Get("parts") == "" {
 		for _, name := range unknown {
@@ -249,14 +260,17 @@ func (h *Handler) read(raw []byte) (map[string]json.RawMessage, error) {
 	return b.Parts, nil
 }
 
-// pick chooses the parts named by ?parts= among those available (all of
-// them when absent), and checks a key caller's scopes cover every one
-// before anything is sent: read to export, write to import.
-func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part, write bool) ([]Part, bool) {
-	chosen := available
-	if raw := r.URL.Query().Get("parts"); raw != "" {
+// pick chooses the parts named by ?parts= among those available, and
+// checks a key caller's scopes cover them before anything is sent: read to
+// export, write to import. A named part the key can't reach is a 403.
+// Without ?parts= it is every available part the caller can reach; the
+// rest come back as denied, with the scope each needs.
+func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part, write bool) (chosen []Part, denied map[string]string, ok bool) {
+	named := r.URL.Query().Get("parts") != ""
+	chosen = available
+	if named {
 		chosen = nil
-		for _, name := range strings.Split(raw, ",") {
+		for _, name := range strings.Split(r.URL.Query().Get("parts"), ",") {
 			name = strings.TrimSpace(name)
 			i := slices.IndexFunc(available, func(p Part) bool { return p.Name == name })
 			if i < 0 {
@@ -265,7 +279,7 @@ func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part,
 					where = "the file has no"
 				}
 				helper.RespondErrorJSON(w, http.StatusBadRequest, where+" "+name+" part")
-				return nil, false
+				return nil, nil, false
 			}
 			if !slices.ContainsFunc(chosen, func(p Part) bool { return p.Name == name }) {
 				chosen = append(chosen, available[i])
@@ -274,21 +288,36 @@ func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part,
 	}
 	if len(chosen) == 0 {
 		helper.RespondErrorJSON(w, http.StatusBadRequest, "no parts to export or import")
-		return nil, false
+		return nil, nil, false
 	}
-	if scopes, isKey := auth.KeyScopesFromContext(r); isKey {
-		op := "read"
-		if write {
-			op = "write"
-		}
-		for _, p := range chosen {
-			if need := p.Downstream + ":" + op; !auth.KeyCoversScope(scopes, need) {
-				helper.RespondErrorJSON(w, http.StatusForbidden, "the "+p.Name+" part needs the "+need+" scope")
-				return nil, false
-			}
+	scopes, isKey := auth.KeyScopesFromContext(r)
+	if !isKey {
+		return chosen, nil, true
+	}
+	op := "read"
+	if write {
+		op = "write"
+	}
+	var reachable []Part
+	denied = map[string]string{}
+	for _, p := range chosen {
+		need := p.Downstream + ":" + op
+		switch {
+		case auth.KeyCoversScope(scopes, need):
+			reachable = append(reachable, p)
+		case named:
+			helper.RespondErrorJSON(w, http.StatusForbidden, "the "+p.Name+" part needs the "+need+" scope")
+			return nil, nil, false
+		default:
+			denied[p.Name] = need
 		}
 	}
-	return chosen, true
+	if len(reachable) == 0 {
+		helper.RespondErrorJSON(w, http.StatusForbidden, "this key can't "+map[bool]string{false: "export", true: "import"}[write]+
+			" any part: the "+chosen[0].Name+" part needs the "+chosen[0].Downstream+":"+op+" scope")
+		return nil, nil, false
+	}
+	return reachable, denied, true
 }
 
 // sub serves one part request through the gateway's routes, as the

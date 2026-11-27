@@ -95,7 +95,7 @@ function ExportPanel() {
         <Download className="h-4 w-4" aria-hidden />
         {exporting.isPending ? "Exporting…" : "Export"}
       </Button>
-      <p className="mt-2 min-h-5 text-sm" role="status">
+      <p className="mt-2 min-h-5 text-sm" aria-live="polite">
         {exporting.isSuccess && <span className="text-muted-foreground">Saved {exporting.data}</span>}
         {exporting.isError && <span className="text-destructive">{exporting.error.message}</span>}
       </p>
@@ -256,6 +256,12 @@ function ImportResults({ result }: { result: ImportResponse }) {
                 </dl>
               )}
               {r.status === "imported" && counts.length === 0 && <p className="mt-1 text-sm text-muted-foreground">Nothing in this part.</p>}
+              {r.status === "imported" && (r.warnings?.length ?? 0) > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Left out {r.warnings!.length}: {r.warnings![0].reason}
+                  {r.warnings!.length > 1 && " (and others like it)"}
+                </p>
+              )}
               {r.errors?.length > 0 && (
                 <ul className="mt-2 space-y-1 text-sm">
                   {r.errors.slice(0, 5).map((e, i) => (

@@ -23,6 +23,7 @@ import (
 	"github.com/ejsadiarin/coregateway/internal/config"
 	db "github.com/ejsadiarin/coregateway/internal/db/sqlc"
 	"github.com/ejsadiarin/coregateway/internal/export"
+	"github.com/ejsadiarin/coregateway/internal/services/coreban"
 	"github.com/ejsadiarin/coregateway/internal/services/corefinance"
 	"github.com/ejsadiarin/coregateway/internal/token"
 )
@@ -51,6 +52,12 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.query = append(f.query, r.URL.RawQuery)
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
+	case "/api/coreban/export":
+		_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[]}}`)
+	case "/api/coreban/import":
+		body, _ := io.ReadAll(r.Body)
+		f.imports = append(f.imports, string(body))
+		_ = json.NewEncoder(w).Encode(map[string]any{"part": "kanban", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})
 	case "/api/budget/export":
 		_, _ = io.WriteString(w, `{"$schema":"x","format":"coregateway.budget","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"expenses":[]}}`)
 	case "/api/budget/import":
@@ -93,7 +100,7 @@ func exportSetup(t *testing.T) (http.Handler, *fakeBudget, *keyAuthStubQuerier) 
 		t.Fatal(err)
 	}
 	iss, err := token.NewIssuer(token.Key{KID: "k", Private: priv, Public: pub}, nil,
-		"https://gateway.internal", []string{"corefinance"}, 300*time.Second)
+		"https://gateway.internal", []string{"corefinance", "coreban"}, 300*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,6 +110,7 @@ func exportSetup(t *testing.T) (http.Handler, *fakeBudget, *keyAuthStubQuerier) 
 	s := &Server{
 		TokenIssuer:       iss,
 		CorefinanceClient: corefinance.New(downstream.URL),
+		CorebanClient:     coreban.New(downstream.URL),
 		KeysService:       auth.NewKeysService(q),
 		AuthService:       auth.NewService(q),
 	}
@@ -139,11 +147,36 @@ func TestExportBundle(t *testing.T) {
 			t.Errorf("Content-Disposition = %q, want the date in the owner's zone", got)
 		}
 		validate(t, rec.Body.Bytes())
+		// A key gets the parts its scopes can read: this one, budget only.
+		var b export.Bundle
+		mustDecode(t, rec.Body.Bytes(), &b)
+		if _, ok := b.Parts["budget"]; !ok || len(b.Parts) != 1 {
+			t.Errorf("parts = %v, want budget only", b.Parts)
+		}
+	})
+
+	t.Run("a session exports every part", func(t *testing.T) {
+		h, _, _ := exportSetup(t)
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export", "")
+		var b export.Bundle
+		mustDecode(t, rec.Body.Bytes(), &b)
+		if len(b.Parts) != 2 {
+			t.Errorf("parts = %v, want budget and kanban", b.Parts)
+		}
+		validate(t, rec.Body.Bytes())
+	})
+
+	t.Run("naming a part the key can't read is a 403", func(t *testing.T) {
+		h, _, _ := exportSetup(t)
+		rec := doKeyRequest(t, h, testReadKeyPlaintext, http.MethodGet, "/api/export?parts=budget,kanban", "")
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "coreban:read") {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
 	})
 
 	t.Run("a key without the part's read scope is refused before any part is asked", func(t *testing.T) {
 		h, fake, _ := exportSetup(t)
-		rec := doKeyRequest(t, h, testCorebanReadKeyPlaintext, http.MethodGet, "/api/export", "")
+		rec := doKeyRequest(t, h, testCorebanReadKeyPlaintext, http.MethodGet, "/api/export?parts=budget", "")
 		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "corefinance:read") {
 			t.Fatalf("status = %d, body %s; want 403 naming corefinance:read", rec.Code, rec.Body)
 		}
@@ -247,6 +280,20 @@ func TestImportBundle(t *testing.T) {
 		mustDecode(t, rec.Body.Bytes(), &got)
 		if !strings.Contains(string(got.Parts["garden"]), `"status":"skipped"`) {
 			t.Errorf("garden = %s", got.Parts["garden"])
+		}
+	})
+
+	t.Run("a part the key can't write is reported skipped", func(t *testing.T) {
+		h, fake, _ := exportSetup(t)
+		body := `{"format":"coregateway.export","version":1,"parts":{"budget":` + part + `,"kanban":{"format":"coregateway.kanban","version":1,"data":{}}}}`
+		rec := doKeyRequest(t, h, testCorebanWriteKeyPlaintext, http.MethodPost, "/api/import", body)
+		var got export.ImportResponse
+		mustDecode(t, rec.Body.Bytes(), &got)
+		if !strings.Contains(string(got.Parts["budget"]), "corefinance:write") || !strings.Contains(string(got.Parts["kanban"]), `"status":"imported"`) {
+			t.Errorf("response = %s", rec.Body)
+		}
+		if len(fake.imports) != 1 {
+			t.Errorf("imports = %d, want kanban only", len(fake.imports))
 		}
 	})
 

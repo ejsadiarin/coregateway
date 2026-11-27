@@ -19,6 +19,11 @@
           "$ref": "#/$defs/part",
           "properties": { "format": { "const": "coregateway.budget" } },
           "description": "corefinance's part: https://raw.githubusercontent.com/ejsadiarin/corefinance/main/schemas/budget.v1.json"
+        },
+        "kanban": {
+          "$ref": "#/$defs/part",
+          "properties": { "format": { "const": "coregateway.kanban" } },
+          "description": "coreban's part: https://raw.githubusercontent.com/ejsadiarin/coreban/main/schemas/kanban.v1.json"
         }
       },
       "additionalProperties": { "$ref": "#/$defs/part" }

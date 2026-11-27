@@ -5,6 +5,7 @@ import type { FilePart, ImportResponse } from "@/types/export";
 // part is one entry here and one in the gateway's export.Parts.
 export const EXPORT_PARTS = [
   { name: "budget", format: "coregateway.budget", label: "Budget", blurb: "Expenses, incomes, recurring rules and tags" },
+  { name: "kanban", format: "coregateway.kanban", label: "Kanban and Feed", blurb: "Boards, cards, reminders and notes; photo and video files stay out" },
 ] as const;
 
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;

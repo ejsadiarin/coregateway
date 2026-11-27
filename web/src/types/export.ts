@@ -22,6 +22,8 @@ export interface PartResult {
   status: PartStatus;
   counts: Record<string, PartCount>;
   errors: PartError[];
+  // What an import left out, such as a photo whose file isn't stored.
+  warnings?: PartError[];
 }
 
 export interface ImportResponse {
