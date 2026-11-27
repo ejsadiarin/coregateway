@@ -18,8 +18,6 @@ import {
   createIncome,
   updateIncome,
   deleteIncome,
-  exportBudgetJSON,
-  importBudgetJSON,
   fetchBudgetRemaining,
   fetchCategoryBreakdown,
   fetchFiftyThirtyTwenty,
@@ -42,8 +40,6 @@ import type {
   BudgetRemainingResponse,
   CategoryBreakdown,
   PaginatedResponse,
-  BudgetExportPayload,
-  BudgetImportResult,
   FiftyThirtyTwentyResponse,
   CurrentTotalMoneyResponse,
   PeriodBudgetResponse,
@@ -335,27 +331,6 @@ export function useDeleteIncome() {
       dropNote(queryClient, "income", id);
       queryClient.invalidateQueries({ queryKey: budgetKeys.incomes() });
       invalidateMoneyReads(queryClient);
-    }
-  });
-}
-
-export function useExportBudgetJSON() {
-  return useMutation({
-    mutationFn: exportBudgetJSON
-  });
-}
-
-export function useImportBudgetJSON() {
-  const queryClient = useQueryClient();
-  const { isGuest } = useAuth();
-
-  return useMutation({
-    mutationFn: (payload: BudgetExportPayload): Promise<BudgetImportResult> => {
-      if (isGuest) throw new GuestBlockedError('Guest users cannot import budget data');
-      return importBudgetJSON(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
     }
   });
 }

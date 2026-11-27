@@ -6,12 +6,14 @@ import { THEMES, useTheme } from "@/lib/theme";
 import { revealTheme } from "@/lib/theme-reveal";
 import { ReminderSettings } from "@/pages/dashboard/kanban/settings";
 import { BudgetSettings } from "@/pages/dashboard/budget/settings";
+import { DataSettings } from "@/pages/dashboard/data-settings";
 
 // The sections of the one Settings page, in page order. Each service's own
 // settings live in its section; Draw and Services have none to set.
 const SECTIONS = [
   { id: "reminders", label: "Reminders" },
   { id: "budget", label: "Budget" },
+  { id: "data", label: "Data" },
   { id: "appearance", label: "Appearance" },
 ] as const;
 
@@ -48,8 +50,11 @@ export default function SettingsPage() {
       <Section id="reminders" title="Reminders" blurb="Where Kanban reminders are pushed, and the timezone every service reads your times in.">
         <ReminderSettings />
       </Section>
-      <Section id="budget" title="Budget" blurb="Import and export, the fixed category lists, and your tags.">
+      <Section id="budget" title="Budget" blurb="The fixed category lists, and your tags.">
         <BudgetSettings />
+      </Section>
+      <Section id="data" title="Data" blurb="Export your data as one file, and import an export back. Imports keep every record's id, so nothing is doubled.">
+        <DataSettings />
       </Section>
       <Section id="appearance" title="Appearance" blurb="The color scheme on this device.">
         <ThemePicker />

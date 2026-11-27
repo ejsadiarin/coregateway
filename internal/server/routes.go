@@ -195,9 +195,12 @@ func corsMiddleware(allowedOriginsCSV string) func(http.Handler) http.Handler {
 		}
 	}
 	return cors.Handler(cors.Options{
-		AllowedOrigins:   allowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-User-ID"},
+		AllowedOrigins: allowedOrigins,
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID", "X-User-ID"},
+		// An export names its file; cross-origin the browser hides that
+		// header unless it is exposed.
+		ExposedHeaders:   []string{"Content-Disposition"},
 		AllowCredentials: true,
 	})
 }

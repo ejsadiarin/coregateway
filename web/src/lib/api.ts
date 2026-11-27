@@ -37,8 +37,6 @@ import type {
   CashFlowResponse,
   BudgetPeriod,
   IncomeOccurrence,
-  BudgetExportPayload,
-  BudgetImportResult,
   SkipIncomeRequest,
   SkipExpenseRequest,
   BackupsStatus
@@ -780,32 +778,6 @@ export async function checkSkippedExpense(startDate: string, endDate: string): P
   }
   const data = await res.json();
   return data.is_skipped;
-}
-
-export async function exportBudgetJSON(): Promise<BudgetExportPayload> {
-  const res = await fetch(url + '/api/budget/export', {
-    credentials: 'include'
-  });
-  if (!res.ok) {
-    throw new Error(`Error exporting budget JSON: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function importBudgetJSON(payload: BudgetExportPayload): Promise<BudgetImportResult> {
-  const res = await fetch(url + '/api/budget/import', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: 'Import failed' }));
-    throw new Error(error.error || 'Import failed');
-  }
-  return res.json();
 }
 
 export async function skipIncome(data: SkipIncomeRequest): Promise<{ status: string }> {
