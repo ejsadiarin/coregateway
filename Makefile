@@ -5,7 +5,6 @@
 # Prerequisites:
 # - Go 1.21+
 # - sqlc: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
-# - swag: go install github.com/swaggo/swag/cmd/swag@latest
 # - goose: go install github.com/pressly/goose/v3/cmd/goose@latest
 #
 # Environment Variables:
@@ -107,7 +106,6 @@ help:
 	@echo -e "${GREEN}Code Generation${NC}"
 	@echo "  make sqlc             Generate Go code from SQL"
 	@echo "  make sqlc-check       Check SQL generation (dry-run)"
-	@echo "  make swagger          Generate Swagger documentation"
 	@echo "  make generate         Run all code generation"
 	@echo ""
 	@echo -e "${GREEN}Testing${NC}"
@@ -271,12 +269,7 @@ sqlc-check:
 	@echo -e "${YELLOW}Checking SQL code generation...${NC}"
 	@sqlc diff
 
-swagger:
-	@echo -e "${YELLOW}Generating Swagger documentation...${NC}"
-	@swag init -g cmd/coregateway/main.go -o docs --parseDependency --parseInternal
-	@echo -e "${GREEN}Swagger docs generated in docs/${NC}"
-
-generate: sqlc swagger
+generate: sqlc
 	@echo -e "${GREEN}All code generation complete${NC}"
 
 # ==============================================================================
@@ -469,7 +462,7 @@ env-check:
         stack-up stack-down stack-logs stack-ps \
         migrate-up migrate-down migrate-redo migrate-status \
         migrate-create migrate-baseline migrate-fix \
-        sqlc sqlc-check swagger generate \
+        sqlc sqlc-check generate \
         test test-unit test-integration test-coverage test-race watch-test \
         x-test-integration \
         lint fmt vet staticcheck check check-refs \

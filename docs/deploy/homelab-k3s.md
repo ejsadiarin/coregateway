@@ -1984,7 +1984,7 @@ Apply policies last, one at a time, and watch for drops with
 kubectl -n coregateway get pods                    # all Running, 0 restarts after settling
 kubectl -n coregateway get httproute core          # Accepted and ResolvedRefs True
 curl -sI https://core.ejsadiarin.com | head -1     # 200
-# Only /api reaches the gateway. /.well-known/jwks.json, /swagger and /health
+# Only /api reaches the gateway. /.well-known/jwks.json and /health
 # fall through to the web pod, so they are not published:
 curl -s https://core.ejsadiarin.com/.well-known/jwks.json | head -c 15   # HTML, not JSON
 # Browser: log in, open the budget page, check the cookie is Secure and HttpOnly

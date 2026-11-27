@@ -223,7 +223,6 @@ coregateway/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| GET | `/swagger/*` | Swagger UI |
 
 ### Auth
 

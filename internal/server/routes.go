@@ -16,7 +16,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	swagger "github.com/swaggo/http-swagger"
 )
 
 func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
@@ -30,7 +29,6 @@ func (s *Server) RegisterRoutes(cfg *config.Config) http.Handler {
 
 	// ops
 	r.Get("/.well-known/jwks.json", s.ServeJWKS)
-	r.Get("/swagger/*", swagger.WrapHandler)
 	r.Get("/health", healthCheck)
 
 	// auth
