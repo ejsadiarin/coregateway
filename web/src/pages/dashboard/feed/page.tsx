@@ -33,6 +33,7 @@ import {
   archivePrompt,
   canErase,
   copyText,
+  dayKey,
   dayNet,
   deleteRecordPrompt,
   feedDays,
@@ -229,6 +230,10 @@ function useEnterToSend(send: () => void, onEscape?: () => void) {
 interface NoteActions {
   // Starts a reply to the note in the composer.
   reply: () => void;
+  // Goes to the note a reply quotes; undefined when it has none to go to.
+  jumpToQuote?: () => void;
+  // The Feed is on its way to that note.
+  quoteJumping: boolean;
   copy: () => void;
   saveText: (text: string, done: () => void) => void;
   makeReminder: () => void;
@@ -403,7 +408,26 @@ function LiveNote({
   }
 
   const link = note.link;
-  const quote = note.reply_to && <QuoteBlock quote={note.reply_to} categoryName={categoryName} />;
+  const quote = note.reply_to && (
+    <QuoteBlock
+      quote={note.reply_to}
+      categoryName={categoryName}
+      onJump={actions.jumpToQuote}
+      jumping={actions.quoteJumping}
+    />
+  );
+  // A linked note's bubble is a button; a quote, itself a button, sits
+  // above it rather than inside.
+  const recordLines = link && (
+    <>
+      {isBudgetLink(link) ? (
+        <BudgetLine link={link} categoryName={categoryName} />
+      ) : (
+        <LinkLine link={link} categoryName={categoryName} />
+      )}
+      {note.origin !== "budget" && <NoteTime note={note} className="text-right" />}
+    </>
+  );
   return (
     <div className="group flex items-start justify-end gap-1">
       {link ? (
@@ -418,15 +442,16 @@ function LiveNote({
             <LinkLine link={link} categoryName={categoryName} />
             <NoteTime note={note} className="text-right" />
           </div>
+        ) : quote ? (
+          <div className={cn(bubble, "hover:border-primary/40")}>
+            {quote}
+            <button type="button" onClick={actions.openRecord} className="block w-full text-left">
+              {recordLines}
+            </button>
+          </div>
         ) : (
           <button type="button" onClick={actions.openRecord} className={cn(bubble, "hover:border-primary/40")}>
-            {quote}
-            {isBudgetLink(link) ? (
-              <BudgetLine link={link} categoryName={categoryName} />
-            ) : (
-              <LinkLine link={link} categoryName={categoryName} />
-            )}
-            {note.origin !== "budget" && <NoteTime note={note} className="text-right" />}
+            {recordLines}
           </button>
         )
       ) : (
@@ -662,6 +687,42 @@ export default function FeedPage() {
     if (target) document.getElementById(`feed-day-${target.key}`)?.scrollIntoView({ block: "start" });
     setJumpTo(null);
   }, [jumpTo, feedPending, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Tapping a reply's quote goes to the note it quotes (coregateway#79):
+  // in the whole Feed, with archived notes shown if it is archived, loading
+  // older pages until its day is in, then flashing it (.feed-landed).
+  const [landed, setLanded] = useState<string | null>(null);
+  const [jumpNote, setJumpNote] = useState<{ id: string; day: string } | null>(null);
+  const jumpToQuote = (quoted: Note) => {
+    const inView = days.some((d) => d.notes.some((n) => n.id === quoted.id));
+    if (!inView) {
+      if (searchOpen) setQuery(null);
+      if (filter !== "all") setFilter("all");
+      if (quoted.archived_at && !showArchived) setShowArchived(true);
+    }
+    pinned.current = false;
+    setActionError("");
+    setJumpNote({ id: quoted.id, day: dayKey(quoted.posted_at) });
+  };
+  useEffect(() => {
+    if (!jumpNote || feedPending) return;
+    if (days.some((d) => d.notes.some((n) => n.id === jumpNote.id))) {
+      pinned.current = false;
+      scroller.current
+        ?.querySelector(`[data-note-id="${CSS.escape(jumpNote.id)}"]`)
+        ?.scrollIntoView({ block: "center" });
+      setLanded(jumpNote.id);
+      setJumpNote(null);
+      return;
+    }
+    const oldest = days[0]?.key;
+    if (hasNextPage && (!oldest || oldest >= jumpNote.day)) {
+      if (!isFetchingNextPage) fetchNextPage();
+      return;
+    }
+    setJumpNote(null);
+    setActionError("Couldn't find that note in the Feed.");
+  }, [jumpNote, feedPending, days, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const toggleArchived = () => {
     toBottom.current = true;
@@ -901,7 +962,6 @@ export default function FeedPage() {
 
   // landed is the note of a record just saved from the sheet: once it shows
   // it is brought into view and flashes where it landed (.feed-landed).
-  const [landed, setLanded] = useState<string | null>(null);
   useEffect(() => {
     if (!landed) return;
     const li = scroller.current?.querySelector(`[data-note-id="${CSS.escape(landed)}"]`);
@@ -978,6 +1038,8 @@ export default function FeedPage() {
       setReplyingTo(note.id);
       input.current?.focus();
     },
+    jumpToQuote: note.reply_to?.note ? () => jumpToQuote(note.reply_to!.note!) : undefined,
+    quoteJumping: jumpNote !== null && jumpNote.id === note.reply_to?.note?.id,
     copy: () =>
       copyText(noteCopyText(note, new Date().getFullYear(), categoryName)).then(
         () => setStatus("Copied."),

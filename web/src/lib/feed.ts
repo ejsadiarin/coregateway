@@ -226,11 +226,14 @@ export function dayLabel(at: Date, now: Date = new Date()): string {
 }
 
 // feedDays groups notes (oldest first) by the local day they sit on.
+// dayKey is the day a note sits under in the Feed, on the device's clock.
+export const dayKey = (iso: string) => format(new Date(iso), "yyyy-MM-dd");
+
 export function feedDays(notes: Note[], now: Date = new Date()): FeedDay[] {
   const days: FeedDay[] = [];
   for (const n of notes) {
     const at = new Date(n.posted_at);
-    const key = format(at, "yyyy-MM-dd");
+    const key = dayKey(n.posted_at);
     const last = days[days.length - 1];
     if (last?.key === key) last.notes.push(n);
     else days.push({ key, label: dayLabel(at, now), notes: [n] });

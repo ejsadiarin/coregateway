@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
-import { Archive, Reply, X } from "lucide-react";
+import { Archive, Loader2, Reply, X } from "lucide-react";
 import { quoteLine } from "@/lib/feed";
 import { SWIPE, swipeIntent, swipeOffset } from "@/lib/swipe-reply";
 import type { Note, Quote } from "@/types/feed";
@@ -19,16 +19,22 @@ function thumbOf(note: Note | null): string | undefined {
 // the way a chat app does: muted, behind an accent bar, two lines at most,
 // with a thumbnail when the note has pictures. An archived note is still
 // quoted, tagged; a permanently deleted one reads "Note deleted".
-export function QuoteBlock({ quote, categoryName }: { quote: Quote; categoryName: CategoryName }) {
+// Tapping it goes to the quoted note (onJump), with a spinner while the
+// Feed loads its way there; a deleted note's quote goes nowhere.
+export function QuoteBlock({
+  quote,
+  categoryName,
+  onJump,
+  jumping = false,
+}: {
+  quote: Quote;
+  categoryName: CategoryName;
+  onJump?: () => void;
+  jumping?: boolean;
+}) {
   const thumb = thumbOf(quote.note);
-  return (
-    <figure
-      aria-label="Replying to"
-      className={cn(
-        "mb-1.5 flex min-w-0 items-stretch gap-2 rounded-lg bg-muted/60 py-1.5 pl-2 pr-2 text-left",
-        quote.deleted && "italic",
-      )}
-    >
+  const body = (
+    <>
       <span className="w-0.5 shrink-0 rounded-full bg-primary/70" aria-hidden />
       <div className="min-w-0 flex-1">
         {quote.note?.archived_at && (
@@ -41,7 +47,32 @@ export function QuoteBlock({ quote, categoryName }: { quote: Quote; categoryName
           {quoteLine(quote, new Date().getFullYear(), categoryName)}
         </p>
       </div>
-      {thumb && <img src={thumb} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />}
+      {jumping ? (
+        <Loader2 className="h-4 w-4 shrink-0 self-center animate-spin text-muted-foreground" aria-hidden />
+      ) : (
+        thumb && <img src={thumb} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
+      )}
+    </>
+  );
+  const box = "flex w-full min-w-0 items-stretch gap-2 rounded-lg bg-muted/60 py-1.5 pl-2 pr-2 text-left";
+  return (
+    <figure aria-label="Replying to" className={cn("mb-1.5 min-w-0", quote.deleted && "italic")}>
+      {onJump && !quote.deleted ? (
+        <button
+          type="button"
+          aria-label="Go to the quoted note"
+          aria-busy={jumping}
+          onClick={(e) => {
+            e.stopPropagation();
+            onJump();
+          }}
+          className={cn(box, "hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary")}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className={box}>{body}</div>
+      )}
     </figure>
   );
 }

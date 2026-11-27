@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, login, test } from "./fixtures";
+import { API_URL as api, expect, login, test } from "./fixtures";
 
 // unique keeps notes from colliding with another test or an earlier run on
 // the same stack.
@@ -379,5 +379,92 @@ test.describe("swipe to reply", () => {
     await expect(button).toBeVisible();
     await button.click();
     await expect(replyBar(page)).toContainText(text);
+  });
+});
+
+// coregateway#79: tapping a reply's quote goes to the note it quotes and
+// flashes it, loading older pages, the Feed as a whole, or archived notes
+// as needed.
+test.describe("jump to the quoted note", () => {
+  const goTo = (page: Page, reply: string) =>
+    quoteIn(page, reply).getByRole("button", { name: "Go to the quoted note" }).click();
+  const original = (page: Page, text: string) => noteItem(page, text).first();
+  const postApi = async (page: Page, text: string, replyTo?: string) => {
+    const res = await page.request.post(`${api}/api/coreban/notes`, {
+      data: replyTo ? { text, reply_to: replyTo } : { text },
+    });
+    expect(res.ok()).toBe(true);
+    return (await res.json()).id as string;
+  };
+
+  test("a quote whose note is on screen scrolls to it and flashes it", async ({ page }) => {
+    const text = unique("jump target");
+    const answer = unique("jump from");
+    await post(page, text);
+    await replyTo(page, text);
+    await post(page, answer);
+
+    await goTo(page, answer);
+    await expect(original(page, text)).toHaveClass(/feed-landed/);
+    await expect(original(page, text)).toBeInViewport();
+  });
+
+  test("a quote whose note is pages back loads them and lands on it", async ({ page }) => {
+    const text = unique("long ago");
+    const id = await postApi(page, text);
+    for (let i = 0; i < 60; i++) await postApi(page, unique(`filler ${i}`));
+    const answer = unique("about long ago");
+    await postApi(page, answer, id);
+    await page.reload();
+    await expect(noteItem(page, answer)).toBeVisible();
+    await expect(noteItem(page, text)).toHaveCount(1); // only the quote
+
+    await goTo(page, answer);
+    await expect(original(page, text)).toHaveClass(/feed-landed/);
+    await expect(original(page, text)).toBeInViewport();
+  });
+
+  test("from a search, the jump goes back to the whole Feed", async ({ page }) => {
+    const text = unique("searched target");
+    const answer = unique("searchable reply");
+    await post(page, text);
+    await replyTo(page, text);
+    await post(page, answer);
+
+    await page.getByRole("button", { name: "Search" }).click();
+    await page.getByRole("searchbox", { name: "Search the Feed" }).fill(answer.split(" ").at(-1)!);
+    await expect(noteItem(page, answer)).toBeVisible();
+    await expect(feed(page).getByRole("listitem")).toHaveCount(1);
+
+    await goTo(page, answer);
+    await expect(page.getByRole("searchbox", { name: "Search the Feed" })).toHaveCount(0);
+    await expect(original(page, text)).toHaveClass(/feed-landed/);
+  });
+
+  test("an archived quote shows archived notes and lands on it; a deleted one isn't a link", async ({ page }) => {
+    const kept = unique("archived target");
+    const gone = unique("deleted target");
+    const toKept = unique("to the archived");
+    const toGone = unique("to the deleted");
+    await post(page, kept);
+    await post(page, gone);
+    await replyTo(page, kept);
+    await post(page, toKept);
+    await replyTo(page, gone);
+    await post(page, toGone);
+    await replyTo(page, kept, "Archive");
+    await replyTo(page, gone, "Permanently delete");
+    await page.getByRole("alertdialog").getByRole("button", { name: "Permanently delete" }).click();
+
+    await expect(quoteIn(page, toGone)).toContainText("Note deleted");
+    await expect(quoteIn(page, toGone).getByRole("button")).toHaveCount(0);
+
+    await goTo(page, toKept);
+    await expect(page.getByRole("group", { name: "Show" }).getByRole("button", { name: "Archived" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(original(page, kept)).toHaveClass(/feed-landed/);
+    await expect(archivedRow(page, kept)).toBeInViewport();
   });
 });
