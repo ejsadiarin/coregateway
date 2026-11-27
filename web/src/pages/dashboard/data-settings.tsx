@@ -11,8 +11,9 @@ import type { FilePart, ImportResponse, PartResult } from "@/types/export";
 
 // DataSettings is the Data section of the Settings page: export your data
 // as one file with a part per service, and import a file's parts back
-// (coregateway ADR-0008). Import keeps every record's id, so what you
-// already have is skipped and importing twice changes nothing.
+// (coregateway ADR-0008). Import works from any account's file: your own
+// keeps its ids, another's is copied under ids derived for you. What you
+// already have is skipped, so importing twice changes nothing.
 export function DataSettings() {
   return (
     <div className="grid gap-10 lg:grid-cols-2">

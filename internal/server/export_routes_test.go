@@ -83,7 +83,7 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case strings.Contains(string(body), "refuse"):
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_ = json.NewEncoder(w).Encode(map[string]any{"part": "budget", "status": "failed", "dry_run": dry,
-				"errors": []map[string]string{{"entity": "expense", "reason": "id belongs to another user"}}})
+				"errors": []map[string]string{{"entity": "expense", "reason": "date is not a date"}}})
 		default:
 			_ = json.NewEncoder(w).Encode(map[string]any{"part": "budget", "status": "imported", "dry_run": dry,
 				"counts": map[string]any{"expenses": map[string]int{"created": 0, "skipped": 1}}})
@@ -306,7 +306,7 @@ func TestImportBundle(t *testing.T) {
 	t.Run("a refused or broken part is reported failed with a 200 overall", func(t *testing.T) {
 		h, _, _ := exportSetup(t)
 		for body, reason := range map[string]string{
-			bundle(`{"format":"coregateway.budget","version":1,"data":"refuse"}`):  "id belongs to another user",
+			bundle(`{"format":"coregateway.budget","version":1,"data":"refuse"}`):  "date is not a date",
 			bundle(`{"format":"coregateway.budget","version":1,"data":"explode"}`): "database unreachable",
 		} {
 			rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import", body)

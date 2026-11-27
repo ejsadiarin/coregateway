@@ -127,5 +127,5 @@ The slice of an export one service owns (budget, kanban, draw, or the export-onl
 _Avoid_: section, module, service export
 
 **Import**:
-Loading an export's chosen parts into the caller's own data, keeping each record's id: what the caller already has is skipped, so importing the same file twice changes nothing.
+Loading an export's chosen parts into the caller's own data, into any account. A part from the caller's own data keeps each record's id; a part from another account is copied under ids derived for the caller, with its links kept. Either way, what the caller already has is skipped, so importing the same file twice changes nothing.
 _Avoid_: restore, upload, merge, sync

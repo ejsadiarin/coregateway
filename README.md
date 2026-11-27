@@ -260,7 +260,7 @@ coregateway/
 |--------|------|-------------|
 | GET | `/api/export?parts=budget,kanban,draw,account` | Your data as one file ([`schemas/export.v1.json`](schemas/export.v1.json)), a part per service; one part named is that part's own file. Admins may add `user_id`. Keys need each part's `<service>:read` |
 | GET | `/api/account/export` | The export-only account part: your email, role and timezone ([`schemas/account.v1.json`](schemas/account.v1.json)); admins may add `user_id` |
-| POST | `/api/import?parts=budget&dry_run=true` | Import a bundle or one part's file into your own data, keeping ids; reports each part's result. Keys need `<service>:write`; the demo account can't import. Max 25 MB |
+| POST | `/api/import?parts=budget&dry_run=true` | Import a bundle or one part's file into your own data (any account's file: your own keeps its ids, another's is copied); reports each part's result. Keys need `<service>:write`; the demo account can't import. Max 25 MB |
 
 ## Architecture
 
