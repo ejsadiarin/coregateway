@@ -5,6 +5,7 @@ import { Sidebar } from "./sidebar";
 import { MobileNav } from "./mobile-nav";
 import { useMobileNavMode } from "./mobile-nav-mode";
 import { ContentHeader } from "./content-header";
+import { OfflineMark } from "./offline-mark";
 import { PageTitleProvider } from "./page-title";
 import { cn } from "@/lib/utils";
 import { tabEnterFrom } from "@/lib/motion";
@@ -39,6 +40,7 @@ function ShellInner({ children }: { children: React.ReactNode }) {
         <div className={cn(isDrawEditor && "hidden md:block")}>
           <ContentHeader />
         </div>
+        <OfflineMark />
 
         {/* Keyed so each route starts at the top. The entrance is a CSS
             animation the compositor runs on its own: the new page's mount

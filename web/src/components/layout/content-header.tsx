@@ -183,6 +183,7 @@ export function ContentHeader() {
               variant="ghost"
               size="icon"
               className="hidden md:flex text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 w-8"
+              aria-label="Account"
             >
               <User className="h-4 w-4" />
             </Button>

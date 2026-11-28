@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
 import { safeReturnPath } from "@/lib/share";
+import { NeedsConnection } from "@/components/layout/needs-connection";
+import { useOnline } from "@/hooks/use-online";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,6 +20,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { login, demoLogin, isAuthenticated, isGuest, user } = useAuth();
   const navigate = useNavigate();
+  const online = useOnline();
   // Back to the page that sent the reader here (a share, say), else the
   // dashboard; it takes login's place, so Back never returns to the form.
   const next = safeReturnPath((useLocation().state as { from?: unknown } | null)?.from);
@@ -119,6 +122,10 @@ export default function LoginPage() {
             </div>
           )}
 
+          {!online && (
+            <NeedsConnection what="Signing in" className="mb-6 flex items-start gap-3 rounded-md border border-border px-4 py-3" />
+          )}
+
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -186,7 +193,7 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 relative overflow-hidden"
-              disabled={isLoading}
+              disabled={isLoading || !online}
             >
               {isLoading ? (
                 <motion.div
@@ -219,7 +226,7 @@ export default function LoginPage() {
             variant="outline"
             className="w-full border-accent/50 text-accent hover:bg-accent/10"
             onClick={handleDemoLogin}
-            disabled={isLoading}
+            disabled={isLoading || !online}
           >
             Try Demo Mode (Guest Access)
           </Button>

@@ -8,6 +8,7 @@
 // (Seam A, lib/draw.ts) is the only I/O this module does.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   fetchBoard,
   saveBoard,
@@ -64,7 +65,12 @@ function saveInput(snapshot: unknown, meta: BoardMeta): SaveBoardInput {
   return { snapshot, snapshotVersion, doc: meta.doc, revision: meta.revision };
 }
 
+// A board as last loaded or saved here, kept as last-seen data so it opens
+// offline (ADR-0009).
+export const boardKey = (id: string) => ["draw", "board", id];
+
 export function useBoardSync(boardId: string | undefined, engine: SyncEngine): BoardSync {
+  const queryClient = useQueryClient();
   const [phase, setPhase] = useState<Phase>("loading");
   const [loadError, setLoadError] = useState("");
   const [meta, setMeta] = useState<BoardMeta | null>(null);
@@ -96,7 +102,16 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
       setConflict(null);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       try {
-        const board = await fetchBoard(id);
+        let board: Board;
+        try {
+          board = await fetchBoard(id);
+          queryClient.setQueryData(boardKey(id), board);
+        } catch (err) {
+          // Out of reach (offline): the copy last seen here, if any.
+          const saved = queryClient.getQueryData<Board>(boardKey(id));
+          if (!saved || !(err instanceof TypeError)) throw err;
+          board = saved;
+        }
         if (!alive.current) return;
         loadedRef.current = { snapshot: board.snapshot, version: board.snapshot_version };
         setMeta({ id: board.id, title: board.title, doc: board.doc, revision: board.revision });
@@ -110,7 +125,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
         setPhase("error");
       }
     },
-    [applyCurrent],
+    [applyCurrent, queryClient],
   );
 
   useEffect(() => {
@@ -146,6 +161,9 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
     setSaveState("saving");
     try {
       const updated = await saveBoard(current.id, saveInput(snapshot, current));
+      queryClient.setQueryData<Board>(boardKey(current.id), (b) =>
+        b && { ...b, ...updated, snapshot, doc: current.doc, revision: updated.revision },
+      );
       if (!alive.current) return true;
       setMeta({ ...current, revision: updated.revision });
       setSaveState("saved");
@@ -171,7 +189,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
       }
       return false;
     }
-  }, []);
+  }, [queryClient]);
 
   const scheduleSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);

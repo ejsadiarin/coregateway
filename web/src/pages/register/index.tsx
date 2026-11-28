@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/contexts/auth-context";
+import { NeedsConnection } from "@/components/layout/needs-connection";
+import { useOnline } from "@/hooks/use-online";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -16,6 +18,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { register } = useAuth();
+  const online = useOnline();
   const navigate = useNavigate();
 
   const validateForm = (): string | null => {
@@ -110,6 +113,10 @@ export default function RegisterPage() {
             </motion.div>
           )}
 
+          {!online && (
+            <NeedsConnection what="Registering" className="mb-6 flex items-start gap-3 rounded-md border border-border px-4 py-3" />
+          )}
+
           {/* Register Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -183,7 +190,7 @@ export default function RegisterPage() {
             <Button
               type="submit"
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 relative overflow-hidden"
-              disabled={isLoading}
+              disabled={isLoading || !online}
             >
               {isLoading ? (
                 <motion.div

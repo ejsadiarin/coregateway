@@ -24,8 +24,10 @@ export function useBudgetSearch(term: string, enabled: boolean): BudgetMatches {
   const expenseCategories = useKindCategories("expense");
   const incomeCategories = useKindCategories("income");
   const queries = [expenses, incomes, expenseCategories, incomeCategories];
-  const loading = queries.some((q) => q.isPending);
-  const failed = queries.some((q) => q.isError && !q.data);
+  // Offline, a read never saved on this device waits (paused): the search
+  // goes on without it rather than waiting for a connection.
+  const loading = queries.some((q) => q.isPending && !q.isPaused);
+  const failed = queries.some((q) => (q.isError || q.isPaused) && !q.data);
 
   const matched = useMemo(() => {
     if (!enabled || !expenses.data || !incomes.data || !expenseCategories.data || !incomeCategories.data) {

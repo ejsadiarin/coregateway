@@ -67,7 +67,8 @@ import { syncAllBudgetNotes } from "@/lib/budget-sync";
 import { formatPeso } from "@/lib/format";
 import { useBudgetRecords, type CategoryName } from "./use-budget-records";
 import { useBudgetSearch } from "./use-budget-search";
-import { MAX_SEARCH_LENGTH, MAX_SEARCH_RECORDS } from "@/lib/feed-search";
+import { MAX_SEARCH_LENGTH, MAX_SEARCH_RECORDS, searchSavedNotes } from "@/lib/feed-search";
+import { useOnline } from "@/hooks/use-online";
 import { useTouchDevice } from "@/hooks/use-touch-device";
 import { useAuth } from "@/contexts/auth-context";
 import { ExchangeDialog } from "@/components/exchange/exchange-compare";
@@ -654,6 +655,10 @@ export default function FeedPage() {
   const term = typed && settled;
   const searching = term !== "";
   const budget = useBudgetSearch(term, searching && filter !== "notes");
+  // Offline, a search covers only the notes saved on this device: the
+  // Feed's own last-seen pages (ADR-0009 decision 7).
+  const online = useOnline();
+  const offlineSearch = searching && !online;
 
   const key = useMemo(
     () =>
@@ -668,11 +673,23 @@ export default function FeedPage() {
       searching
         ? searchFeed(term, budget.records, pageParam, filter, showArchived)
         : fetchFeed(pageParam, filter, showArchived),
-    enabled: !budget.loading,
+    enabled: !budget.loading && !offlineSearch,
+    // Each search is its own read, never kept as last-seen data.
+    gcTime: searching ? 5 * 60_000 : undefined,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
-  const feed = feedNotes(feedQuery.data);
+  const saved = useMemo(() => {
+    if (!offlineSearch) return [];
+    const views = queryClient
+      .getQueriesData<FeedData>({
+        queryKey: feedKey,
+        predicate: (q) => isFeedData(q.state.data) && q.queryKey[feedKey.length] !== "search",
+      })
+      .flatMap(([, data]) => (data ? [data] : []));
+    return searchSavedNotes(views, term, { filter, withArchived: showArchived, records: budget.records });
+  }, [offlineSearch, queryClient, term, filter, showArchived, budget.records]);
+  const feed = offlineSearch ? saved : feedNotes(feedQuery.data);
   const { hasNextPage, isFetchingNextPage, fetchNextPage, isPending: feedPending } = feedQuery;
   const pageCount = feedQuery.data?.pages.length ?? 0;
 
@@ -1124,7 +1141,7 @@ export default function FeedPage() {
     erase: () => setDeleting(note),
   });
 
-  const isEmpty = feedQuery.isSuccess && notes.length === 0;
+  const isEmpty = (offlineSearch || feedQuery.isSuccess) && notes.length === 0;
   const captureText = draft.trim();
 
   return (
@@ -1167,7 +1184,10 @@ export default function FeedPage() {
               autoFocus
               className="h-11 [&::-webkit-search-cancel-button]:hidden"
             />
-            {searching && budget.failed && (
+            {offlineSearch && (
+              <p className="pt-2 text-sm text-muted-foreground">Searching saved notes only — connect for everything</p>
+            )}
+            {searching && budget.failed && !offlineSearch && (
               <p className="pt-2 text-sm text-muted-foreground">
                 Your budget couldn't be read, so expenses and incomes aren't included.
               </p>
@@ -1218,7 +1238,7 @@ export default function FeedPage() {
         ref={scroller}
         role="log"
         aria-label="Feed"
-        aria-busy={feedQuery.isPending || isFetchingNextPage}
+        aria-busy={(!offlineSearch && feedQuery.isPending && !feedQuery.isPaused) || isFetchingNextPage}
         className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6"
       >
         {hasNextPage && (
@@ -1239,6 +1259,10 @@ export default function FeedPage() {
               <div key={i} className="ml-auto h-14 w-2/3 animate-pulse rounded-xl bg-muted" />
             ))}
           </div>
+        )}
+
+        {!offlineSearch && feedQuery.isPending && feedQuery.isPaused && (
+          <p className="text-sm text-muted-foreground">Nothing from this view of the Feed is saved on this device yet.</p>
         )}
 
         {feedQuery.error && (

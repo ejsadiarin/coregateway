@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetRecordIds, rememberShown, showBudget } from "./feed-records";
+import { budgetRecordIds, recordsFromShown, rememberShown, showBudget } from "./feed-records";
 import type { Note, NoteLink } from "@/types/feed";
 import type { Expense, Income } from "@/types/api";
 
@@ -127,5 +127,31 @@ describe("quoted budget notes", () => {
     const shown = showBudget(quoting("r", expenseNote), records, {}).note;
     const link = shown.reply_to?.note?.link;
     expect(link?.kind === "expense" && link.expense?.description).toBe("Lunch");
+  });
+});
+
+describe("recordsFromShown", () => {
+  it("shows the records last shown on this device, as if read just now", () => {
+    const shown = rememberShown({}, [
+      { kind: "expense", record: lunch },
+      { kind: "income", record: salary },
+    ]);
+    const records = recordsFromShown({ expense: ["e1", "e2"], income: ["i1"] }, shown);
+    expect(showBudget(expenseNote("n", "e1"), records, shown).note.link).toEqual({
+      kind: "expense",
+      deleted: false,
+      record_id: "e1",
+      expense: lunch,
+    });
+    // One never shown here is left as it came, never read as deleted.
+    const unseen = expenseNote("m", "e2");
+    expect(showBudget(unseen, records, shown)).toEqual({ note: unseen });
+  });
+
+  it("never takes one kind's record for the other", () => {
+    const shown = rememberShown({}, [{ kind: "income", record: { ...salary, id: "x" } }]);
+    const records = recordsFromShown({ expense: ["x"], income: [] }, shown);
+    expect(records.expense.size).toBe(0);
+    expect(records.asked.has("x")).toBe(false);
   });
 });

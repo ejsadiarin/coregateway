@@ -5,6 +5,7 @@ import { deleteNote, saveSnapshot } from "@/lib/feed";
 import {
   budgetRecordIds,
   fetchBudgetRecords,
+  recordsFromShown,
   loadShown,
   rememberShown,
   saveShown,
@@ -37,6 +38,8 @@ export function useBudgetRecords(
     queryFn: () => fetchBudgetRecords(ids),
     enabled,
     placeholderData: keepPreviousData,
+    // A batch is replaced as the Feed scrolls: older ones needn't be kept.
+    gcTime: 5 * 60_000,
   });
   const categories = useQuery({
     queryKey: budgetKeys.categoriesList(),
@@ -54,7 +57,11 @@ export function useBudgetRecords(
     (categories.data?.find((c) => c.id === id) ?? incomeCategories.data?.find((c) => c.id === id))?.name;
 
   const [shown, setShown] = useState(loadShown);
-  const shownNotes = feed.map((n) => showBudget(n, records.data, shown));
+  // With corefinance out of reach (offline), the records come from what this
+  // device last showed instead, so no note reads as deleted.
+  const unreachable = !records.data && (records.isPaused || records.isError);
+  const read = unreachable ? recordsFromShown(ids, shown) : records.data;
+  const shownNotes = feed.map((n) => showBudget(n, read, shown));
 
   const data = records.data;
   useEffect(() => {

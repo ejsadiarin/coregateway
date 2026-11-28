@@ -53,7 +53,7 @@ Rules for theme-safe accents: hardcoded hexes are banned outside `theme.ts` — 
 
 ## 2c. Mobile / PWA (Android-first)
 
-Installable via `public/manifest.webmanifest` + `public/sw.js` (offline shell, network-only `/api`, registered in PROD only). `theme-color` meta syncs per theme in `applyTheme()`. Viewport uses `viewport-fit=cover`; bottom nav already spacers `env(safe-area-inset-bottom)`. Perf rules: entrance particles drop to 16 under 768px, `backdrop-blur` on fixed chrome only, 44px touch targets, single-column collapse <768px with no horizontal scroll.
+Installable via `public/manifest.webmanifest` + `public/sw.js` (offline shell, network-only `/api`, registered in PROD only). Offline, pages show their last-seen data: React Query's cache kept in IndexedDB per account (`src/lib/last-seen.ts`, never in the service worker), under a mono `● OFFLINE · LAST-SEEN DATA ON THIS DEVICE` strip below the header; what only works online shows `NeedsConnection` instead. `theme-color` meta syncs per theme in `applyTheme()`. Viewport uses `viewport-fit=cover`; bottom nav already spacers `env(safe-area-inset-bottom)`. Perf rules: entrance particles drop to 16 under 768px, `backdrop-blur` on fixed chrome only, 44px touch targets, single-column collapse <768px with no horizontal scroll.
 
 ## 3. Typography Rules
 

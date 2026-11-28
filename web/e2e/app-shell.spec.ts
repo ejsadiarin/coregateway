@@ -39,12 +39,14 @@ test("/login while signed in says so, and still offers the form to switch accoun
   await page.waitForURL("**/dashboard");
 });
 
+// The account last signed in on this device opens while the check can't
+// finish, on its last-seen data (coregateway#92).
 test("a session check that can't reach the gateway keeps the owner signed in", async ({ page }) => {
   await login(page);
   let offline = true;
   await page.route("**/api/auth/me", (route) => (offline ? route.abort("internetdisconnected") : route.continue()));
   await page.goto("/dashboard/budget");
-  await expect(page.getByTestId("dashboard-skeleton")).toBeVisible();
+  await expect(page.getByTestId("money-on-hand-card")).toBeVisible();
   await page.waitForTimeout(2500);
   await expect(page).toHaveURL(/\/dashboard\/budget/);
   offline = false;

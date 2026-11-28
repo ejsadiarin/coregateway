@@ -1,8 +1,8 @@
 import { lazy, Suspense } from "react";
 import { MotionConfig } from "motion/react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "@/contexts/query-context";
+import { LastSeenProvider } from "@/contexts/last-seen-provider";
+import { OnlineOnly } from "@/components/layout/needs-connection";
 import { EntrancePortal } from "@/components/entrance/entrance-portal";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
@@ -56,9 +56,9 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <QueryClientProvider client={queryClient}>
+          <LastSeenProvider>
             <DashboardLayout />
-          </QueryClientProvider>
+          </LastSeenProvider>
         }
       >
         <Route index element={<DashboardPage />} />
@@ -72,8 +72,22 @@ export default function App() {
         <Route path="budget/summary" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/health" element={<Navigate to="/dashboard/budget" replace />} />
         <Route path="budget/subscriptions" element={<Navigate to="/dashboard/budget" replace />} />
-        <Route path="admin/users" element={<UsersPage />} />
-        <Route path="admin/backups" element={<BackupsPage />} />
+        <Route
+          path="admin/users"
+          element={
+            <OnlineOnly what="Users">
+              <UsersPage />
+            </OnlineOnly>
+          }
+        />
+        <Route
+          path="admin/backups"
+          element={
+            <OnlineOnly what="Backups">
+              <BackupsPage />
+            </OnlineOnly>
+          }
+        />
         <Route path="kanban" element={<KanbanBoardsPage />} />
         <Route path="kanban/settings" element={<Navigate to="/dashboard/settings#reminders" replace />} />
         <Route path="settings" element={<SettingsPage />} />

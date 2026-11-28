@@ -2,7 +2,8 @@
 // live expenses and incomes are in corefinance, so the web matches those
 // and names them in the search (coreban ADR-0003 keeps their text out of
 // coreban).
-import type { BudgetKind } from "@/types/feed";
+import type { BudgetKind, FeedFilter, Note } from "@/types/feed";
+import type { FeedData } from "@/lib/feed";
 import { today, type Entry } from "@/lib/ledger";
 
 // coreban's caps on one search.
@@ -50,4 +51,45 @@ export function matchRecords(
     .filter((e) => e.date <= now && matches(e, words, categoryName))
     .sort((a, b) => b.date.localeCompare(a.date));
   return { records: hits.slice(0, MAX_SEARCH_RECORDS).map(({ kind, id }) => ({ kind, id })), total: hits.length };
+}
+
+// searchSavedNotes is the Feed's search with no connection: only the notes
+// saved on this device (the Feed's cached views), each found by every word
+// of q in its text, its reminder or its card, or for a budget note by its
+// record being one of records (matchRecords over the saved budget). It
+// follows the Feed's filter and archive toggle; oldest first, like the Feed.
+export function searchSavedNotes(
+  saved: FeedData[],
+  q: string,
+  { filter, withArchived, records }: { filter: FeedFilter; withArchived: boolean; records: RecordRef[] },
+): Note[] {
+  const words = searchWords(q);
+  if (words.length === 0) return [];
+  const budget = new Set(records.map((r) => `${r.kind}:${r.id}`));
+  const found = new Map<string, Note>();
+  for (const data of saved) {
+    for (const page of data.pages) {
+      for (const n of page.notes) {
+        if (found.has(n.id) || (n.archived_at && !withArchived)) continue;
+        const l = n.link;
+        const isBudget = l?.kind === "expense" || l?.kind === "income";
+        if ((filter === "budget" && !isBudget) || (filter === "notes" && isBudget)) continue;
+        const hit =
+          l?.kind === "expense" || l?.kind === "income"
+            ? budget.has(`${l.kind}:${l.record_id}`)
+            : noteMatches(n, words);
+        if (hit) found.set(n.id, n);
+      }
+    }
+  }
+  return [...found.values()].sort((a, b) => Date.parse(a.posted_at) - Date.parse(b.posted_at));
+}
+
+function noteMatches(n: Note, words: string[]): boolean {
+  const l = n.link;
+  const text = [n.text, l?.kind === "reminder" && l.reminder?.message, l?.kind === "card" && l.card?.title]
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+  return words.every((w) => text.includes(w));
 }

@@ -7,6 +7,8 @@ import { revealTheme } from "@/lib/theme-reveal";
 import { ReminderSettings } from "@/pages/dashboard/kanban/settings";
 import { BudgetSettings } from "@/pages/dashboard/budget/settings";
 import { DataSettings } from "@/pages/dashboard/data-settings";
+import { NeedsConnection } from "@/components/layout/needs-connection";
+import { useOnline } from "@/hooks/use-online";
 
 // The sections of the one Settings page, in page order. Each service's own
 // settings live in its section; Draw and Services have none to set.
@@ -19,6 +21,10 @@ const SECTIONS = [
 
 export default function SettingsPage() {
   const { hash } = useLocation();
+  // Settings are read and saved on the server: offline only the device's
+  // own appearance can change (ADR-0009 decision 7).
+  const online = useOnline();
+  const offline = (what: string) => <NeedsConnection what={what} className="flex flex-col items-start gap-3" />;
 
   // A link to a section (#budget, or an old settings URL redirected here)
   // lands on it once the page has laid out.
@@ -48,13 +54,13 @@ export default function SettingsPage() {
       </nav>
 
       <Section id="reminders" title="Reminders" blurb="Where Kanban reminders are pushed, and the timezone every service reads your times in.">
-        <ReminderSettings />
+        {online ? <ReminderSettings /> : offline("Reminder settings")}
       </Section>
       <Section id="budget" title="Budget" blurb="The fixed category lists, and your tags.">
-        <BudgetSettings />
+        {online ? <BudgetSettings /> : offline("Budget settings")}
       </Section>
       <Section id="data" title="Data" blurb="Export your data as one file, and import an export back. Imports keep every record's id, so nothing is doubled.">
-        <DataSettings />
+        {online ? <DataSettings /> : offline("Export and import")}
       </Section>
       <Section id="appearance" title="Appearance" blurb="The color scheme on this device.">
         <ThemePicker />

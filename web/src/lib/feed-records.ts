@@ -83,6 +83,26 @@ export function rememberShown(prev: Shown, records: ShownRecord[], cap = 300): S
 // Where Shown lives in localStorage.
 export const SHOWN_KEY = "coreban.feed.shown";
 
+// recordsFromShown stands in for a batch read when corefinance can't be
+// reached (offline): the records in ids that this device last showed, as if
+// just read. Only those count as asked, so none of the rest reads as deleted.
+export function recordsFromShown(ids: Record<BudgetKind, string[]>, shown: Shown): BudgetRecords {
+  const records: BudgetRecords = { asked: new Set(), expense: new Map(), income: new Map() };
+  for (const id of ids.expense) {
+    const s = shown[id];
+    if (s?.kind !== "expense") continue;
+    records.asked.add(id);
+    records.expense.set(id, s.record);
+  }
+  for (const id of ids.income) {
+    const s = shown[id];
+    if (s?.kind !== "income") continue;
+    records.asked.add(id);
+    records.income.set(id, s.record);
+  }
+  return records;
+}
+
 // loadShown and saveShown keep Shown on this device, so a record deleted
 // while the Feed was closed still leaves its last content behind.
 export function loadShown(): Shown {

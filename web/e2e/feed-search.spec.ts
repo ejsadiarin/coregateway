@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { API_URL as api, expect, login, test } from "./fixtures";
+import { ADMIN, API_URL as api, expect, login, test } from "./fixtures";
 
 // Searching the Feed (coreban#18): one list of notes, reminders and budget
 // records, in Feed order.
@@ -150,7 +150,16 @@ test("if the budget can't be read, the rest is still found", async ({ page }) =>
   const tag = unique("findme");
   await post(page, `plain ${tag}`);
   await page.route("**/api/budget/incomes?*", (r) => r.fulfill({ status: 500, body: "{}" }));
-  await page.reload();
+  // Signing out clears the budget saved on this device (last-seen data), so
+  // signing back in finds none to search instead.
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitem", { name: "Logout" }).click();
+  await page.waitForURL("**/login");
+  // Signing back in returns to the Feed it was signed out from.
+  await page.getByLabel("Email").fill(ADMIN.email);
+  await page.getByLabel("Password").fill(ADMIN.password);
+  await page.getByRole("button", { name: "Access System" }).click();
+  await page.waitForURL("**/dashboard/feed");
   await search(page, tag);
   // React Query retries before it gives up.
   await expect(page.getByText("expenses and incomes aren't included")).toBeVisible({ timeout: 20_000 });

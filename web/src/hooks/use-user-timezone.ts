@@ -8,6 +8,10 @@ import {
   type UserTimezone,
 } from "@/lib/user-timezone";
 
+// When this page load started: a timezone read before it came from the
+// device's last-seen data, and is read again.
+const loadedAt = Date.now();
+
 export const userTimezoneKey = (userId: string | undefined) => ["user", userId, "timezone"];
 
 // useUserTimezone reads the signed-in user's timezone from the gateway. A
@@ -26,7 +30,7 @@ export function useUserTimezone() {
       return adoptDeviceTimezone(current, deviceTimezone(), (tz) => saveUserTimezone(id, tz));
     },
     enabled: !!userId,
-    staleTime: Infinity,
+    staleTime: (q) => (q.state.dataUpdatedAt < loadedAt ? 0 : Infinity),
     retry: false,
   });
 }
