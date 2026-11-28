@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Odometer } from '@/components/ui/odometer';
 import { useServices } from '@/hooks/use-services';
 
 /** One compact admin-only line about the monitored services. */
@@ -31,7 +32,7 @@ export function ServiceHealthLine({ className }: { className?: string }) {
     >
       <span className={`h-1.5 w-1.5 rounded-full ${down.length ? 'bg-destructive' : 'bg-[var(--chart-2)]'}`} />
       <span>
-        {up}/{total} services up
+        <Odometer value={up} format={String} />/{total} services up
       </span>
       {down.length > 0 && <span className="text-destructive">· down: {down.map((service) => service.name).join(', ')}</span>}
     </Link>

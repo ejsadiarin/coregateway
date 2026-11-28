@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CountUp } from '@/components/ui/count-up';
+import { Odometer } from '@/components/ui/odometer';
 import { todayISODate } from '@/lib/budget-period';
 import { formatPeso } from '@/lib/format';
 import type { PeriodBudgetResponse } from '@/types/api';
@@ -95,18 +95,18 @@ export function PeriodBudgetCard({ data, isLoading, isPast, className }: PeriodB
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
           <Metric
             label="Funded"
-            value={<CountUp value={Number(data.funded)} format={formatPeso} />}
+            value={<Odometer value={Number(data.funded)} format={formatPeso} />}
             note={projected > 0 ? `includes ${formatPeso(projected)} projected` : 'income this period'}
           />
-          <Metric label="Spent" value={<CountUp value={Number(data.spent)} format={formatPeso} />} note={spentNote} />
+          <Metric label="Spent" value={<Odometer value={Number(data.spent)} format={formatPeso} />} note={spentNote} />
           <Metric
             label="Bills still due"
-            value={<CountUp value={Number(data.bills_still_due)} format={formatPeso} />}
+            value={<Odometer value={Number(data.bills_still_due)} format={formatPeso} />}
             note={isPast ? 'none' : 'after today'}
           />
           <Metric
             label="Left"
-            value={<CountUp value={left} format={formatPeso} />}
+            value={<Odometer value={left} format={formatPeso} />}
             note={left < 0 ? 'over budget' : 'funded − spent − bills'}
             tone={left < 0 ? 'negative' : 'positive'}
           />

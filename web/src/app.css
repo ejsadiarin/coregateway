@@ -452,3 +452,29 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Odometer (components/ui/odometer.tsx): a digit's 0–9 column is drawn
+   with generated content so the figure's text stays the figure itself. The
+   slot is one hidden "0" tall and wide; the column rolls by tenths. */
+.odometer-digit::after {
+  content: "0";
+  visibility: hidden;
+}
+.odometer-digit > span::before {
+  content: "0\a 1\a 2\a 3\a 4\a 5\a 6\a 7\a 8\a 9";
+  white-space: pre;
+}
+
+/* HoldToConfirm: the label trembles just before the hold completes. */
+@keyframes hold-tremble {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1px);
+  }
+  75% {
+    transform: translateX(1px);
+  }
+}

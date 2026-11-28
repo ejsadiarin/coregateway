@@ -62,10 +62,25 @@ export async function newDrawBoard(page: Page, prefix: string): Promise<string> 
   return name;
 }
 
+// holdToConfirm holds a HoldToConfirm button down until it confirms: it
+// turns done, or its dialog has already closed it away.
+export async function holdToConfirm(page: Page, button: Locator) {
+  await button.hover();
+  await page.mouse.down();
+  await expect
+    .poll(() => button.evaluateAll((els) => els.length === 0 || els[0].hasAttribute("data-done")))
+    .toBe(true);
+  await page.mouse.up();
+}
+
 export async function deleteBoard(page: Page, name: string) {
   await page.goto("/dashboard/kanban");
   await page.getByRole("button", { name: `Delete ${name}` }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  const hold = page.getByRole("alertdialog").getByRole("button", { name: "Hold to delete" });
+  // A tap alone doesn't delete.
+  await hold.click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await holdToConfirm(page, hold);
   await expect(page.getByRole("main").getByText(name, { exact: true })).toHaveCount(0);
 }
 

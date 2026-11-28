@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
   BanknoteArrowUp,
   BellRing,
+  Check,
   ChevronDown,
   Copy,
   MessageSquareText,
@@ -76,7 +77,7 @@ import { QuoteBlock, ReplyBar, SwipeToReply } from "./reply";
 import { ATTACH_ACCEPT, MAX_ATTACHMENTS } from "@/lib/attachments";
 import { takeSharedFiles } from "@/lib/shared-files";
 import { cn } from "@/lib/utils";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { EnterItem } from "@/components/ui/enter-item";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,7 +235,8 @@ interface NoteActions {
   jumpToQuote?: () => void;
   // The Feed is on its way to that note.
   quoteJumping: boolean;
-  copy: () => void;
+  // Copies the note; resolves true once it is on the clipboard.
+  copy: () => Promise<boolean>;
   saveText: (text: string, done: () => void) => void;
   makeReminder: () => void;
   makeCard: () => void;
@@ -249,6 +251,48 @@ interface NoteActions {
   erase: () => void;
 }
 
+// CopyItem copies without closing the menu at once: its icon turns into a
+// check where the eye already is, then the menu closes. (After ui-moments'
+// Copy Button.) A failed copy closes it straight away; the Feed says why.
+function CopyItem({ className, copy, close }: { className: string; copy: () => Promise<boolean>; close: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const closeRef = useRef(close);
+  useLayoutEffect(() => {
+    closeRef.current = close;
+  });
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => closeRef.current(), 700);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <DropdownMenuItem
+      className={className}
+      onSelect={(e) => {
+        e.preventDefault();
+        if (copied) return;
+        void copy().then((ok) => (ok ? setCopied(true) : close()));
+      }}
+    >
+      <span className="relative h-4 w-4" aria-hidden>
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span
+            key={copied ? "check" : "copy"}
+            className="absolute inset-0"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            {copied ? <Check className="h-4 w-4 text-[var(--chart-2)]" /> : <Copy className="h-4 w-4" />}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+      {copied ? "Copied" : "Copy"}
+    </DropdownMenuItem>
+  );
+}
+
 function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActions; onEditText: () => void }) {
   const link = note.link;
   // Reply leaves focus in the composer, not back on this menu's button.
@@ -257,8 +301,9 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
   // A note with attachments stays a plain note, and Copy copies text only.
   const convertible = !link && !note.attachments?.length;
   const copyable = !!link || note.text !== "";
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Note actions">
           <MoreHorizontal className="h-4 w-4" />
@@ -292,10 +337,7 @@ function NoteMenu({ note, actions, onEditText }: { note: Note; actions: NoteActi
           </>
         )}
         {copyable && (
-          <DropdownMenuItem className={item} onSelect={actions.copy}>
-            <Copy className="h-4 w-4" aria-hidden />
-            Copy
-          </DropdownMenuItem>
+          <CopyItem className={item} copy={actions.copy} close={() => setOpen(false)} />
         )}
         {!link && (
           <DropdownMenuItem className={item} onSelect={onEditText}>
@@ -1042,8 +1084,14 @@ export default function FeedPage() {
     quoteJumping: jumpNote !== null && jumpNote.id === note.reply_to?.note?.id,
     copy: () =>
       copyText(noteCopyText(note, new Date().getFullYear(), categoryName)).then(
-        () => setStatus("Copied."),
-        fail("Couldn't copy this note"),
+        () => {
+          setStatus("Copied.");
+          return true;
+        },
+        (err) => {
+          fail("Couldn't copy this note")(err);
+          return false;
+        },
       ),
     saveText: (text, done) => {
       setActionError("");

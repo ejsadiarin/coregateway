@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -23,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 
 const boardsKey = ["kanban", "boards"];
 
@@ -249,12 +249,12 @@ export default function KanbanBoardsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleting && deleteMutation.mutate(deleting.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            <HoldToConfirm
+              onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+              pending={deleteMutation.isPending}
             >
-              Delete
-            </AlertDialogAction>
+              Hold to delete
+            </HoldToConfirm>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

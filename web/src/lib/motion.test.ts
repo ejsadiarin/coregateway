@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { digitKeys, staggerDelay, tabEnterFrom } from "./motion";
+import { digitKeys, odometerSlots, staggerDelay, tabEnterFrom } from "./motion";
 
 // DESIGN §6: a list cascades 0.06s apart for its first five items, then
 // the rest come in together with the fifth.
@@ -41,5 +41,24 @@ describe("digitKeys", () => {
 
   it("keeps every key when nothing changed", () => {
     expect(digitKeys("42", ["7", "9"], "42", 10)).toEqual({ keys: ["7", "9"], next: 10 });
+  });
+});
+
+// An odometer rolls a column per digit and keeps the rest still; places
+// are counted from the right so a figure growing a digit rolls in place.
+describe("odometerSlots", () => {
+  it("makes each digit a column and leaves signs and separators plain", () => {
+    expect(odometerSlots("-₱1,05")).toEqual([
+      { key: "5", char: "-", digit: null },
+      { key: "4", char: "₱", digit: null },
+      { key: "3", char: "1", digit: 1 },
+      { key: "2", char: ",", digit: null },
+      { key: "1", char: "0", digit: 0 },
+      { key: "0", char: "5", digit: 5 },
+    ]);
+  });
+
+  it("keeps the ones place's key when the figure grows on the left", () => {
+    expect(odometerSlots("99").at(-1)?.key).toBe(odometerSlots("100").at(-1)?.key);
   });
 });

@@ -3,16 +3,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { Edit, Trash2, Calendar, Repeat } from "lucide-react";
 import type { Expense, CreateExpenseRequest, UpdateExpenseRequest } from "@/types/api";
 import { format } from "date-fns";
@@ -40,7 +31,6 @@ export function ExpenseDetailDialog({
   isGuest = false,
 }: ExpenseDetailDialogProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   if (!expense) return null;
 
@@ -55,18 +45,14 @@ export function ExpenseDetailDialog({
     setEditDialogOpen(true);
   };
 
-  const handleDeleteClick = () => {
-    if (isGuest && showToast) {
-      showToast("Guest user is read-only. Create an account to save changes", "warning");
-      return;
-    }
-    setDeleteDialogOpen(true);
+  const handleGuestDelete = () => {
+    showToast?.("Guest user is read-only. Create an account to save changes", "warning");
   };
 
+  // Holding the delete is the confirmation, so there is no second dialog.
   const handleConfirmDelete = () => {
     onDelete?.(expense.id);
     onOpenChange(false);
-    setDeleteDialogOpen(false);
   };
 
   return (
@@ -138,14 +124,21 @@ export function ExpenseDetailDialog({
                 <Edit className="h-4 w-4" />
                 Edit
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleDeleteClick}
-                className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </Button>
+              {isGuest ? (
+                <Button
+                  variant="outline"
+                  onClick={handleGuestDelete}
+                  className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              ) : (
+                <HoldToConfirm onConfirm={handleConfirmDelete} className="flex-1">
+                  <Trash2 className="h-4 w-4" />
+                  Hold to delete
+                </HoldToConfirm>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -163,23 +156,6 @@ export function ExpenseDetailDialog({
           onOpenChange(false);
         }}
       />
-
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Expense</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete this expense only if it was added by mistake. This permanently removes it and cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

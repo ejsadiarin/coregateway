@@ -37,3 +37,15 @@ export function digitKeys(prev: string, prevKeys: readonly string[], text: strin
   keys.push(...prevKeys.slice(prevKeys.length - end));
   return { keys, next };
 }
+
+// odometerSlots splits a formatted figure into the slots an odometer draws:
+// each digit a rolling column, anything else (₱, a comma, a minus) a plain
+// character. Slots are keyed by their place counted from the right, so the
+// ones stay the ones when a figure gains or loses a digit on the left.
+export function odometerSlots(text: string): { key: string; char: string; digit: number | null }[] {
+  return [...text].map((char, i, all) => ({
+    key: String(all.length - 1 - i),
+    char,
+    digit: char >= "0" && char <= "9" ? Number(char) : null,
+  }));
+}

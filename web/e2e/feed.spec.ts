@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { API_URL as api, expect, login, test } from "./fixtures";
+import { API_URL as api, expect, holdToConfirm, login, test } from "./fixtures";
 
 // unique keeps notes from colliding with another test or an earlier run on
 // the same stack.
@@ -180,7 +180,7 @@ test("Make card converts a note in place; archiving it archives the card and Res
 
   await page.goto("/dashboard/kanban");
   await page.getByRole("button", { name: `Delete ${board}` }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
+  await holdToConfirm(page, page.getByRole("alertdialog").getByRole("button", { name: "Hold to delete" }));
 });
 
 test("on a desktop keyboard Enter posts and Shift+Enter breaks the line", async ({ page }) => {
