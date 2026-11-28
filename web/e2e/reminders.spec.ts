@@ -112,10 +112,9 @@ test("the Calendar marks each day a reminder is sent and adds one on a chosen da
   try {
     await page.goto("/dashboard/kanban/reminders");
     const main = page.getByRole("main");
-    await main.getByRole("button", { name: "Calendar" }).click();
-    // The choice is remembered.
-    await page.reload();
-    await expect(main.getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+    // A desktop shows the list and the calendar side by side, no toggle.
+    await expect(main.getByRole("group", { name: "View" })).toHaveCount(0);
+    await expect(main.getByRole("region", { name: /^This week|^Later|^Tomorrow|^Today/ }).first()).toBeVisible();
 
     // Next month: every Monday, and only Mondays, carry it.
     await main.getByRole("button", { name: "Next month" }).click();
@@ -139,6 +138,29 @@ test("the Calendar marks each day a reminder is sent and adds one on a chosen da
     const dialog = page.getByRole("dialog", { name: "New reminder" });
     await expect(dialog.getByLabel("When")).toHaveValue(/T09:00$/);
     await dialog.getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    await page.request.delete(`${api}/api/coreban/reminders/${id}`);
+  }
+});
+
+test("below desktop width, the List and Calendar toggle switches views and is remembered", async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  const message = `e2e toggle ${Date.now().toString(36)}`;
+  const created = await page.request.post(`${api}/api/coreban/reminders`, {
+    data: { message, schedule: { kind: "daily", time: "08:00" } },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const { id } = await created.json();
+
+  try {
+    await page.goto("/dashboard/kanban/reminders");
+    const main = page.getByRole("main");
+    await main.getByRole("button", { name: "Calendar" }).click();
+    await expect(main.getByRole("group", { name: /^Days of / })).toBeVisible();
+    await page.reload();
+    await expect(main.getByRole("button", { name: "Calendar" })).toHaveAttribute("aria-pressed", "true");
+    await main.getByRole("button", { name: "List" }).click();
+    await expect(main.getByRole("group", { name: /^Days of / })).toHaveCount(0);
   } finally {
     await page.request.delete(`${api}/api/coreban/reminders/${id}`);
     await page.evaluate(() => localStorage.removeItem("core-reminders-view"));

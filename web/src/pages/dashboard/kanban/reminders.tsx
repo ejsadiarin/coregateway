@@ -14,6 +14,7 @@ import {
 } from "@/lib/kanban";
 import type { KanbanReminder, KanbanScheduleInput, KanbanWeekday } from "@/types/kanban";
 import { useUserTimezone } from "@/hooks/use-user-timezone";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
 import {
   fieldsOf,
   groupReminders,
@@ -47,7 +48,8 @@ import {
 
 const settingsKey = ["kanban", "settings"];
 
-// The view the Reminders page opens on, remembered per device.
+// The view the Reminders page opens on below desktop width, remembered per
+// device. A desktop shows the list and the calendar side by side.
 type View = "list" | "calendar";
 const VIEW_KEY = "core-reminders-view";
 
@@ -75,7 +77,6 @@ function newReminderAt(date: string, today: string, now: Date, timeZone: string)
   return hour >= 23 ? `${date}T23:59` : `${date}T${String(hour + 1).padStart(2, "0")}:00`;
 }
 
-
 export default function KanbanRemindersPage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<ReminderDialogState | null>(null);
@@ -83,6 +84,9 @@ export default function KanbanRemindersPage() {
   const [actionError, setActionError] = useState("");
   const [sentOpen, setSentOpen] = useState(false);
   const [view, setView] = useState<View>(savedView);
+  const desktop = useIsDesktop();
+  const showList = desktop || view === "list";
+  const showCalendar = desktop || view === "calendar";
 
   const remindersQuery = useQuery({ queryKey: remindersKey, queryFn: () => fetchKanbanReminders() });
   const settingsQuery = useQuery({ queryKey: settingsKey, queryFn: fetchKanbanSettings });
@@ -107,7 +111,7 @@ export default function KanbanRemindersPage() {
   const zone = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const today = todayIn(now, zone);
-  const groups = reminders && view === "list" ? groupReminders(reminders, now, zone) : [];
+  const groups = reminders && showList ? groupReminders(reminders, now, zone) : [];
   const open = (state: ReminderDialogState) => {
     setActionError("");
     setDialog(state);
@@ -121,7 +125,7 @@ export default function KanbanRemindersPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 md:px-6">
+    <div className="mx-auto max-w-3xl px-4 py-6 md:px-6 lg:max-w-6xl">
       <Link
         to="/dashboard/kanban"
         className="inline-flex min-h-11 items-center gap-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground hover:text-foreground"
@@ -139,23 +143,28 @@ export default function KanbanRemindersPage() {
       <p className="mt-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
         Pushed to your phone through ntfy at the moment you choose.
       </p>
-      <div className="mt-4 inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="View">
-        {(["list", "calendar"] as const).map((v) => (
-          <Button
-            key={v}
-            type="button"
-            variant="ghost"
-            aria-pressed={view === v}
-            className={cn("min-h-11 px-4 capitalize", view === v ? "bg-muted text-foreground" : "text-muted-foreground")}
-            onClick={() => {
-              setView(v);
-              saveView(v);
-            }}
-          >
-            {v}
-          </Button>
-        ))}
-      </div>
+      {!desktop && (
+        <div className="mt-4 inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="View">
+          {(["list", "calendar"] as const).map((v) => (
+            <Button
+              key={v}
+              type="button"
+              variant="ghost"
+              aria-pressed={view === v}
+              className={cn(
+                "min-h-11 px-4 capitalize",
+                view === v ? "bg-muted text-foreground" : "text-muted-foreground",
+              )}
+              onClick={() => {
+                setView(v);
+                saveView(v);
+              }}
+            >
+              {v}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {noTarget && (
         <p className="mt-6 flex items-start gap-2 rounded-xl border border-border p-4 text-sm leading-relaxed">
@@ -200,56 +209,66 @@ export default function KanbanRemindersPage() {
         </div>
       )}
 
-      {reminders && reminders.length > 0 && view === "calendar" && (
-        <RemindersCalendar
-          reminders={reminders}
-          today={today}
-          newAt={(date) => newReminderAt(date, today, new Date(), zone)}
-          onNew={(at) => open({ mode: "new", at })}
-          {...rowActions}
-        />
+      {reminders && reminders.length > 0 && (
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start lg:gap-12">
+          {showList && (
+            <div className="mt-8 lg:mt-6">
+              {groups.map((group) => {
+                const folded = group.key === "sent" && !sentOpen;
+                const headingId = `reminders-${group.key}`;
+                return (
+                  <section key={group.key} aria-labelledby={headingId} className="mt-8 first:mt-0">
+                    <h2
+                      id={headingId}
+                      className={cn(
+                        "font-mono text-[10px] uppercase tracking-[0.18em]",
+                        group.key === "late" ? "text-destructive" : "text-muted-foreground",
+                      )}
+                    >
+                      {group.key === "sent" ? (
+                        <button
+                          type="button"
+                          className="inline-flex min-h-11 items-center gap-1 uppercase hover:text-foreground"
+                          aria-expanded={!folded}
+                          onClick={() => setSentOpen((o) => !o)}
+                        >
+                          <ChevronRight
+                            className={cn("h-3 w-3 transition-transform", !folded && "rotate-90")}
+                            aria-hidden
+                          />
+                          {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
+                        </button>
+                      ) : (
+                        <>
+                          {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
+                        </>
+                      )}
+                    </h2>
+                    {!folded && (
+                      <ul className="mt-2 divide-y divide-border border-y border-border">
+                        {group.reminders.map((r) => (
+                          <li key={r.id}>
+                            <ReminderRow reminder={r} {...rowActions} />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          )}
+          {showCalendar && (
+            <RemindersCalendar
+              reminders={reminders}
+              today={today}
+              newAt={(date) => newReminderAt(date, today, new Date(), zone)}
+              onNew={(at) => open({ mode: "new", at })}
+              {...rowActions}
+            />
+          )}
+        </div>
       )}
-
-      {groups.map((group) => {
-        const folded = group.key === "sent" && !sentOpen;
-        const headingId = `reminders-${group.key}`;
-        return (
-          <section key={group.key} aria-labelledby={headingId} className="mt-8">
-            <h2
-              id={headingId}
-              className={cn(
-                "font-mono text-[10px] uppercase tracking-[0.18em]",
-                group.key === "late" ? "text-destructive" : "text-muted-foreground",
-              )}
-            >
-              {group.key === "sent" ? (
-                <button
-                  type="button"
-                  className="inline-flex min-h-11 items-center gap-1 uppercase hover:text-foreground"
-                  aria-expanded={!folded}
-                  onClick={() => setSentOpen((o) => !o)}
-                >
-                  <ChevronRight className={cn("h-3 w-3 transition-transform", !folded && "rotate-90")} aria-hidden />
-                  {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
-                </button>
-              ) : (
-                <>
-                  {group.title} · <span className="tabular-nums">{group.reminders.length}</span>
-                </>
-              )}
-            </h2>
-            {!folded && (
-              <ul className="mt-2 divide-y divide-border border-y border-border">
-                {group.reminders.map((r) => (
-                  <li key={r.id}>
-                    <ReminderRow reminder={r} {...rowActions} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        );
-      })}
 
       <ReminderDialog
         state={dialog}
@@ -264,9 +283,7 @@ export default function KanbanRemindersPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this reminder?</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{deleting?.message}" stops for good. This can't be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>"{deleting?.message}" stops for good. This can't be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="min-h-11">Cancel</AlertDialogCancel>
@@ -291,8 +308,7 @@ export default function KanbanRemindersPage() {
 // page, maybe at a chosen moment, or from the Feed, pre-filled with text and
 // linked to note), or editing one.
 export type ReminderDialogState =
-  | { mode: "new"; at?: string; text?: string; note?: FeedNote }
-  | { mode: "edit"; reminder: KanbanReminder };
+  { mode: "new"; at?: string; text?: string; note?: FeedNote } | { mode: "edit"; reminder: KanbanReminder };
 
 export function ReminderDialog({
   state,
@@ -415,7 +431,9 @@ export function ReminderForm({
   const errorFor = (f: ScheduleField) => (missing?.field === f ? missing.error : field === f ? plain : "");
   const messageError = field === "message" ? plain : "";
   const otherError =
-    mutation.error && !field ? detail || (onCancel ? "Couldn't save this reminder." : "Couldn't add this reminder.") : "";
+    mutation.error && !field
+      ? detail || (onCancel ? "Couldn't save this reminder." : "Couldn't add this reminder.")
+      : "";
   const zoneNote = timezone ? `In ${zoneLabel(timezone)}, your timezone.` : "In your timezone.";
 
   const handleSubmit = (e: React.FormEvent) => {
