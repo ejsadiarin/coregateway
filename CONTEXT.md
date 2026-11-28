@@ -116,6 +116,24 @@ _Avoid_: backup window, expiry, TTL
 The most recent backup that failed, nightly or manual, with when and why; shown to admins until a backup next succeeds. A skipped nightly (one already taken that day, or another backup running) is not a failure.
 _Avoid_: error log, alert, incident
 
+### Offline
+
+**Outbox queue**:
+The web's list on one device of writes it has not yet had confirmed by a downstream service, kept in IndexedDB per account so closing the app loses none. Every write goes through it, online or not; a confirmed item leaves at once (ADR-0009).
+_Avoid_: outbox, sync queue, pending queue, cache
+
+**Waiting to send**:
+An item in the Outbox queue that has not reached its service yet, shown in place as if done, with a clock mark. A **couldn't send** item was refused by its service and waits for the owner to retry, edit or discard it; a **deleted on another device** item was an edit to something deleted elsewhere, kept so its content can be copied.
+_Avoid_: pending, unsynced, draft, failed
+
+**Last-seen data**:
+What each page last loaded, saved on the device so the page shows it offline. Replaced whenever the page loads fresh; cleared on sign-out.
+_Avoid_: cache, offline copy, snapshot
+
+**Edit time**:
+When a field of a record was last changed, by the device that changed it, capped at the service's clock. A change applies only to fields where it is newer, so the latest edit of each field wins.
+_Avoid_: updated at, timestamp, version
+
 ### Exports
 
 **Export**:
