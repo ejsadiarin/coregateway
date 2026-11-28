@@ -32,12 +32,12 @@ server {
     }
 
     # Imports (ADR-0008) take a JSON file up to 25 MB, or a zip with its
-    # photos and videos up to 2 GB; the gateway and services cap each
+    # photos and videos up to 10 GB; the gateway and services cap each
     # themselves. nginx's default of 1 MB would refuse a real one before
     # the gateway saw it. The body streams through rather than being
     # buffered to disk here first, and a long upload isn't cut short.
     location ~ ^/api/(budget/|coreban/|coredraw/)?import$ {
-        client_max_body_size 2g;
+        client_max_body_size 10g;
         proxy_request_buffering off;
         proxy_read_timeout 2h;
         proxy_send_timeout 2h;

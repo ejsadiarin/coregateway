@@ -14,6 +14,7 @@ import {
   importExport,
   isExportOnly,
   openExportFile,
+  startMediaExport,
   type ExportFile,
 } from "@/lib/export";
 import type { ImportResponse, PartResult } from "@/types/export";
@@ -84,6 +85,19 @@ function ExportPanel() {
   const [media, setMedia] = useState(true);
   const exporting = useMutation({ mutationFn: downloadExport });
   const canMedia = chosen.includes(MEDIA_PART);
+  // A zip is the browser's own download: the page knows only that it
+  // started, or the error if it never did.
+  const [zip, setZip] = useState<{ state: "started" } | { state: "failed"; message: string } | null>(null);
+  const start = () => {
+    exporting.reset();
+    setZip(null);
+    if (canMedia && media) {
+      setZip({ state: "started" });
+      startMediaExport(chosen, (message) => setZip({ state: "failed", message }));
+    } else {
+      exporting.mutate(chosen);
+    }
+  };
 
   return (
     <div>
@@ -114,16 +128,16 @@ function ExportPanel() {
           onChange={setMedia}
         />
       </div>
-      <Button
-        className="mt-4 min-h-11"
-        disabled={!chosen.length || exporting.isPending}
-        onClick={() => exporting.mutate({ parts: chosen, media: canMedia && media })}
-      >
+      <Button className="mt-4 min-h-11" disabled={!chosen.length || exporting.isPending} onClick={start}>
         <Download className="h-4 w-4" aria-hidden />
         {exporting.isPending ? "Exporting…" : "Export"}
       </Button>
       <p className="mt-2 min-h-5 text-sm" aria-live="polite">
         {exporting.isSuccess && <span className="text-muted-foreground">Saved {exporting.data}</span>}
+        {zip?.state === "started" && (
+          <span className="text-muted-foreground">Your browser is downloading the zip; its downloads show the progress.</span>
+        )}
+        {zip?.state === "failed" && <span className="text-destructive">{zip.message}</span>}
         {exporting.isError && <span className="text-destructive">{exporting.error.message}</span>}
       </p>
     </div>

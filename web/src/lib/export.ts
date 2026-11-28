@@ -18,7 +18,7 @@ export function isExportOnly(name: string): boolean {
 
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
 // A zip export carries photos and videos beside its file.
-export const MAX_ZIP_IMPORT_BYTES = 2 * 1024 * 1024 * 1024;
+export const MAX_ZIP_IMPORT_BYTES = 10 * 1024 * 1024 * 1024;
 // The part whose photos and videos a zip export carries.
 export const MEDIA_PART = "kanban";
 
@@ -40,16 +40,17 @@ function partsQuery(parts: string[], all: readonly string[]): string {
   return everything ? "" : `parts=${parts.map(encodeURIComponent).join(",")}`;
 }
 
-// downloadExport saves the chosen parts as the gateway names the file, and
-// returns that name. With media it is a zip holding the photos and videos
-// too.
-export async function downloadExport({ parts, media }: { parts: string[]; media: boolean }): Promise<string> {
-  const withMedia = media && parts.includes(MEDIA_PART);
-  const query = [partsQuery(parts, EXPORT_PARTS.map((p) => p.name)), withMedia ? "media=true" : ""].filter(Boolean).join("&");
-  const res = await fetch(`${url}/api/export${query ? `?${query}` : ""}`, { credentials: "include" });
+function exportUrl(parts: string[], media: boolean): string {
+  const query = [partsQuery(parts, EXPORT_PARTS.map((p) => p.name)), media ? "media=true" : ""].filter(Boolean).join("&");
+  return `${url}/api/export${query ? `?${query}` : ""}`;
+}
+
+// downloadExport saves the chosen parts as one JSON file (at most 25 MB)
+// as the gateway names it, and returns that name.
+export async function downloadExport(parts: string[]): Promise<string> {
+  const res = await fetch(exportUrl(parts, false), { credentials: "include" });
   if (!res.ok) await failure(res, "Export failed");
-  const fallback = withMedia ? "coregateway-export.zip" : "coregateway-export.json";
-  const name = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? fallback;
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "coregateway-export.json";
   const href = URL.createObjectURL(await res.blob());
   const a = document.createElement("a");
   a.href = href;
@@ -59,6 +60,39 @@ export async function downloadExport({ parts, media }: { parts: string[]; media:
   a.remove();
   URL.revokeObjectURL(href);
   return name;
+}
+
+// startMediaExport downloads the chosen parts with their photos and videos
+// as a zip, which may be many gigabytes. A hidden iframe hands the request
+// to the browser's own download manager, which streams the zip to disk as
+// it arrives, so the page never holds it. A zip download loads nothing into
+// the iframe; a failure before the zip starts is the gateway's JSON error,
+// which does, and onError gets its message.
+export function startMediaExport(parts: string[], onError: (message: string) => void): void {
+  document.getElementById(MEDIA_FRAME)?.remove();
+  const frame = document.createElement("iframe");
+  frame.id = MEDIA_FRAME;
+  frame.hidden = true;
+  frame.title = "Export download";
+  document.body.appendChild(frame);
+  frame.addEventListener("load", () => onError(frameError(frame)));
+  frame.src = exportUrl(parts, true);
+}
+
+const MEDIA_FRAME = "coregateway-media-export";
+
+// frameError is the gateway's error from a failed export the iframe
+// loaded. Its text is readable only on the app's own origin (production,
+// where nginx serves /api/); elsewhere it is a generic message.
+function frameError(frame: HTMLIFrameElement): string {
+  try {
+    const text = frame.contentDocument?.body?.textContent ?? "";
+    const body = JSON.parse(text) as { error?: unknown };
+    if (typeof body.error === "string") return body.error;
+  } catch {
+    // another origin, or not the gateway's JSON
+  }
+  return "Export failed. Try again.";
 }
 
 // readExportFile lists the parts in a file: a bundle's parts, one part's
@@ -122,7 +156,7 @@ export async function openExportFile(file: Blob): Promise<ExportFile> {
     const text = await file.text();
     return { body: text, zip: false, parts: readExportFile(text), mediaFiles: 0 };
   }
-  if (file.size > MAX_ZIP_IMPORT_BYTES) throw new ExportFileError("This zip is larger than 2 GB.");
+  if (file.size > MAX_ZIP_IMPORT_BYTES) throw new ExportFileError("This zip is larger than 10 GB.");
   try {
     const entries = await listZip(file);
     const main = entries.find((e) => e.name === "export.json");

@@ -215,7 +215,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		var bad badFile
 		switch {
 		case errors.As(err, &tooBig) && media != nil:
-			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 2 GB")
+			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 10 GB")
 		case errors.As(err, &tooBig):
 			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 25 MB")
 		case errors.As(err, &bad):

@@ -7,13 +7,13 @@ import { isZip, listZip, readZipText } from "./zip";
 // deflated, with a central directory at the end.
 function zipOf(entries: { name: string; body: string; deflate?: boolean }[]): Blob {
   const enc = new TextEncoder();
-  const chunks: Uint8Array[] = [];
-  const central: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  const central: Uint8Array<ArrayBuffer>[] = [];
   let offset = 0;
   for (const e of entries) {
     const name = enc.encode(e.name);
     const raw = enc.encode(e.body);
-    const data = e.deflate ? new Uint8Array(deflateRawSync(raw)) : raw;
+    const data: Uint8Array<ArrayBuffer> = e.deflate ? new Uint8Array(deflateRawSync(raw)) : raw;
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(8, e.deflate ? 8 : 0, true);

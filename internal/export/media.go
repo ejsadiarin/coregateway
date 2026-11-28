@@ -18,9 +18,10 @@ import (
 	"github.com/ejsadiarin/coregateway/internal/helper"
 )
 
-// MaxZipImportBytes caps an import that is a zip with its files (a var
+// MaxZipImportBytes caps an import that is a zip with its files: twice
+// coreban's default attachment quota, so a full account's zip fits (a var
 // only so a test can lower it).
-var MaxZipImportBytes int64 = 2 << 30
+var MaxZipImportBytes int64 = 10 << 30
 
 const (
 	// zipEntry is the export file inside a zip; its parts' files sit
@@ -29,7 +30,7 @@ const (
 
 	// transferTime is how long a zip export or import may take, past the
 	// server's own read and write timeouts.
-	transferTime = 2 * time.Hour
+	transferTime = 12 * time.Hour
 )
 
 var zipSignature = []byte("PK\x03\x04")

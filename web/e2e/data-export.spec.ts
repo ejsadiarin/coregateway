@@ -147,3 +147,16 @@ test("a zip export with photos restores a deleted photo note", async ({ page }) 
   expect(restored!.attachments?.[0]?.id).toBe(photo);
   expect(restored!.attachments?.[0]?.url).toBeTruthy();
 });
+
+// A zip export the gateway refuses before it starts shows an error on the
+// page instead of downloading.
+test("a failed zip export shows its error", async ({ page }) => {
+  await page.route(/\/api\/export\?.*media=true/, (r) =>
+    r.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "no service could export its part" }) }),
+  );
+  await page.goto("/dashboard/settings#data");
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  // On another origin (this dev stack) the page can't read the frame, so it
+  // says the export failed; on its own origin it shows the gateway's words.
+  await expect(page.getByText(/no service could export its part|Export failed\. Try again\./)).toBeVisible();
+});
