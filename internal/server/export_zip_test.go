@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -27,16 +29,22 @@ func unzip(t *testing.T, body []byte) map[string][]byte {
 	return out
 }
 
+// zipOf zips files as a common tool would (deflated, sizes after each
+// entry), export.json first and the rest in name order.
 func zipOf(t *testing.T, files map[string]string) string {
 	t.Helper()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	for name, body := range files {
+	names := slices.Sorted(maps.Keys(files))
+	slices.SortStableFunc(names, func(a, b string) int {
+		return map[bool]int{true: 0, false: 1}[a == "export.json"] - map[bool]int{true: 0, false: 1}[b == "export.json"]
+	})
+	for _, name := range names {
 		w, err := zw.Create(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, _ = io.WriteString(w, body)
+		_, _ = io.WriteString(w, files[name])
 	}
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
@@ -56,13 +64,14 @@ func TestExportZip(t *testing.T) {
 		}
 		files := unzip(t, rec.Body.Bytes())
 		validate(t, files["export.json"])
-		if got := string(files["media/"+fakePhoto]); got != "photo-bytes" {
+		// Each file carries its type's extension, so it opens from the zip.
+		if got := string(files["media/"+fakePhoto+".webp"]); got != "photo-bytes" {
 			t.Errorf("photo = %q", got)
 		}
-		if got := string(files["media/"+fakeVideo+".poster"]); got != "pst" {
+		if got := string(files["media/"+fakeVideo+".poster.webp"]); got != "pst" {
 			t.Errorf("poster = %q", got)
 		}
-		if _, ok := files["media/"+fakeVideo]; ok {
+		if _, ok := files["media/"+fakeVideo+".mp4"]; ok {
 			t.Error("a file its service didn't have is in the zip")
 		}
 	})
@@ -71,7 +80,7 @@ func TestExportZip(t *testing.T) {
 		h, _, _ := exportSetup(t)
 		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export?parts=kanban&media=true", "")
 		files := unzip(t, rec.Body.Bytes())
-		if !strings.Contains(string(files["export.json"]), `"format":"coregateway.kanban"`) || files["media/"+fakePhoto] == nil {
+		if !strings.Contains(string(files["export.json"]), `"format":"coregateway.kanban"`) || files["media/"+fakePhoto+".webp"] == nil {
 			t.Fatalf("files = %v", files)
 		}
 		if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "coregateway-kanban-") {
@@ -99,7 +108,13 @@ func TestImportZip(t *testing.T) {
 		for k, v := range files {
 			withStray[k] = string(v)
 		}
-		for _, zipped := range []string{body, zipOf(t, withStray)} {
+		// A zip from before files had extensions names them by id alone.
+		legacy := map[string]string{}
+		for k, v := range files {
+			k = strings.TrimSuffix(strings.TrimSuffix(k, ".webp"), ".mp4")
+			legacy[k] = string(v)
+		}
+		for _, zipped := range []string{body, zipOf(t, withStray), zipOf(t, legacy)} {
 			fake.fields = nil
 			rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import?parts=budget,kanban", zipped)
 			if rec.Code != http.StatusOK {

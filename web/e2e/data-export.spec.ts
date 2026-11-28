@@ -130,7 +130,7 @@ test("a zip export with photos restores a deleted photo note", async ({ page }) 
   const file = await readFile(await download.path());
   const entries = await listZip(new Blob([file]));
   expect(entries.map((e) => e.name)).toContain("export.json");
-  expect(entries.map((e) => e.name)).toContain(`media/${photo}`);
+  expect(entries.map((e) => e.name)).toContain(`media/${photo}.webp`);
 
   expect((await page.request.delete(`${api}/api/coreban/notes/${note}`)).ok()).toBe(true);
 

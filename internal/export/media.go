@@ -34,21 +34,40 @@ type badFile struct{ msg string }
 
 func (b badFile) Error() string { return b.msg }
 
-// mediaFile is a file a part refers to: its name under media/ in a zip,
-// and its size as the part gives it.
+// mediaFile is a file a part refers to. Name is what its service calls it
+// ("<id>", or "<id>.poster"); File is its name under media/ in a zip, with
+// the extension of its type ("<id>.webp", "<id>.poster.webp"), so it opens
+// from the zip; Size is its size as the part gives it.
 type mediaFile struct {
-	Name string
-	Size int64
+	Name, File string
+	Size       int64
+}
+
+// zipNames is the names a file may have in a zip: with its extension, and
+// without, as zips were written before files had one.
+func (f mediaFile) zipNames() []string {
+	if f.File == f.Name {
+		return []string{f.Name}
+	}
+	return []string{f.File, f.Name}
+}
+
+// extensions is the extension of each type the Feed stores: photos as WebP
+// (or GIF), videos as MP4, WebM or QuickTime, posters as WebP.
+var extensions = map[string]string{
+	"image/webp": ".webp", "image/gif": ".gif",
+	"video/mp4": ".mp4", "video/webm": ".webm", "video/quicktime": ".mov",
 }
 
 // kanbanFiles lists the kanban part's attachment files: each attachment's
-// id, and "<id>.poster" for a video's poster.
+// file, and a video's poster.
 func kanbanFiles(part json.RawMessage) ([]mediaFile, error) {
 	var p struct {
 		Data struct {
 			Notes []struct {
 				Attachments []struct {
 					ID          string `json:"id"`
+					ContentType string `json:"content_type"`
 					SizeBytes   int64  `json:"size_bytes"`
 					PosterBytes *int64 `json:"poster_bytes"`
 				} `json:"attachments"`
@@ -61,9 +80,9 @@ func kanbanFiles(part json.RawMessage) ([]mediaFile, error) {
 	var files []mediaFile
 	for _, n := range p.Data.Notes {
 		for _, a := range n.Attachments {
-			files = append(files, mediaFile{a.ID, a.SizeBytes})
+			files = append(files, mediaFile{Name: a.ID, File: a.ID + extensions[a.ContentType], Size: a.SizeBytes})
 			if a.PosterBytes != nil {
-				files = append(files, mediaFile{a.ID + ".poster", *a.PosterBytes})
+				files = append(files, mediaFile{Name: a.ID + ".poster", File: a.ID + ".poster.webp", Size: *a.PosterBytes})
 			}
 		}
 	}
@@ -103,8 +122,8 @@ func (h *Handler) exportZip(w http.ResponseWriter, r *http.Request, name string,
 			continue
 		}
 		for _, f := range names {
-			n := f.Name
-			id, poster := strings.CutSuffix(n, ".poster")
+			n := f.File
+			id, poster := strings.CutSuffix(f.Name, ".poster")
 			query := url.Values{}
 			if poster {
 				query.Set("poster", "true")
@@ -221,11 +240,14 @@ func (h *Handler) subStream(r *http.Request, p Part, query url.Values, part json
 	if err != nil {
 		files = nil // the service reports a part it can't read
 	}
-	named := map[string]bool{}
+	// Each file by its names in the zip, to the name its service takes.
+	named := map[string]string{}
 	for _, f := range files {
-		named[f.Name] = true
-		// A stored entry may give its size only after its data.
-		z.sizes["media/"+f.Name] = f.Size
+		for _, n := range f.zipNames() {
+			named[n] = f.Name
+			// A stored entry may give its size only after its data.
+			z.sizes["media/"+n] = f.Size
+		}
 	}
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
@@ -246,7 +268,7 @@ func (h *Handler) subStream(r *http.Request, p Part, query url.Values, part json
 	return partResult(p, query.Get("dry_run") == "true", rec)
 }
 
-func writeStream(mw *multipart.Writer, part json.RawMessage, named map[string]bool, z *zipStream) error {
+func writeStream(mw *multipart.Writer, part json.RawMessage, named map[string]string, z *zipStream) error {
 	f, err := mw.CreateFormField("part")
 	if err != nil {
 		return err
@@ -262,11 +284,12 @@ func writeStream(mw *multipart.Writer, part json.RawMessage, named map[string]bo
 		if err != nil {
 			return err
 		}
-		n, ok := strings.CutPrefix(name, "media/")
-		if !ok || !named[n] {
+		n, inMedia := strings.CutPrefix(name, "media/")
+		target, ok := named[n]
+		if !inMedia || !ok {
 			continue // Next reads past it
 		}
-		w, err := mw.CreateFormFile(name, n)
+		w, err := mw.CreateFormFile("media/"+target, n)
 		if err != nil {
 			return err
 		}
