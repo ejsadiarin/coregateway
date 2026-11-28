@@ -70,7 +70,9 @@ Installable via `public/manifest.webmanifest` + `public/sw.js` (offline shell, n
 - **Status pills / badges:** `rounded-full`, mono `text-[10px] uppercase tracking-[0.18em]`, dot + pulse. Pattern: `● ONLINE`, `● TRACKING PED 04 — click empty or Esc`. One pulse loop per view cluster.
 - **HUD brackets:** 16px L-corners `border-primary/50`, entrance + detail modal only. Not on every card.
 - **Inputs:** label above, `gap-2` block, error below. Focus ring Signal. No placeholder-as-label. Contrast AA min.
-- **Loaders:** skeletal blocks matching exact card dims (keep `ServiceCardSkeleton`). No circular spinners except full-page `Initializing...` boot state.
+- **Loaders:** pick the one that fits what's loading. Skeleton when the shape of what's coming is known — lists, cards, tables, the service grid — sized to the real thing (keep `ServiceCardSkeleton`). Spinner when an action is in flight and there's nothing to draw yet — a button's pending state, a refresh icon, a small inline wait — kept small and inside the control that started it. Never a large centered spinner standing in for content a skeleton could show; the full-page `Initializing...` boot state is the one big spinner.
+- **Destructive confirms:** `HoldToConfirm` (hold to delete). Where the delete already sits beside the item it removes (a detail dialog), holding is the confirmation — no second dialog. Where it starts from a small icon in a list, the dialog stays to say what's lost, and its action is the hold.
+- **Figures:** money and counts that change use `Odometer` — digits roll to their new value, tabular, transform only.
 - **Empty states:** composed (icon + 1-line why + 1 CTA), not bare "No data".
 - **Nav:** sidebar 240/64, hairline right border, no `backdrop-blur-xl` on scroll container. Active item = Signal left tick + tinted wash, not glow. Header = sticky, `bg-background/60 backdrop-blur-md`, breadcrumb mono, current page uppercase Ink.
 

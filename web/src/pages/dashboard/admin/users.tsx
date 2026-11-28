@@ -40,6 +40,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { HoldToConfirm } from "@/components/ui/hold-to-confirm";
 import { useAuth } from "@/contexts/auth-context";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/use-users";
 import type { User as UserType, UserRole, UpdateUserRequest } from "@/types/api";
@@ -173,10 +174,29 @@ export default function UsersPage() {
     const isDemoUser = (user: UserType) => user.email === "demo@example.com";
     const isCurrentUser = (user: UserType) => user.id === currentUser?.id;
 
+    // DESIGN §4: the page's shape is known while it loads, so it shows as
+    // a skeleton of the header, search bar, and user rows, not a spinner.
     if (isLoading || authLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <div className="px-4 md:px-6 py-6" aria-busy="true" aria-label="Loading users">
+                <div className="mb-8 space-y-3">
+                    <div className="h-7 w-56 animate-pulse rounded bg-muted" />
+                    <div className="h-4 w-72 max-w-full animate-pulse rounded bg-muted" />
+                </div>
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row">
+                    <div className="h-9 flex-1 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-9 w-28 animate-pulse rounded-lg bg-muted" />
+                </div>
+                <div className="rounded-lg border border-border bg-card/50 divide-y divide-border">
+                    {Array.from({ length: 4 }, (_, i) => (
+                        <div key={i} className="flex items-center gap-4 px-4 py-3">
+                            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+                            <div className="h-5 w-14 animate-pulse rounded-full bg-muted" />
+                            <div className="hidden h-4 w-24 animate-pulse rounded bg-muted sm:block" />
+                            <div className="h-8 w-20 animate-pulse rounded bg-muted" />
+                        </div>
+                    ))}
+                </div>
             </div>
         );
     }
@@ -447,17 +467,19 @@ export default function UsersPage() {
                             This action cannot be undone.
                         </DialogDescription>
                     </DialogHeader>
+                    {formError && (
+                        <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{formError}</AlertDescription>
+                        </Alert>
+                    )}
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>
                             Cancel
                         </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleDelete}
-                            disabled={deleteUser.isPending}
-                        >
-                            {deleteUser.isPending ? "Deleting..." : "Delete User"}
-                        </Button>
+                        <HoldToConfirm onConfirm={handleDelete} pending={deleteUser.isPending}>
+                            Hold to delete
+                        </HoldToConfirm>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
