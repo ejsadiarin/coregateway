@@ -40,7 +40,16 @@ type fakeBudget struct {
 	imports []string
 	query   []string
 	sub     []string
+	// fields is each multipart kanban import's fields, by name.
+	fields []map[string]string
 }
+
+// The fake kanban part's attachments: a photo, and a video whose file is
+// missing but whose poster is there.
+const (
+	fakePhoto = "11111111-1111-4111-8111-111111111111"
+	fakeVideo = "22222222-2222-4222-8222-222222222222"
+)
 
 func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
@@ -65,8 +74,43 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.imports = append(f.imports, string(body))
 		_ = json.NewEncoder(w).Encode(map[string]any{"part": "draw", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})
 	case "/api/coreban/export":
-		_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[]}}`)
+		_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[],"notes":[`+
+			`{"id":"33333333-3333-4333-8333-333333333333","attachments":[{"id":"`+fakePhoto+`","poster_bytes":null},{"id":"`+fakeVideo+`","poster_bytes":3}]}]}}`)
+	case "/api/coreban/export/media/" + fakePhoto:
+		if r.URL.Query().Get("poster") != "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = io.WriteString(w, "photo-bytes")
+	case "/api/coreban/export/media/" + fakeVideo:
+		if r.URL.Query().Get("poster") != "true" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, `{"error":"this file isn't in storage"}`)
+			return
+		}
+		_, _ = io.WriteString(w, "pst")
 	case "/api/coreban/import":
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			fields := map[string]string{}
+			mr, err := r.MultipartReader()
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			p, err := mr.NextPart()
+			for ; err == nil; p, err = mr.NextPart() {
+				b, _ := io.ReadAll(p)
+				fields[p.FormName()] = string(b)
+			}
+			if err != io.EOF {
+				fields["error"] = err.Error()
+			}
+			f.fields = append(f.fields, fields)
+			f.imports = append(f.imports, fields["part"])
+			_ = json.NewEncoder(w).Encode(map[string]any{"part": "kanban", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})
+			return
+		}
 		body, _ := io.ReadAll(r.Body)
 		f.imports = append(f.imports, string(body))
 		_ = json.NewEncoder(w).Encode(map[string]any{"part": "kanban", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})

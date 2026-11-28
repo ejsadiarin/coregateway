@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { listZip } from "../src/lib/zip";
 import { API_URL as api, expect, login, test } from "./fixtures";
 
 const unique = (prefix: string) => `${prefix} ${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -24,6 +25,8 @@ test("export downloads a bundle that imports back with nothing new", async ({ pa
     // Import and export left the Budget section.
     await expect(page.locator("#budget").getByRole("button", { name: /export/i })).toHaveCount(0);
 
+    // Without photos and videos it is one JSON file.
+    await page.getByRole("checkbox", { name: /Include photos and videos/ }).uncheck();
     const exporting = page.waitForEvent("download");
     await page.getByRole("button", { name: "Export", exact: true }).click();
     const download = await exporting;
@@ -99,4 +102,48 @@ test("a file that isn't an export is refused before upload", async ({ page }) =>
   await page.getByLabel("Export file").setInputFiles({ name: "notes.json", mimeType: "application/json", buffer: Buffer.from(`{"hello":"world"}`) });
   await expect(page.getByText("This file isn't an export.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Check" })).toHaveCount(0);
+});
+
+// A 1x1 WebP, for a photo note.
+const PIXEL = Buffer.from("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==", "base64");
+
+// A full export with photos is a zip; deleting the photo note and
+// importing that zip brings the note back with its file.
+test("a zip export with photos restores a deleted photo note", async ({ page }) => {
+  const caption = unique("Zip photo");
+  const reserved = await page.request.post(`${api}/api/coreban/attachments`, {
+    data: { kind: "image", content_type: "image/webp", size: PIXEL.length, width: 1, height: 1 },
+  });
+  expect(reserved.ok(), await reserved.text()).toBe(true);
+  const { id: photo, upload } = (await reserved.json()) as { id: string; upload: { url: string; headers: Record<string, string> } };
+  expect((await page.request.put(upload.url, { headers: upload.headers, data: PIXEL })).ok()).toBe(true);
+  const posted = await page.request.post(`${api}/api/coreban/notes`, { data: { text: caption, attachments: [photo] } });
+  expect(posted.ok(), await posted.text()).toBe(true);
+  const note = ((await posted.json()) as { id: string }).id;
+
+  await page.goto("/dashboard/settings#data");
+  await expect(page.getByRole("checkbox", { name: /Include photos and videos/ })).toBeChecked();
+  const exporting = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  const download = await exporting;
+  expect(download.suggestedFilename()).toMatch(/^coregateway-export-\d{4}-\d{2}-\d{2}\.zip$/);
+  const file = await readFile(await download.path());
+  const entries = await listZip(new Blob([file]));
+  expect(entries.map((e) => e.name)).toContain("export.json");
+  expect(entries.map((e) => e.name)).toContain(`media/${photo}`);
+
+  expect((await page.request.delete(`${api}/api/coreban/notes/${note}`)).ok()).toBe(true);
+
+  await page.getByLabel("Export file").setInputFiles({ name: download.suggestedFilename(), mimeType: "application/zip", buffer: file });
+  const parts = page.getByRole("group", { name: "Parts to import" });
+  await expect(parts.getByText(/with \d+ photo and video files?/)).toBeVisible();
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  const result = page.getByTestId("import-result-kanban");
+  await expect(result).toContainText("Imported");
+
+  const feed = await (await page.request.get(`${api}/api/coreban/notes?size=50`)).text();
+  const restored = (JSON.parse(feed).notes as { id: string; attachments?: { id: string; url?: string }[] }[]).find((n) => n.id === note);
+  expect(restored, "the deleted note is back").toBeTruthy();
+  expect(restored!.attachments?.[0]?.id).toBe(photo);
+  expect(restored!.attachments?.[0]?.url).toBeTruthy();
 });

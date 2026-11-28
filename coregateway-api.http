@@ -449,6 +449,17 @@ GET {{host}}/api/export
 
 GET {{host}}/api/export?parts=budget
 
+### Export everything with the Feed's photos and videos (a zip: export.json + media/)
+
+GET {{host}}/api/export?media=true
+
+### Import a zip export (photos and videos included)
+
+POST {{host}}/api/import?dry_run=true
+Content-Type: application/zip
+
+< ./coregateway-export.zip
+
 ### Check an import without writing (paste an export file as the body)
 
 POST {{host}}/api/import?dry_run=true

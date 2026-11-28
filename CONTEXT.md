@@ -119,7 +119,7 @@ _Avoid_: error log, alert, incident
 ### Exports
 
 **Export**:
-A user's own data written out as one versioned JSON file they can keep or import again, made of one or more parts. Unlike a backup, it belongs to one user, is asked for by that user, and leaves out device and credential data.
+A user's own data written out as one versioned JSON file they can keep or import again, made of one or more parts. With its photos and videos it is a zip of that file and the media files beside it; the JSON inside is the same. Unlike a backup, it belongs to one user, is asked for by that user, and leaves out device and credential data.
 _Avoid_: backup, dump, snapshot, download
 
 **Part**:

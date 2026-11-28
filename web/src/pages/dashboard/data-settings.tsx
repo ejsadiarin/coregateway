@@ -6,12 +6,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
-import { EXPORT_PARTS, ExportFileError, MAX_IMPORT_BYTES, downloadExport, importExport, isExportOnly, readExportFile } from "@/lib/export";
-import type { FilePart, ImportResponse, PartResult } from "@/types/export";
+import {
+  EXPORT_PARTS,
+  ExportFileError,
+  MEDIA_PART,
+  downloadExport,
+  importExport,
+  isExportOnly,
+  openExportFile,
+  type ExportFile,
+} from "@/lib/export";
+import type { ImportResponse, PartResult } from "@/types/export";
 
 // DataSettings is the Data section of the Settings page: export your data
-// as one file with a part per service, and import a file's parts back
-// (coregateway ADR-0008). Import works from any account's file: your own
+// as one file with a part per service (a zip when it carries photos and
+// videos), and import a file's parts back (coregateway ADR-0008). Import works from any account's file: your own
 // keeps its ids, another's is copied under ids derived for you. What you
 // already have is skipped, so importing twice changes nothing.
 export function DataSettings() {
@@ -72,13 +81,16 @@ function toggle(list: string[], name: string, on: boolean): string[] {
 
 function ExportPanel() {
   const [chosen, setChosen] = useState<string[]>(EXPORT_PARTS.map((p) => p.name));
+  const [media, setMedia] = useState(true);
   const exporting = useMutation({ mutationFn: downloadExport });
+  const canMedia = chosen.includes(MEDIA_PART);
 
   return (
     <div>
       <PanelTitle>Export</PanelTitle>
       <p className="mt-1 max-w-[65ch] text-sm text-muted-foreground">
-        One JSON file with a part per service, each with its own format and version.
+        One JSON file with a part per service, each with its own format and version. With photos and videos, it is a zip of
+        that file and the media.
       </p>
       <div className="mt-3" role="group" aria-label="Parts to export">
         {EXPORT_PARTS.map((p) => (
@@ -92,7 +104,21 @@ function ExportPanel() {
           />
         ))}
       </div>
-      <Button className="mt-4 min-h-11" disabled={!chosen.length || exporting.isPending} onClick={() => exporting.mutate(chosen)}>
+      <div className="mt-3 border-t border-border">
+        <PartCheckbox
+          id="export-media"
+          label="Include photos and videos"
+          detail={canMedia ? "The Feed's files, so the export is complete; it can be large" : "Only Kanban and Feed has photos and videos"}
+          checked={canMedia && media}
+          disabled={!canMedia}
+          onChange={setMedia}
+        />
+      </div>
+      <Button
+        className="mt-4 min-h-11"
+        disabled={!chosen.length || exporting.isPending}
+        onClick={() => exporting.mutate({ parts: chosen, media: canMedia && media })}
+      >
         <Download className="h-4 w-4" aria-hidden />
         {exporting.isPending ? "Exporting…" : "Export"}
       </Button>
@@ -104,10 +130,8 @@ function ExportPanel() {
   );
 }
 
-interface ChosenFile {
+interface ChosenFile extends ExportFile {
   name: string;
-  text: string;
-  parts: FilePart[];
 }
 
 function ImportPanel() {
@@ -121,7 +145,7 @@ function ImportPanel() {
   const run = useMutation({
     mutationFn: ({ dryRun }: { dryRun: boolean }) => {
       const inFile = file!.parts.filter((p) => p.known && !isExportOnly(p.name)).map((p) => p.name);
-      return importExport(file!.text, chosen, inFile, dryRun);
+      return importExport(file!, chosen, inFile, dryRun);
     },
     onSuccess: (res) => {
       setResult(res);
@@ -138,15 +162,10 @@ function ImportPanel() {
     setFileError(null);
     run.reset();
     if (!picked) return;
-    if (picked.size > MAX_IMPORT_BYTES) {
-      setFileError("This file is larger than 25 MB.");
-      return;
-    }
-    const text = await picked.text();
     try {
-      const parts = readExportFile(text);
-      setFile({ name: picked.name, text, parts });
-      setChosen(parts.filter((p) => p.known && !isExportOnly(p.name)).map((p) => p.name));
+      const opened = await openExportFile(picked);
+      setFile({ name: picked.name, ...opened });
+      setChosen(opened.parts.filter((p) => p.known && !isExportOnly(p.name)).map((p) => p.name));
     } catch (err) {
       setFileError(err instanceof ExportFileError ? err.message : "Couldn't read this file.");
     }
@@ -166,7 +185,13 @@ function ImportPanel() {
         <>
           <div className="mt-3 grid gap-2">
             <Label htmlFor="import-file">Export file</Label>
-            <Input id="import-file" type="file" accept="application/json,.json" onChange={choose} disabled={busy} />
+            <Input
+              id="import-file"
+              type="file"
+              accept="application/json,.json,application/zip,.zip"
+              onChange={choose}
+              disabled={busy}
+            />
           </div>
           {fileError && <p className="mt-2 text-sm text-destructive">{fileError}</p>}
 
@@ -182,6 +207,8 @@ function ImportPanel() {
                       ? "For reference only; importing never changes your account"
                       : p.version === 0
                       ? "An older export, from before versions"
+                      : p.name === MEDIA_PART && file.zip
+                      ? `Version ${p.version}, with ${file.mediaFiles} photo and video ${file.mediaFiles === 1 ? "file" : "files"}`
                       : `Version ${p.version}`;
                   return (
                     <PartCheckbox

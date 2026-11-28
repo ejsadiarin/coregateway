@@ -1,11 +1,13 @@
 // Package export serves the official export and import bundle (ADR-0008):
-// one JSON file with a versioned part per service. The gateway never looks
-// inside a part. It asks each part's own endpoint through the gateway's own
-// routes, so every part request is authenticated, scope-checked, targeted
-// and minted exactly like any other proxied request.
+// one JSON file with a versioned part per service, or a zip of that file
+// with the attachment files beside it. The gateway looks inside a part only
+// to list its files. It asks each part's own endpoint through the gateway's
+// own routes, so every part request is authenticated, scope-checked,
+// targeted and minted exactly like any other proxied request.
 package export
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -52,6 +54,11 @@ type Part struct {
 	// Legacy reports whether a file with no format is this part's
 	// unversioned export (its version 0).
 	Legacy func(top map[string]json.RawMessage) bool
+	// Files lists the files a part's data refers to, by the names they
+	// have in a zip under media/; MediaPath + name fetches one. Nil for a
+	// part without files.
+	Files     func(part json.RawMessage) ([]string, error)
+	MediaPath string
 }
 
 // Budget is corefinance's part.
@@ -65,6 +72,7 @@ var Budget = Part{
 var Kanban = Part{
 	Name: "kanban", Format: "coregateway.kanban", Downstream: "coreban",
 	ExportPath: "/api/coreban/export", ImportPath: "/api/coreban/import",
+	Files: kanbanFiles, MediaPath: "/api/coreban/export/media/",
 }
 
 // Draw is coredraw's part: whiteboards, each saved whole.
@@ -124,10 +132,16 @@ func NewHandler(parts []Part, zone ZoneFunc) *Handler {
 // Mount gives the handler the gateway's router, which serves the parts.
 func (h *Handler) Mount(router http.Handler) { h.router = router }
 
-// Export serves GET /api/export?parts=a,b[&user_id=]. A bundle, unless
-// ?parts= names one part: then it is that part's own file. Without
-// ?parts= a key gets every part its scopes can read.
+// Export serves GET /api/export?parts=a,b[&user_id=][&media=true]. A
+// bundle, unless ?parts= names one part: then it is that part's own file.
+// Without ?parts= a key gets every part its scopes can read. With
+// ?media=true it is a zip of that file and the parts' files.
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	media := r.URL.Query().Get("media") == "true"
+	if media && r.URL.Query().Get("user_id") != "" {
+		helper.RespondErrorJSON(w, http.StatusForbidden, "an export of another user leaves out their photos and videos")
+		return
+	}
 	parts, _, ok := h.pick(w, r, h.parts, false)
 	if !ok {
 		return
@@ -167,6 +181,10 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		name = "coregateway-" + parts[0].Name + "-" + date + ".json"
 		body = files[parts[0].Name]
 	}
+	if media {
+		h.exportZip(w, r, strings.TrimSuffix(name, ".json")+".zip", body, parts, files)
+		return
+	}
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
 	helper.RespondJSON(w, http.StatusOK, body)
 }
@@ -180,14 +198,32 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		helper.RespondErrorJSON(w, http.StatusForbidden, "The demo account can't import. Create an account to keep your data")
 		return
 	}
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxImportBytes))
+	body := bufio.NewReader(r.Body)
+	var media *zipMedia
+	var raw []byte
+	var err error
+	if sig, _ := body.Peek(4); bytes.Equal(sig, zipSignature) {
+		media, raw, err = openZip(w, r, body)
+		if media != nil {
+			defer media.close()
+		}
+	} else {
+		raw, err = io.ReadAll(http.MaxBytesReader(w, io.NopCloser(body), MaxImportBytes))
+	}
 	if err != nil {
 		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
+		var bad badFile
+		switch {
+		case errors.As(err, &tooBig) && media != nil:
+			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 2 GB")
+		case errors.As(err, &tooBig):
 			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 25 MB")
-			return
+		case errors.As(err, &bad):
+			helper.RespondErrorJSON(w, http.StatusBadRequest, bad.Error())
+		default:
+			slog.Error("import: reading the file failed", "error", err)
+			helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
 		}
-		helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	inFile, err := h.read(raw)
@@ -224,7 +260,12 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 				Errors: []PartError{{Entity: "part", Reason: "the " + p.Name + " part is for reference; importing it changes nothing"}}})
 			continue
 		}
-		rec := h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
+		var rec *httptest.ResponseRecorder
+		if media.has(p) {
+			rec = h.subMultipart(r, p, query, inFile[p.Name], media)
+		} else {
+			rec = h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
+		}
 		results[p.Name] = partResult(p, dryRun, rec)
 	}
 	for name, need := range denied {
@@ -347,7 +388,23 @@ func (h *Handler) pick(w http.ResponseWriter, r *http.Request, available []Part,
 // caller: their cookie or key travels, nothing from this request's context
 // does, so the part route authenticates the caller afresh.
 func (h *Handler) sub(r *http.Request, method, path string, query url.Values, body []byte) *httptest.ResponseRecorder {
-	req, _ := http.NewRequestWithContext(valuesFree{r.Context()}, method, path, bytes.NewReader(body))
+	contentType := ""
+	if body != nil {
+		contentType = "application/json"
+	}
+	rec := httptest.NewRecorder()
+	h.serve(rec, r, method, path, query, bytes.NewReader(body), contentType)
+	return rec
+}
+
+// serve is sub writing to w, with any body: a part's file streams through
+// it without being held.
+func (h *Handler) serve(w http.ResponseWriter, r *http.Request, method, path string, query url.Values, body io.Reader, contentType string) {
+	req, _ := http.NewRequestWithContext(valuesFree{r.Context()}, method, path, body)
+	if _, streamed := body.(*io.PipeReader); streamed {
+		// Unknown length: with 0, a proxy would send no body at all.
+		req.ContentLength = -1
+	}
 	req.URL.RawQuery = query.Encode()
 	req.RemoteAddr = r.RemoteAddr
 	for _, k := range []string{"Cookie", "Authorization", "X-Request-ID", "User-Agent"} {
@@ -355,12 +412,10 @@ func (h *Handler) sub(r *http.Request, method, path string, query url.Values, bo
 			req.Header.Set(k, v)
 		}
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
-	rec := httptest.NewRecorder()
-	h.router.ServeHTTP(rec, req)
-	return rec
+	h.router.ServeHTTP(w, req)
 }
 
 // partResult is the service's own result when it gave one, else a failed
