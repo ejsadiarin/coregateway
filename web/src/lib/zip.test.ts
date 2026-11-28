@@ -77,6 +77,19 @@ describe("zip", () => {
     await expect(openExportFile(zipOf([{ name: "media/a", body: "x" }]))).rejects.toThrow(ExportFileError);
   });
 
+  it("refuses a zip whose export.json isn't first, as the server reads it in order", async () => {
+    const zip = zipOf([
+      { name: "media/a", body: "photo" },
+      { name: "export.json", body: bundle },
+    ]);
+    await expect(openExportFile(zip)).rejects.toThrow(/first file/);
+  });
+
+  it("keeps a zip's export.json, to send alone when no media part is imported", async () => {
+    const file = await openExportFile(zipOf([{ name: "export.json", body: bundle, deflate: true }]));
+    expect(file.json).toBe(bundle);
+  });
+
   it("still opens a JSON export", async () => {
     const file = await openExportFile(new Blob([bundle]));
     expect(file.zip).toBe(false);

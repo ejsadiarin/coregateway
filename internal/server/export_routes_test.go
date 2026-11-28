@@ -75,7 +75,7 @@ func (f *fakeBudget) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"part": "draw", "status": "imported", "dry_run": r.URL.Query().Get("dry_run") == "true"})
 	case "/api/coreban/export":
 		_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"exported_at":"2026-11-27T00:00:00Z","data":{"boards":[],"notes":[`+
-			`{"id":"33333333-3333-4333-8333-333333333333","attachments":[{"id":"`+fakePhoto+`","poster_bytes":null},{"id":"`+fakeVideo+`","poster_bytes":3}]}]}}`)
+			`{"id":"33333333-3333-4333-8333-333333333333","attachments":[{"id":"`+fakePhoto+`","size_bytes":11,"poster_bytes":null},{"id":"`+fakeVideo+`","size_bytes":5,"poster_bytes":3}]}]}}`)
 	case "/api/coreban/export/media/" + fakePhoto:
 		if r.URL.Query().Get("poster") != "" {
 			w.WriteHeader(http.StatusNotFound)

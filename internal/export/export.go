@@ -57,7 +57,7 @@ type Part struct {
 	// Files lists the files a part's data refers to, by the names they
 	// have in a zip under media/; MediaPath + name fetches one. Nil for a
 	// part without files.
-	Files     func(part json.RawMessage) ([]string, error)
+	Files     func(part json.RawMessage) ([]mediaFile, error)
 	MediaPath string
 }
 
@@ -190,7 +190,8 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 }
 
 // Import serves POST /api/import?parts=a,b&dry_run=true. The body is a
-// bundle or one part's file. Each chosen part goes to its own service and
+// bundle or one part's file, or a zip of that file with its media, read as
+// it arrives. Each chosen part goes to its own service and
 // reports its own result; one failing doesn't stop the others.
 func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUserFromContext(r)
@@ -199,33 +200,36 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := bufio.NewReader(r.Body)
-	var media *zipMedia
-	var raw []byte
-	var err error
 	if sig, _ := body.Peek(4); bytes.Equal(sig, zipSignature) {
-		media, raw, err = openZip(w, r, body)
-		if media != nil {
-			defer media.close()
-		}
-	} else {
-		raw, err = io.ReadAll(http.MaxBytesReader(w, io.NopCloser(body), MaxImportBytes))
-	}
-	if err != nil {
-		var tooBig *http.MaxBytesError
-		var bad badFile
-		switch {
-		case errors.As(err, &tooBig) && media != nil:
-			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 10 GB")
-		case errors.As(err, &tooBig):
-			helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 25 MB")
-		case errors.As(err, &bad):
-			helper.RespondErrorJSON(w, http.StatusBadRequest, bad.Error())
-		default:
-			slog.Error("import: reading the file failed", "error", err)
-			helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
-		}
+		h.importZip(w, r, body)
 		return
 	}
+	raw, err := io.ReadAll(http.MaxBytesReader(w, io.NopCloser(body), MaxImportBytes))
+	if err != nil {
+		h.refuse(w, err)
+		return
+	}
+	h.importFile(w, r, raw, nil)
+}
+
+// refuse answers an import body the gateway couldn't read.
+func (h *Handler) refuse(w http.ResponseWriter, err error) {
+	var tooBig *http.MaxBytesError
+	var bad badFile
+	switch {
+	case errors.As(err, &tooBig):
+		helper.RespondErrorJSON(w, http.StatusRequestEntityTooLarge, "import file is larger than 25 MB")
+	case errors.As(err, &bad):
+		helper.RespondErrorJSON(w, http.StatusBadRequest, bad.Error())
+	default:
+		slog.Error("import: reading the file failed", "error", err)
+		helper.RespondErrorJSON(w, http.StatusBadRequest, "invalid request body")
+	}
+}
+
+// importFile imports an export file's chosen parts; z, when the file came
+// in a zip, is the rest of the zip, for a part's files.
+func (h *Handler) importFile(w http.ResponseWriter, r *http.Request, raw []byte, z *zipStream) {
 	inFile, err := h.read(raw)
 	if err != nil {
 		helper.RespondErrorJSON(w, http.StatusBadRequest, err.Error())
@@ -260,12 +264,11 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 				Errors: []PartError{{Entity: "part", Reason: "the " + p.Name + " part is for reference; importing it changes nothing"}}})
 			continue
 		}
-		var rec *httptest.ResponseRecorder
-		if media.has(p) {
-			rec = h.subMultipart(r, p, query, inFile[p.Name], media)
-		} else {
-			rec = h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
+		if z != nil && p.Files != nil {
+			results[p.Name] = h.subStream(r, p, query, inFile[p.Name], z)
+			continue
 		}
+		rec := h.sub(r, http.MethodPost, p.ImportPath, query, inFile[p.Name])
 		results[p.Name] = partResult(p, dryRun, rec)
 	}
 	for name, need := range denied {

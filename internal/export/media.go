@@ -11,17 +11,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/ejsadiarin/coregateway/internal/helper"
 )
-
-// MaxZipImportBytes caps an import that is a zip with its files: twice
-// coreban's default attachment quota, so a full account's zip fits (a var
-// only so a test can lower it).
-var MaxZipImportBytes int64 = 10 << 30
 
 const (
 	// zipEntry is the export file inside a zip; its parts' files sit
@@ -40,14 +34,22 @@ type badFile struct{ msg string }
 
 func (b badFile) Error() string { return b.msg }
 
-// kanbanFiles names the kanban part's attachment files: each attachment's
+// mediaFile is a file a part refers to: its name under media/ in a zip,
+// and its size as the part gives it.
+type mediaFile struct {
+	Name string
+	Size int64
+}
+
+// kanbanFiles lists the kanban part's attachment files: each attachment's
 // id, and "<id>.poster" for a video's poster.
-func kanbanFiles(part json.RawMessage) ([]string, error) {
+func kanbanFiles(part json.RawMessage) ([]mediaFile, error) {
 	var p struct {
 		Data struct {
 			Notes []struct {
 				Attachments []struct {
 					ID          string `json:"id"`
+					SizeBytes   int64  `json:"size_bytes"`
 					PosterBytes *int64 `json:"poster_bytes"`
 				} `json:"attachments"`
 			} `json:"notes"`
@@ -56,16 +58,16 @@ func kanbanFiles(part json.RawMessage) ([]string, error) {
 	if err := json.Unmarshal(part, &p); err != nil {
 		return nil, err
 	}
-	var names []string
+	var files []mediaFile
 	for _, n := range p.Data.Notes {
 		for _, a := range n.Attachments {
-			names = append(names, a.ID)
+			files = append(files, mediaFile{a.ID, a.SizeBytes})
 			if a.PosterBytes != nil {
-				names = append(names, a.ID+".poster")
+				files = append(files, mediaFile{a.ID + ".poster", *a.PosterBytes})
 			}
 		}
 	}
-	return names, nil
+	return files, nil
 }
 
 // exportZip writes the export file and every file its parts refer to as a
@@ -100,7 +102,8 @@ func (h *Handler) exportZip(w http.ResponseWriter, r *http.Request, name string,
 			slog.Warn("export: listing a part's files failed", "part", p.Name, "error", err)
 			continue
 		}
-		for _, n := range names {
+		for _, f := range names {
+			n := f.Name
 			id, poster := strings.CutSuffix(n, ".poster")
 			query := url.Values{}
 			if poster {
@@ -179,89 +182,71 @@ func (e *entryWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// zipMedia is an imported zip, kept in a temporary file: its files by
-// their names under media/.
-type zipMedia struct {
-	tmp   *os.File
-	files map[string]*zip.File
-}
-
-// openZip saves a zip import to a temporary file and reads its export
-// file. The files stay in the zip until a part's import streams them.
-func openZip(w http.ResponseWriter, r *http.Request, body *bufio.Reader) (*zipMedia, []byte, error) {
+// importZip imports a zip as it arrives, reading it front to back. Its
+// first entry must be export.json, the export file: each chosen part
+// imports from it as from a JSON file, except a part with files, which
+// streams to its service as multipart with each file it names as the zip
+// reaches it. Nothing is written to disk. The rest of the request is read
+// before answering, so the client always gets the answer.
+func (h *Handler) importZip(w http.ResponseWriter, r *http.Request, body *bufio.Reader) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetReadDeadline(time.Now().Add(transferTime))
 	_ = rc.SetWriteDeadline(time.Now().Add(transferTime))
+	defer func() { _, _ = io.Copy(io.Discard, body) }()
 
-	tmp, err := os.CreateTemp("", "coregateway-import-*.zip")
-	if err != nil {
-		return nil, nil, err
+	z := newZipStream(body)
+	name, entry, err := z.Next()
+	if err == nil && name != zipEntry {
+		err = badFile{"export.json must be the zip's first file; export the zip again from the Data page"}
 	}
-	m := &zipMedia{tmp: tmp, files: map[string]*zip.File{}}
-	n, err := io.Copy(tmp, http.MaxBytesReader(w, io.NopCloser(body), MaxZipImportBytes))
-	if err != nil {
-		return m, nil, err
-	}
-	zr, err := zip.NewReader(tmp, n)
-	if err != nil {
-		return m, nil, badFile{"the zip can't be read"}
-	}
-	var export *zip.File
-	for _, f := range zr.File {
-		switch {
-		case f.Name == zipEntry:
-			export = f
-		case strings.HasPrefix(f.Name, "media/") && !f.FileInfo().IsDir():
-			m.files[strings.TrimPrefix(f.Name, "media/")] = f
+	var raw []byte
+	if err == nil {
+		raw, err = io.ReadAll(io.LimitReader(entry, MaxImportBytes+1))
+		if err == nil && len(raw) > MaxImportBytes {
+			err = badFile{"the zip's export.json is larger than 25 MB"}
 		}
 	}
-	if export == nil {
-		return m, nil, badFile{"the zip has no " + zipEntry}
-	}
-	rd, err := export.Open()
 	if err != nil {
-		return m, nil, badFile{"the zip's " + zipEntry + " can't be read"}
+		h.refuse(w, err)
+		return
 	}
-	defer rd.Close()
-	raw, err := io.ReadAll(io.LimitReader(rd, MaxImportBytes+1))
-	if err != nil {
-		return m, nil, badFile{"the zip's " + zipEntry + " can't be read"}
-	}
-	if len(raw) > MaxImportBytes {
-		return m, nil, badFile{"the zip's " + zipEntry + " is larger than 25 MB"}
-	}
-	return m, raw, nil
+	h.importFile(w, r, raw, z)
 }
 
-func (m *zipMedia) close() {
-	m.tmp.Close()
-	os.Remove(m.tmp.Name())
-}
-
-// has reports whether the zip brings files for p.
-func (m *zipMedia) has(p Part) bool {
-	return m != nil && p.Files != nil && len(m.files) > 0
-}
-
-// subMultipart imports a part with its files: the part, then each file it
-// refers to that the zip holds, streamed from the zip into the request.
-func (h *Handler) subMultipart(r *http.Request, p Part, query url.Values, part json.RawMessage, m *zipMedia) *httptest.ResponseRecorder {
-	names, err := p.Files(part)
+// subStream imports a part with its files: the part, then each file it
+// names, streamed from the zip into the request as the zip arrives. A
+// problem reading the zip fails the part, saying what it was.
+func (h *Handler) subStream(r *http.Request, p Part, query url.Values, part json.RawMessage, z *zipStream) json.RawMessage {
+	files, err := p.Files(part)
 	if err != nil {
-		names = nil // the service reports a part it can't read
+		files = nil // the service reports a part it can't read
+	}
+	named := map[string]bool{}
+	for _, f := range files {
+		named[f.Name] = true
+		// A stored entry may give its size only after its data.
+		z.sizes["media/"+f.Name] = f.Size
 	}
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
+	done := make(chan error, 1)
 	go func() {
-		pw.CloseWithError(writeMultipart(mw, part, names, m))
+		err := writeStream(mw, part, named, z)
+		pw.CloseWithError(err)
+		done <- err
 	}()
 	rec := httptest.NewRecorder()
 	h.serve(rec, r, http.MethodPost, p.ImportPath, query, pr, mw.FormDataContentType())
 	pr.CloseWithError(errors.New("the part's import has answered"))
-	return rec
+	var bad badFile
+	if zipErr := <-done; errors.As(zipErr, &bad) {
+		return mustJSON(PartResult{Part: p.Name, Format: p.Format, DryRun: query.Get("dry_run") == "true", Status: StatusFailed,
+			Errors: []PartError{{Entity: "part", Reason: bad.Error()}}})
+	}
+	return partResult(p, query.Get("dry_run") == "true", rec)
 }
 
-func writeMultipart(mw *multipart.Writer, part json.RawMessage, names []string, m *zipMedia) error {
+func writeStream(mw *multipart.Writer, part json.RawMessage, named map[string]bool, z *zipStream) error {
 	f, err := mw.CreateFormField("part")
 	if err != nil {
 		return err
@@ -269,24 +254,24 @@ func writeMultipart(mw *multipart.Writer, part json.RawMessage, names []string, 
 	if _, err := f.Write(part); err != nil {
 		return err
 	}
-	for _, n := range names {
-		zf, ok := m.files[n]
-		if !ok {
-			continue
+	for {
+		name, entry, err := z.Next()
+		if errors.Is(err, io.EOF) {
+			return mw.Close()
 		}
-		w, err := mw.CreateFormFile("media/"+n, n)
 		if err != nil {
 			return err
 		}
-		rd, err := zf.Open()
+		n, ok := strings.CutPrefix(name, "media/")
+		if !ok || !named[n] {
+			continue // Next reads past it
+		}
+		w, err := mw.CreateFormFile(name, n)
 		if err != nil {
 			return err
 		}
-		_, err = io.Copy(w, rd)
-		rd.Close()
-		if err != nil {
+		if _, err := io.Copy(w, entry); err != nil {
 			return err
 		}
 	}
-	return mw.Close()
 }

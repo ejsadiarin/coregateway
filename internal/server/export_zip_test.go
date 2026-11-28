@@ -3,13 +3,10 @@ package server
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/rand"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	"github.com/ejsadiarin/coregateway/internal/export"
 )
 
 func unzip(t *testing.T, body []byte) map[string][]byte {
@@ -28,13 +25,6 @@ func unzip(t *testing.T, body []byte) map[string][]byte {
 		rd.Close()
 	}
 	return out
-}
-
-// noise is n bytes that don't compress.
-func noise(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return string(b)
 }
 
 func zipOf(t *testing.T, files map[string]string) string {
@@ -138,14 +128,42 @@ func TestImportZip(t *testing.T) {
 		}
 	})
 
-	t.Run("a zip over the cap is a 413", func(t *testing.T) {
+	t.Run("export.json must come first", func(t *testing.T) {
 		h, _, _ := exportSetup(t)
-		limit := export.MaxZipImportBytes
-		export.MaxZipImportBytes = 1 << 10
-		t.Cleanup(func() { export.MaxZipImportBytes = limit })
-		big := zipOf(t, map[string]string{"export.json": "{}", "media/x": noise(8 << 10)})
-		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import", big)
-		if rec.Code != http.StatusRequestEntityTooLarge {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		for _, name := range []string{"media/" + fakePhoto, "export.json"} {
+			w, _ := zw.Create(name)
+			_, _ = io.WriteString(w, `{"format":"coregateway.kanban","version":1,"data":{}}`)
+		}
+		_ = zw.Close()
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import", buf.String())
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "first file") {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("a damaged file fails the kanban part", func(t *testing.T) {
+		h, _, _ := exportSetup(t)
+		zipped := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export?media=true", "").Body.Bytes()
+		i := bytes.Index(zipped, []byte("photo-bytes"))
+		if i < 0 {
+			t.Fatal("the photo isn't stored as is")
+		}
+		zipped[i] = 'X'
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import?parts=kanban", string(zipped))
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"failed"`) ||
+			!strings.Contains(rec.Body.String(), "damaged") {
+			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+		}
+	})
+
+	t.Run("a cut-off zip fails the kanban part", func(t *testing.T) {
+		h, _, _ := exportSetup(t)
+		zipped := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodGet, "/api/export?media=true", "").Body.Bytes()
+		cut := bytes.Index(zipped, []byte("photo-bytes")) + 3
+		rec := doKeyRequest(t, h, testAdminKeyPlaintext, http.MethodPost, "/api/import?parts=kanban", string(zipped[:cut]))
+		if !strings.Contains(rec.Body.String(), `"status":"failed"`) || !strings.Contains(rec.Body.String(), "incomplete") {
 			t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
 		}
 	})

@@ -260,7 +260,7 @@ coregateway/
 |--------|------|-------------|
 | GET | `/api/export?parts=budget,kanban,draw,account` | Your data as one file ([`schemas/export.v1.json`](schemas/export.v1.json)), a part per service; one part named is that part's own file. Add `media=true` for a zip of that file (`export.json`) and the Feed's photo and video files (`media/<attachment id>[.poster]`); not with `user_id`. Admins may add `user_id`. Keys need each part's `<service>:read` |
 | GET | `/api/account/export` | The export-only account part: your email, role and timezone ([`schemas/account.v1.json`](schemas/account.v1.json)); admins may add `user_id` |
-| POST | `/api/import?parts=budget&dry_run=true` | Import a bundle or one part's file into your own data (any account's file: your own keeps its ids, another's is copied); reports each part's result. Takes the JSON file (max 25 MB) or a media zip (max 10 GB), whose files are uploaded into your storage within your quota. Keys need `<service>:write`; the demo account can't import |
+| POST | `/api/import?parts=budget&dry_run=true` | Import a bundle or one part's file into your own data (any account's file: your own keeps its ids, another's is copied); reports each part's result. Takes the JSON file (max 25 MB) or a media zip, read as it arrives with `export.json` first, whose files are uploaded into your storage and held to your storage quota. Keys need `<service>:write`; the demo account can't import |
 
 ## Architecture
 

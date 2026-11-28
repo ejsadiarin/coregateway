@@ -17,8 +17,6 @@ export function isExportOnly(name: string): boolean {
 }
 
 export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
-// A zip export carries photos and videos beside its file.
-export const MAX_ZIP_IMPORT_BYTES = 10 * 1024 * 1024 * 1024;
 // The part whose photos and videos a zip export carries.
 export const MEDIA_PART = "kanban";
 
@@ -139,9 +137,12 @@ function sortParts(parts: FilePart[]): FilePart[] {
 }
 
 // ExportFile is a chosen file ready to import: the JSON text, or a zip with
-// its photos and videos (sent whole, as it is).
+// its photos and videos (sent whole, as it is, or only its export.json when
+// no part with media is imported).
 export interface ExportFile {
   body: string | Blob;
+  // The export file's own text: the JSON, or a zip's export.json.
+  json: string;
   zip: boolean;
   parts: FilePart[];
   // How many photo, video and poster files a zip holds.
@@ -154,16 +155,19 @@ export async function openExportFile(file: Blob): Promise<ExportFile> {
   if (!(await isZip(file))) {
     if (file.size > MAX_IMPORT_BYTES) throw new ExportFileError("This file is larger than 25 MB.");
     const text = await file.text();
-    return { body: text, zip: false, parts: readExportFile(text), mediaFiles: 0 };
+    return { body: text, json: text, zip: false, parts: readExportFile(text), mediaFiles: 0 };
   }
-  if (file.size > MAX_ZIP_IMPORT_BYTES) throw new ExportFileError("This zip is larger than 10 GB.");
+  // No size check: the server holds a zip's photos and videos to your
+  // storage quota as it reads them.
   try {
     const entries = await listZip(file);
     const main = entries.find((e) => e.name === "export.json");
     if (!main) throw new ExportFileError("This zip has no export.json, so it isn't an export.");
-    const parts = readExportFile(await readZipText(file, main));
+    if (entries[0] !== main) throw new ExportFileError("export.json must be the zip's first file; export the zip again.");
+    const json = await readZipText(file, main);
+    const parts = readExportFile(json);
     const mediaFiles = entries.filter((e) => e.name.startsWith("media/") && !e.name.endsWith("/")).length;
-    return { body: file, zip: true, parts, mediaFiles };
+    return { body: file, json, zip: true, parts, mediaFiles };
   } catch (err) {
     if (err instanceof ZipError) throw new ExportFileError(err.message);
     throw err;
@@ -174,11 +178,13 @@ export async function openExportFile(file: Blob): Promise<ExportFile> {
 // run reports what would happen and writes nothing.
 export async function importExport(file: ExportFile, parts: string[], inFile: string[], dryRun: boolean): Promise<ImportResponse> {
   const query = [partsQuery(parts, inFile), dryRun ? "dry_run=true" : ""].filter(Boolean).join("&");
+  // The media go only with the part they belong to.
+  const zip = file.zip && parts.includes(MEDIA_PART);
   const res = await fetch(`${url}/api/import${query ? `?${query}` : ""}`, {
     method: "POST",
-    headers: { "Content-Type": file.zip ? "application/zip" : "application/json" },
+    headers: { "Content-Type": zip ? "application/zip" : "application/json" },
     credentials: "include",
-    body: file.body,
+    body: zip ? file.body : file.json,
   });
   if (!res.ok) await failure(res, "Import failed");
   return res.json();

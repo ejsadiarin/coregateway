@@ -31,13 +31,14 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Imports (ADR-0008) take a JSON file up to 25 MB, or a zip with its
-    # photos and videos up to 10 GB; the gateway and services cap each
-    # themselves. nginx's default of 1 MB would refuse a real one before
-    # the gateway saw it. The body streams through rather than being
-    # buffered to disk here first, and a long upload isn't cut short.
+    # Imports (ADR-0008) take a JSON file (25 MB, capped by the gateway and
+    # each service) or a zip with its photos and videos, which coreban holds
+    # to the owner's storage quota as it reads. So nginx sets no cap of its
+    # own: its default of 1 MB would refuse a real one before the gateway
+    # saw it. The body streams through rather than being buffered to disk
+    # here first, and a long upload isn't cut short.
     location ~ ^/api/(budget/|coreban/|coredraw/)?import$ {
-        client_max_body_size 10g;
+        client_max_body_size 0;
         proxy_request_buffering off;
         proxy_read_timeout 2h;
         proxy_send_timeout 2h;
