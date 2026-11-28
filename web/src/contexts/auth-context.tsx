@@ -37,10 +37,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const owner = useRef<string | undefined>(signedInOnDevice()?.id);
 
     // signedIn records who the gateway says is signed in, and remembers them
-    // on this device for opening offline.
+    // on this device for opening offline. A session that ended (401), or
+    // another account in its place, is that account signed out: its
+    // last-seen data goes too.
     const signedIn = useCallback((u: User | null) => {
+        const gone = owner.current;
+        if (gone && gone !== u?.id) {
+            owner.current = undefined;
+            void forgetLastSeen(gone);
+        }
         if (u) {
-            if (owner.current && owner.current !== u.id) queryClient.clear();
             owner.current = u.id;
             rememberSignedIn(u);
         } else {

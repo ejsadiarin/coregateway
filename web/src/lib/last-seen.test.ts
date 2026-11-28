@@ -143,6 +143,15 @@ describe("createLastSeenPersister", () => {
     expect(saved.size).toBe(0);
   });
 
+  it("restores nothing once closed, even a read already under way", async () => {
+    const p = createLastSeenPersister("u", store, 0);
+    await p.persistClient(client(query(["boards"], 1)));
+    await vi.runAllTimersAsync();
+    const restoring = p.restoreClient();
+    await p.close();
+    expect(await restoring).toBeUndefined();
+  });
+
   it("restores nothing when storage fails", async () => {
     const p = createLastSeenPersister("u", { ...store, get: () => Promise.reject(new Error("blocked")) }, 0);
     expect(await p.restoreClient()).toBeUndefined();

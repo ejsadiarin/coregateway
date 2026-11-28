@@ -10,7 +10,12 @@ export const queryClient = new QueryClient({
             // load replaces it or the owner signs out. Reads that churn (Feed
             // searches, its budget batches) set their own shorter time.
             gcTime: Infinity,
-        }
+        },
+        mutations: {
+            // Writes aren't queued yet (the Outbox queue, ADR-0009, is to
+            // come): offline one fails and says so rather than waiting.
+            networkMode: 'always',
+        },
     }
 })
 

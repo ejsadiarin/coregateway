@@ -8,7 +8,7 @@
 // (Seam A, lib/draw.ts) is the only I/O this module does.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsRestoring, useQueryClient } from "@tanstack/react-query";
 import {
   fetchBoard,
   saveBoard,
@@ -71,6 +71,9 @@ export const boardKey = (id: string) => ["draw", "board", id];
 
 export function useBoardSync(boardId: string | undefined, engine: SyncEngine): BoardSync {
   const queryClient = useQueryClient();
+  // The board's last-seen copy is only there once the device's data is
+  // restored, so loading waits for that.
+  const restoring = useIsRestoring();
   const [phase, setPhase] = useState<Phase>("loading");
   const [loadError, setLoadError] = useState("");
   const [meta, setMeta] = useState<BoardMeta | null>(null);
@@ -130,6 +133,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
 
   useEffect(() => {
     alive.current = true;
+    if (restoring) return;
     if (boardId) {
       void load(boardId);
     } else {
@@ -151,7 +155,7 @@ export function useBoardSync(boardId: string | undefined, engine: SyncEngine): B
       }
       pendingRef.current = null;
     };
-  }, [boardId, load]);
+  }, [boardId, load, restoring]);
 
   const doSave = useCallback(async (): Promise<boolean> => {
     const current = metaRef.current;

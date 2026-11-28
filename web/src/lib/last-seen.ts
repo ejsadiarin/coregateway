@@ -97,7 +97,9 @@ export function createLastSeenPersister(userId: string, store: LastSeenStore, th
     flush,
     async restoreClient() {
       try {
-        return (await store.get(key)) as PersistedClient | undefined;
+        const client = (await store.get(key)) as PersistedClient | undefined;
+        // Signed out meanwhile: nothing of the account may come back.
+        return closed ? undefined : client;
       } catch {
         return undefined;
       }

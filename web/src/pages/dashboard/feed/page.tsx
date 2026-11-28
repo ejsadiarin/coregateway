@@ -5,7 +5,7 @@ import { budgetChips } from "@/lib/feed-rail";
 import { CategoryChip, RuleChip, StatusChip, TagChip } from "@/components/budget/ledger/chips";
 import { FeedRail } from "./feed-rail";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useIsRestoring, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeftRight,
@@ -679,8 +679,10 @@ export default function FeedPage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.older ?? undefined,
   });
+  // Re-read once the device's saved data is restored.
+  const restoring = useIsRestoring();
   const saved = useMemo(() => {
-    if (!offlineSearch) return [];
+    if (!offlineSearch || restoring) return [];
     const views = queryClient
       .getQueriesData<FeedData>({
         queryKey: feedKey,
@@ -688,7 +690,7 @@ export default function FeedPage() {
       })
       .flatMap(([, data]) => (data ? [data] : []));
     return searchSavedNotes(views, term, { filter, withArchived: showArchived, records: budget.records });
-  }, [offlineSearch, queryClient, term, filter, showArchived, budget.records]);
+  }, [offlineSearch, restoring, queryClient, term, filter, showArchived, budget.records]);
   const feed = offlineSearch ? saved : feedNotes(feedQuery.data);
   const { hasNextPage, isFetchingNextPage, fetchNextPage, isPending: feedPending } = feedQuery;
   const pageCount = feedQuery.data?.pages.length ?? 0;

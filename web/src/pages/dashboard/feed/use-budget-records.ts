@@ -59,7 +59,8 @@ export function useBudgetRecords(
   const [shown, setShown] = useState(loadShown);
   // With corefinance out of reach (offline), the records come from what this
   // device last showed instead, so no note reads as deleted.
-  const unreachable = !records.data && (records.isPaused || records.isError);
+  // A batch kept from the previous view (placeholder) doesn't cover this one.
+  const unreachable = (!records.data || records.isPlaceholderData) && (records.isPaused || records.isError);
   const read = unreachable ? recordsFromShown(ids, shown) : records.data;
   const shownNotes = feed.map((n) => showBudget(n, read, shown));
 
