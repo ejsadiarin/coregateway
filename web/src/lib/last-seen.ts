@@ -63,6 +63,9 @@ export interface LastSeenPersister extends Persister {
   flush(): void;
   // Stop writing for good and delete what was kept: signing out.
   close(): Promise<void>;
+  // Stop writing but keep what was kept: the session ended (401), and the
+  // same account signing in again gets it back.
+  setAside(): void;
 }
 
 // createLastSeenPersister keeps one account's last-seen data, writing the
@@ -113,6 +116,10 @@ export function createLastSeenPersister(userId: string, store: LastSeenStore, th
       drop();
       await store.del(key).catch(() => {});
     },
+    setAside() {
+      flush();
+      closed = true;
+    },
   };
 }
 
@@ -138,6 +145,35 @@ export function rememberSignedIn(user: User, storage = device()): void {
     storage?.setItem(SIGNED_IN_KEY, JSON.stringify(user));
   } catch {
     // Storage full or blocked: offline, the app just can't open the account.
+  }
+}
+
+// The account whose last-seen data is on this device, kept after its
+// session ends (401) so that another account signing in deletes it. Only
+// signing out forgets it.
+export const LAST_ACCOUNT_KEY = "core.last-account";
+
+export function lastAccountOnDevice(storage = device()): string | undefined {
+  try {
+    return storage?.getItem(LAST_ACCOUNT_KEY) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function rememberLastAccount(id: string, storage = device()): void {
+  try {
+    storage?.setItem(LAST_ACCOUNT_KEY, id);
+  } catch {
+    // Storage full or blocked: nothing was kept for the account either.
+  }
+}
+
+export function forgetLastAccount(storage = device()): void {
+  try {
+    storage?.removeItem(LAST_ACCOUNT_KEY);
+  } catch {
+    // Blocked storage holds nothing to forget.
   }
 }
 

@@ -2,8 +2,15 @@
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from "react";
 import type { User, UserRole } from "@/types/api";
 import * as api from "@/lib/api";
-import { forgetSignedIn, rememberSignedIn, signedInOnDevice } from "@/lib/last-seen";
-import { forgetLastSeen, queryClient } from "@/contexts/query-context";
+import {
+    forgetLastAccount,
+    forgetSignedIn,
+    lastAccountOnDevice,
+    rememberLastAccount,
+    rememberSignedIn,
+    signedInOnDevice,
+} from "@/lib/last-seen";
+import { forgetLastSeen, queryClient, setAsideLastSeen } from "@/contexts/query-context";
 
 interface AuthContextType {
     user: User | null;
@@ -34,21 +41,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const retry = useRef<{ timer?: ReturnType<typeof setTimeout>; attempt: number }>({ attempt: 0 });
     // Whose reads the in-memory cache holds, so a different account signing
     // in never sees them.
-    const owner = useRef<string | undefined>(signedInOnDevice()?.id);
+    const owner = useRef<string | undefined>(signedInOnDevice()?.id ?? lastAccountOnDevice());
 
     // signedIn records who the gateway says is signed in, and remembers them
-    // on this device for opening offline. A session that ended (401), or
-    // another account in its place, is that account signed out: its
-    // last-seen data goes too.
+    // on this device for opening offline. A session that ended (401) sets
+    // the account's last-seen data aside on the device, for when it signs in
+    // again (ADR-0009); another account signing in deletes it.
     const signedIn = useCallback((u: User | null) => {
         const gone = owner.current;
-        if (gone && gone !== u?.id) {
+        if (gone && !u) {
+            setAsideLastSeen(gone);
+        } else if (gone && gone !== u?.id) {
             owner.current = undefined;
+            forgetLastAccount();
             void forgetLastSeen(gone);
         }
         if (u) {
             owner.current = u.id;
             rememberSignedIn(u);
+            rememberLastAccount(u.id);
         } else {
             forgetSignedIn();
         }
@@ -94,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await api.logout();
         const id = user?.id ?? owner.current;
         forgetSignedIn();
+        forgetLastAccount();
         owner.current = undefined;
         if (id) await forgetLastSeen(id);
         else queryClient.clear();

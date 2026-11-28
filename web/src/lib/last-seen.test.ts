@@ -8,7 +8,10 @@ import {
   trimForStorage,
   type LastSeenStore,
   SIGNED_IN_KEY,
+  forgetLastAccount,
   forgetSignedIn,
+  lastAccountOnDevice,
+  rememberLastAccount,
   rememberSignedIn,
   signedInOnDevice,
 } from "./last-seen";
@@ -152,6 +155,16 @@ describe("createLastSeenPersister", () => {
     expect(await restoring).toBeUndefined();
   });
 
+  it("keeps what it saved once set aside, as when a session ends, and writes no more", async () => {
+    const p = createLastSeenPersister("u", store, 1000);
+    await p.persistClient(client(query(["boards"], "before")));
+    p.setAside();
+    await p.persistClient(client(query(["boards"], "after")));
+    await vi.runAllTimersAsync();
+    const again = createLastSeenPersister("u", store, 0);
+    expect((await again.restoreClient())?.clientState.queries[0].state.data).toBe("before");
+  });
+
   it("restores nothing when storage fails", async () => {
     const p = createLastSeenPersister("u", { ...store, get: () => Promise.reject(new Error("blocked")) }, 0);
     expect(await p.restoreClient()).toBeUndefined();
@@ -176,6 +189,16 @@ describe("the account signed in on this device", () => {
     expect(signedInOnDevice(s)).toEqual(user);
     forgetSignedIn(s);
     expect(signedInOnDevice(s)).toBeNull();
+  });
+
+  it("keeps whose data is on the device until forgotten", () => {
+    const s = memory();
+    expect(lastAccountOnDevice(s)).toBeUndefined();
+    rememberLastAccount("u1", s);
+    forgetSignedIn(s);
+    expect(lastAccountOnDevice(s)).toBe("u1");
+    forgetLastAccount(s);
+    expect(lastAccountOnDevice(s)).toBeUndefined();
   });
 
   it("reads nothing from a broken or foreign entry", () => {

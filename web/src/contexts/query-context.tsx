@@ -54,6 +54,15 @@ if (typeof window !== 'undefined') {
     })
 }
 
+// setAsideLastSeen is a session that ended (401): nothing more is written
+// for the account and memory is cleared, but what the device kept stays for
+// when the same account signs in again (ADR-0009).
+export function setAsideLastSeen(userId: string): void {
+    persisters.get(userId)?.setAside()
+    persisters.delete(userId)
+    queryClient.clear()
+}
+
 // forgetLastSeen is signing out: the account's last-seen data is deleted
 // from the device and from memory, and nothing more is written for it.
 export async function forgetLastSeen(userId: string): Promise<void> {
